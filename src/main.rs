@@ -3,15 +3,22 @@ use std::{collections::BTreeSet, fmt, mem};
 fn main() {
     let mut builder = Grammar::builder();
     builder
-        .terminals(&["NUM", "LPAREN", "RPAREN", "PLUS"])
+        .terminals(&["NUM", "LPAREN", "RPAREN", "PLUS", "0", "1"])
         .rule("EXPR", &["FACTOR"])
         .rule("EXPR", &["LPAREN", "EXPR", "RPAREN"])
         .rule("FACTOR", &["NUM"])
         .rule("FACTOR", &["PLUS", "FACTOR"])
-        .rule("FACTOR", &["FACTOR", "PLUS", "NUM"]);
+        .rule("FACTOR", &["FACTOR", "PLUS", "NUM"])
+        .rule("X", &["Y", "0"])
+        .rule("Y", &["1"])
+        .rule("Y", &[])
+        .rule("Z", &["Y"]);
 
     let grammar = builder.build();
-    println!("{}", grammar);
+    println!("Grammar:\n{}", grammar);
+
+    let nulls_set = grammar.nulls_set();
+    println!("nulls_set: {:?}", nulls_set);
 }
 
 #[derive(Debug)]
@@ -25,6 +32,38 @@ pub struct Grammar {
 impl Grammar {
     pub fn builder() -> Builder {
         Builder::default()
+    }
+
+    /// Calculate the set of nullable symbols in this grammar.
+    ///
+    ///
+    pub fn nulls_set(&self) -> Vec<&'static str> {
+        // ruleからnullableであることが分かっている場合は追加する
+        let mut nulls: BTreeSet<&str> = self
+            .rules
+            .iter()
+            .filter_map(|(name, arg)| arg.is_empty().then(|| *name))
+            .collect();
+
+        // 値が更新されなくなるまで繰り返す
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for (ltoken, pattern) in &self.rules {
+                if nulls.contains(ltoken) {
+                    continue;
+                }
+                // 右辺のsymbolsがすべてnullableかどうか
+                let is_rhs_nullable = pattern.iter().all(|t| nulls.contains(t));
+                if is_rhs_nullable {
+                    changed = true;
+                    nulls.insert(ltoken);
+                    continue;
+                }
+            }
+        }
+
+        nulls.into_iter().collect()
     }
 }
 
