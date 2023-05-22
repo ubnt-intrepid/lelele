@@ -1,9 +1,12 @@
-use std::{collections::BTreeSet, fmt, mem};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt, mem,
+};
 
 fn main() {
     let mut builder = Grammar::builder();
     builder
-        .terminals(&["NUM", "LPAREN", "RPAREN", "PLUS", "0", "1"])
+        .terminals(&["$", "NUM", "LPAREN", "RPAREN", "PLUS", "0", "1"])
         .rule("EXPR", &["FACTOR"])
         .rule("EXPR", &["LPAREN", "EXPR", "RPAREN"])
         .rule("FACTOR", &["NUM"])
@@ -19,12 +22,15 @@ fn main() {
 
     let nulls_set = grammar.nulls_set();
     println!("nulls_set: {:?}", nulls_set);
+
+    let first_set = grammar.first_set();
+    println!("first_set: {:#?}", first_set);
 }
 
 #[derive(Debug)]
 pub struct Grammar {
-    pub terminals: Vec<&'static str>,
-    pub nonterminals: Vec<&'static str>,
+    pub terminals: BTreeSet<&'static str>,
+    pub nonterminals: BTreeSet<&'static str>,
     pub rules: Vec<(&'static str, Vec<&'static str>)>,
     pub goal: &'static str,
 }
@@ -35,8 +41,6 @@ impl Grammar {
     }
 
     /// Calculate the set of nullable symbols in this grammar.
-    ///
-    ///
     pub fn nulls_set(&self) -> Vec<&'static str> {
         // ruleからnullableであることが分かっている場合は追加する
         let mut nulls: BTreeSet<&str> = self
@@ -64,6 +68,61 @@ impl Grammar {
         }
 
         nulls.into_iter().collect()
+    }
+
+    /// a
+    pub fn first_set(&self) -> BTreeMap<&'static str, BTreeSet<&'static str>> {
+        let mut first_set: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+        // EOF
+        first_set.insert("$", Some("$").into_iter().collect());
+
+        // terminal symbols
+        for tok in &self.terminals {
+            first_set.insert(tok, Some(*tok).into_iter().collect());
+        }
+
+        // nonterminal symbols
+        for tok in &self.nonterminals {
+            first_set.insert(tok, BTreeSet::new());
+        }
+
+        // create nulls set
+        let nulls = self.nulls_set();
+
+        // extract constraint
+        let mut constraints = vec![];
+        for (sup, subs) in &self.rules {
+            for sub in subs {
+                if sup != sub {
+                    constraints.push((sup, sub));
+                }
+                if !nulls.contains(sub) {
+                    break;
+                }
+            }
+        }
+
+        // resolve constraints
+        let mut changed = true;
+        while changed {
+            changed = false;
+
+            for (sup, sub) in &constraints {
+                let mut superset = first_set.remove(*sup).unwrap();
+                let subset = first_set.get(*sub).unwrap();
+
+                for tok in subset {
+                    if !superset.contains(tok) {
+                        superset.insert(*tok);
+                        changed = true;
+                    }
+                }
+
+                first_set.insert(sup, superset);
+            }
+        }
+
+        first_set
     }
 }
 
@@ -153,8 +212,8 @@ impl Builder {
         let goal = goal.or_else(|| nonterminals.first().copied()).unwrap();
 
         Grammar {
-            terminals: terminals.into_iter().collect(),
-            nonterminals: nonterminals.into_iter().collect(),
+            terminals,
+            nonterminals,
             rules,
             goal,
         }
