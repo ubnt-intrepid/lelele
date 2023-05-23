@@ -48,8 +48,8 @@ impl fmt::Display for Grammar {
             write!(f, "{}", sym)?;
         }
         write!(f, "\nrules:\n")?;
-        for rule in &self.rules {
-            writeln!(f, "  - {}", rule)?;
+        for (i, rule) in self.rules.iter().enumerate() {
+            writeln!(f, "  [{:02}] {}", i, rule)?;
         }
         writeln!(f, "start: {}", self.start)?;
         Ok(())
