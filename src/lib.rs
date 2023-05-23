@@ -3,12 +3,32 @@
 use indexmap::{IndexMap, IndexSet};
 use std::{fmt, mem};
 
+pub type Symbol = &'static str;
+
+#[derive(Debug)]
+pub struct Rule {
+    pub lhs: Symbol,
+    pub rhs: Vec<Symbol>,
+}
+impl fmt::Display for Rule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} : ", self.lhs)?;
+        for (i, symbol) in self.rhs.iter().enumerate() {
+            if i > 0 {
+                write!(f, " ")?;
+            }
+            write!(f, "{}", symbol)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct Grammar {
-    pub terminals: IndexSet<&'static str>,
-    pub nonterminals: IndexSet<&'static str>,
-    pub rules: Vec<(&'static str, Vec<&'static str>)>,
-    pub start: &'static str,
+    pub terminals: IndexSet<Symbol>,
+    pub nonterminals: IndexSet<Symbol>,
+    pub rules: Vec<Rule>,
+    pub start: Symbol,
 }
 
 impl fmt::Display for Grammar {
@@ -28,15 +48,8 @@ impl fmt::Display for Grammar {
             write!(f, "{}", sym)?;
         }
         write!(f, "\nrules:\n")?;
-        for (name, args) in &self.rules {
-            write!(f, "  - {} -> ", name)?;
-            for (i, arg) in args.iter().enumerate() {
-                if i > 0 {
-                    write!(f, " ")?;
-                }
-                write!(f, "{}", arg)?;
-            }
-            writeln!(f)?;
+        for rule in &self.rules {
+            writeln!(f, "  - {}", rule)?;
         }
         writeln!(f, "start: {}", self.start)?;
         Ok(())
@@ -49,27 +62,27 @@ impl Grammar {
     }
 
     /// Calculate the set of nullable symbols in this grammar.
-    fn nulls_set(&self) -> IndexSet<&'static str> {
+    fn nulls_set(&self) -> IndexSet<Symbol> {
         // ruleからnullableであることが分かっている場合は追加する
-        let mut nulls: IndexSet<&str> = self
+        let mut nulls: IndexSet<Symbol> = self
             .rules
             .iter()
-            .filter_map(|(name, arg)| arg.is_empty().then(|| *name))
+            .filter_map(|rule| rule.rhs.is_empty().then(|| rule.lhs))
             .collect();
 
         // 値が更新されなくなるまで繰り返す
         let mut changed = true;
         while changed {
             changed = false;
-            for (ltoken, pattern) in &self.rules {
-                if nulls.contains(ltoken) {
+            for rule in &self.rules {
+                if nulls.contains(rule.lhs) {
                     continue;
                 }
                 // 右辺のsymbolsがすべてnullableかどうか
-                let is_rhs_nullable = pattern.iter().all(|t| nulls.contains(t));
+                let is_rhs_nullable = rule.rhs.iter().all(|t| nulls.contains(t));
                 if is_rhs_nullable {
                     changed = true;
-                    nulls.insert(ltoken);
+                    nulls.insert(rule.lhs);
                     continue;
                 }
             }
@@ -80,7 +93,7 @@ impl Grammar {
 
     /// Constructs the instance for calculating first sets in this grammar.
     pub fn first_set(&self) -> FirstSet {
-        let mut map: IndexMap<&str, IndexSet<&str>> = IndexMap::new();
+        let mut map: IndexMap<Symbol, IndexSet<Symbol>> = IndexMap::new();
         let nulls = self.nulls_set();
 
         // terminal symbols については First(T) = {T} になる
@@ -99,16 +112,19 @@ impl Grammar {
         //    - Y1 Y2 ... Y(k-1) が nullable で Yk が non-nullable となる
         //  2. Yi (i=1,2,..,k) それぞれに対し First(X) \supseteq First(Yi) という制約を追加する
         struct Constraint {
-            sup: &'static str,
-            sub: &'static str,
+            sup: Symbol,
+            sub: Symbol,
         }
         let mut constraints = vec![];
-        for (sup, subs) in &self.rules {
-            for sub in subs {
-                if sup != sub {
-                    constraints.push(Constraint { sup, sub });
+        for rule in &self.rules {
+            for symbol in &rule.rhs {
+                if rule.lhs != *symbol {
+                    constraints.push(Constraint {
+                        sup: rule.lhs,
+                        sub: symbol,
+                    });
                 }
-                if !nulls.contains(sub) {
+                if !nulls.contains(symbol) {
                     break;
                 }
             }
@@ -142,13 +158,13 @@ impl Grammar {
 
 #[derive(Debug)]
 pub struct FirstSet {
-    pub map: IndexMap<&'static str, IndexSet<&'static str>>,
-    pub nulls: IndexSet<&'static str>,
+    map: IndexMap<Symbol, IndexSet<Symbol>>,
+    nulls: IndexSet<Symbol>,
 }
 
 impl FirstSet {
     /// Calculate the first set of specified symbols.
-    pub fn get(&self, tokens: &[&'static str]) -> IndexSet<&'static str> {
+    pub fn get(&self, tokens: &[Symbol]) -> IndexSet<Symbol> {
         match tokens {
             [token] => self.map.get(token).expect("invalid token provided").clone(),
             tokens => {
@@ -173,14 +189,14 @@ impl FirstSet {
 #[derive(Debug, Default)]
 pub struct Builder {
     // A collection of terminal symbols.
-    terminals: IndexSet<&'static str>,
-    rules: Vec<(&'static str, Vec<&'static str>)>,
-    start: Option<&'static str>,
+    terminals: IndexSet<Symbol>,
+    rules: Vec<Rule>,
+    start: Option<Symbol>,
 }
 
 impl Builder {
     /// Register some terminal symbols into this grammar.
-    pub fn terminals(&mut self, tokens: &[&'static str]) -> &mut Self {
+    pub fn terminals(&mut self, tokens: &[Symbol]) -> &mut Self {
         self.terminals.extend(tokens);
         self
     }
@@ -189,14 +205,16 @@ impl Builder {
     ///
     /// The first argument `name` means the name of a non-terminal symbol,
     /// and the remaining `args` is
-    pub fn rule(&mut self, name: &'static str, symbols: &[&'static str]) -> &mut Self {
-        self.rules
-            .push((name, symbols.into_iter().copied().collect()));
+    pub fn rule(&mut self, name: Symbol, symbols: &[Symbol]) -> &mut Self {
+        self.rules.push(Rule {
+            lhs: name,
+            rhs: symbols.into_iter().copied().collect(),
+        });
         self
     }
 
     /// Specify the start symbol.
-    pub fn start(&mut self, name: &'static str) -> &mut Self {
+    pub fn start(&mut self, name: Symbol) -> &mut Self {
         self.start.replace(name);
         self
     }
@@ -205,18 +223,16 @@ impl Builder {
         let Self {
             terminals,
             rules,
-            start: goal,
+            start,
             ..
         } = mem::take(self);
 
-        let terminals: IndexSet<_> = Some("$").into_iter().chain(terminals).collect();
-
-        let mut nonterminals: IndexSet<_> = rules.iter().map(|(name, _)| *name).collect();
-        nonterminals.insert("$S"); // dummy symbol
+        let nonterminals: IndexSet<_> = rules.iter().map(|rule| rule.lhs).collect();
+        let start = start.or_else(|| nonterminals.first().copied()).unwrap();
 
         // rule内にterminal symbolでもnonterminal symbolでもないものが含まれていないかをチェック
-        for (_, args) in &rules {
-            let mut unknown_symbols = args.iter().filter_map(|arg| {
+        for rule in &rules {
+            let mut unknown_symbols = rule.rhs.iter().filter_map(|arg| {
                 (!terminals.contains(arg) && !nonterminals.contains(arg)).then(|| arg)
             });
             if let Some(arg) = unknown_symbols.next() {
@@ -224,13 +240,11 @@ impl Builder {
             }
         }
 
-        let goal = goal.or_else(|| nonterminals.first().copied()).unwrap();
-
         Grammar {
             terminals,
             nonterminals,
             rules,
-            start: goal,
+            start,
         }
     }
 }
