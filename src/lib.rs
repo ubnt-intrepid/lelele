@@ -78,31 +78,35 @@ impl Grammar {
         nulls
     }
 
-    /// a
-    pub fn first_set(&self) -> FirstSet<'_> {
+    /// Constructs the instance for calculating first sets in this grammar.
+    pub fn first_set(&self) -> FirstSet {
         let mut map: IndexMap<&str, IndexSet<&str>> = IndexMap::new();
-        // EOF
-        map.insert("$", Some("$").into_iter().collect());
+        let nulls = self.nulls_set();
 
-        // terminal symbols
+        // terminal symbols については First(T) = {T} になる
         for tok in &self.terminals {
             map.insert(tok, Some(*tok).into_iter().collect());
         }
 
-        // nonterminal symbols
+        // nonterminal symbols に関する初期値
         for tok in &self.nonterminals {
             map.insert(tok, IndexSet::new());
         }
 
-        // create nulls set
-        let nulls = self.nulls_set();
-
-        // extract constraint
+        // 制約条件の抽出
+        // X -> Y1 Y2 ... Yn という構文規則に対し、
+        //  1. Y1,Y2,...と検索していき、最初に来る非nullableな記号を Yk とする
+        //    - Y1 Y2 ... Y(k-1) が nullable で Yk が non-nullable となる
+        //  2. Yi (i=1,2,..,k) それぞれに対し First(X) \supseteq First(Yi) という制約を追加する
+        struct Constraint {
+            sup: &'static str,
+            sub: &'static str,
+        }
         let mut constraints = vec![];
         for (sup, subs) in &self.rules {
             for sub in subs {
                 if sup != sub {
-                    constraints.push((sup, sub));
+                    constraints.push(Constraint { sup, sub });
                 }
                 if !nulls.contains(sub) {
                     break;
@@ -110,12 +114,14 @@ impl Grammar {
             }
         }
 
-        // resolve constraints
+        // 制約条件の解消
+        // First(A) \subseteq First(B) が満たされるよう First(A) の要素を First(B) に追加するだけ。
+        // これをすべての制約条件に対して繰り返す
         let mut changed = true;
         while changed {
             changed = false;
 
-            for (sup, sub) in &constraints {
+            for Constraint { sup, sub } in &constraints {
                 let mut superset = map.remove(*sup).unwrap();
                 let subset = map.get(*sub).unwrap();
 
@@ -130,21 +136,18 @@ impl Grammar {
             }
         }
 
-        FirstSet {
-            grammar: self,
-            map,
-            nulls,
-        }
+        FirstSet { map, nulls }
     }
 }
 
 #[derive(Debug)]
-pub struct FirstSet<'g> {
-    pub grammar: &'g Grammar,
+pub struct FirstSet {
     pub map: IndexMap<&'static str, IndexSet<&'static str>>,
     pub nulls: IndexSet<&'static str>,
 }
-impl FirstSet<'_> {
+
+impl FirstSet {
+    /// Calculate the first set of specified symbols.
     pub fn get(&self, tokens: &[&'static str]) -> IndexSet<&'static str> {
         match tokens {
             [token] => self.map.get(token).expect("invalid token provided").clone(),
@@ -154,8 +157,8 @@ impl FirstSet<'_> {
                 }
                 let mut res = IndexSet::new();
                 for token in tokens {
-                    let add = self.map.get(token).unwrap();
-                    res.extend(add.iter().copied());
+                    let added = self.map.get(token).expect("invalid token provided");
+                    res.extend(added.iter().copied());
                     if !self.nulls.contains(token) {
                         break;
                     }
@@ -208,7 +211,8 @@ impl Builder {
 
         let terminals: IndexSet<_> = Some("$").into_iter().chain(terminals).collect();
 
-        let nonterminals: IndexSet<_> = rules.iter().map(|(name, _)| *name).collect();
+        let mut nonterminals: IndexSet<_> = rules.iter().map(|(name, _)| *name).collect();
+        nonterminals.insert("$S"); // dummy symbol
 
         // rule内にterminal symbolでもnonterminal symbolでもないものが含まれていないかをチェック
         for (_, args) in &rules {
