@@ -49,7 +49,7 @@ impl Grammar {
     }
 
     /// Calculate the set of nullable symbols in this grammar.
-    pub fn nulls_set(&self) -> IndexSet<&'static str> {
+    fn nulls_set(&self) -> IndexSet<&'static str> {
         // ruleからnullableであることが分かっている場合は追加する
         let mut nulls: IndexSet<&str> = self
             .rules
@@ -143,6 +143,27 @@ pub struct FirstSet<'g> {
     pub grammar: &'g Grammar,
     pub map: IndexMap<&'static str, IndexSet<&'static str>>,
     pub nulls: IndexSet<&'static str>,
+}
+impl FirstSet<'_> {
+    pub fn get(&self, tokens: &[&'static str]) -> IndexSet<&'static str> {
+        match tokens {
+            [token] => self.map.get(token).expect("invalid token provided").clone(),
+            tokens => {
+                if tokens.iter().any(|t| !self.map.contains_key(t)) {
+                    panic!("invalid token provided");
+                }
+                let mut res = IndexSet::new();
+                for token in tokens {
+                    let add = self.map.get(token).unwrap();
+                    res.extend(add.iter().copied());
+                    if !self.nulls.contains(token) {
+                        break;
+                    }
+                }
+                res
+            }
+        }
+    }
 }
 
 /// A builder object for `Grammar`.

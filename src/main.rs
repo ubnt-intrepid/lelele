@@ -15,9 +15,14 @@ fn main() {
     let grammar = builder.build();
     println!("Grammar:\n{}", grammar);
 
-    let nulls_set = grammar.nulls_set();
-    println!("nulls_set: {:?}", nulls_set);
-
     let first_set = grammar.first_set();
-    println!("first_set: {:#?}", first_set);
+    println!("First(X): {:?}", first_set.get(&["X"]));
+    println!("First(Y): {:?}", first_set.get(&["Y"]));
+    println!("First(Z): {:?}", first_set.get(&["Z"]));
+    println!("First(Y,X): {:?}", first_set.get(&["Y", "X"]));
+    println!("First(NUM): {:?}", first_set.get(&["NUM"]));
+    println!("First(Y,NUM): {:?}", first_set.get(&["Y", "NUM"]));
+    println!("First(Y,X): {:?}", first_set.get(&["Y", "X"]));
+    println!("First(Y,X,NUM): {:?}", first_set.get(&["Y", "X", "NUM"]));
+    println!("First(Y,Z,NUM): {:?}", first_set.get(&["Y", "Z", "NUM"]));
 }
