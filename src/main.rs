@@ -30,7 +30,7 @@ pub struct Grammar {
     pub terminals: IndexSet<&'static str>,
     pub nonterminals: IndexSet<&'static str>,
     pub rules: Vec<(&'static str, Vec<&'static str>)>,
-    pub goal: &'static str,
+    pub start: &'static str,
 }
 
 impl Grammar {
@@ -151,7 +151,7 @@ impl fmt::Display for Grammar {
             }
             writeln!(f)?;
         }
-        writeln!(f, "goal: {}", self.goal)?;
+        writeln!(f, "start: {}", self.start)?;
         Ok(())
     }
 }
@@ -162,7 +162,7 @@ pub struct Builder {
     // A collection of terminal symbols.
     terminals: IndexSet<&'static str>,
     rules: Vec<(&'static str, Vec<&'static str>)>,
-    goal: Option<&'static str>,
+    start: Option<&'static str>,
 }
 
 impl Builder {
@@ -182,8 +182,9 @@ impl Builder {
         self
     }
 
-    pub fn goal(&mut self, name: &'static str) -> &mut Self {
-        self.goal.replace(name);
+    /// Specify the start symbol.
+    pub fn start(&mut self, name: &'static str) -> &mut Self {
+        self.start.replace(name);
         self
     }
 
@@ -191,7 +192,7 @@ impl Builder {
         let Self {
             terminals,
             rules,
-            goal,
+            start: goal,
             ..
         } = mem::take(self);
 
@@ -215,7 +216,7 @@ impl Builder {
             terminals,
             nonterminals,
             rules,
-            goal,
+            start: goal,
         }
     }
 }
