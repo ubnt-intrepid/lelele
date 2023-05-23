@@ -1,12 +1,10 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt, mem,
-};
+use indexmap::{IndexMap, IndexSet};
+use std::{fmt, mem};
 
 fn main() {
     let mut builder = Grammar::builder();
     builder
-        .terminals(&["$", "NUM", "LPAREN", "RPAREN", "PLUS", "0", "1"])
+        .terminals(&["NUM", "LPAREN", "RPAREN", "PLUS", "0", "1"])
         .rule("EXPR", &["FACTOR"])
         .rule("EXPR", &["LPAREN", "EXPR", "RPAREN"])
         .rule("FACTOR", &["NUM"])
@@ -29,8 +27,8 @@ fn main() {
 
 #[derive(Debug)]
 pub struct Grammar {
-    pub terminals: BTreeSet<&'static str>,
-    pub nonterminals: BTreeSet<&'static str>,
+    pub terminals: IndexSet<&'static str>,
+    pub nonterminals: IndexSet<&'static str>,
     pub rules: Vec<(&'static str, Vec<&'static str>)>,
     pub goal: &'static str,
 }
@@ -43,7 +41,7 @@ impl Grammar {
     /// Calculate the set of nullable symbols in this grammar.
     pub fn nulls_set(&self) -> Vec<&'static str> {
         // ruleからnullableであることが分かっている場合は追加する
-        let mut nulls: BTreeSet<&str> = self
+        let mut nulls: IndexSet<&str> = self
             .rules
             .iter()
             .filter_map(|(name, arg)| arg.is_empty().then(|| *name))
@@ -71,8 +69,8 @@ impl Grammar {
     }
 
     /// a
-    pub fn first_set(&self) -> BTreeMap<&'static str, BTreeSet<&'static str>> {
-        let mut first_set: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+    pub fn first_set(&self) -> IndexMap<&'static str, IndexSet<&'static str>> {
+        let mut first_set: IndexMap<&str, IndexSet<&str>> = IndexMap::new();
         // EOF
         first_set.insert("$", Some("$").into_iter().collect());
 
@@ -83,7 +81,7 @@ impl Grammar {
 
         // nonterminal symbols
         for tok in &self.nonterminals {
-            first_set.insert(tok, BTreeSet::new());
+            first_set.insert(tok, IndexSet::new());
         }
 
         // create nulls set
@@ -162,7 +160,7 @@ impl fmt::Display for Grammar {
 #[derive(Debug, Default)]
 pub struct Builder {
     // A collection of terminal symbols.
-    terminals: BTreeSet<&'static str>,
+    terminals: IndexSet<&'static str>,
     rules: Vec<(&'static str, Vec<&'static str>)>,
     goal: Option<&'static str>,
 }
@@ -197,7 +195,9 @@ impl Builder {
             ..
         } = mem::take(self);
 
-        let nonterminals: BTreeSet<_> = rules.iter().map(|(name, _)| *name).collect();
+        let terminals: IndexSet<_> = Some("$").into_iter().chain(terminals).collect();
+
+        let nonterminals: IndexSet<_> = rules.iter().map(|(name, _)| *name).collect();
 
         // rule内にterminal symbolでもnonterminal symbolでもないものが含まれていないかをチェック
         for (_, args) in &rules {
