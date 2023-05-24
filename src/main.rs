@@ -17,34 +17,16 @@ fn main() {
 
     // DFA construction
     let mut gen = DFAGenerator::new(&grammar);
-    let nodes = gen.process();
+    let dfa = gen.process();
 
-    println!("\nDFA nodes:");
-    for (id, node) in &nodes {
-        println!(" - {:02}:", id);
-        println!("     item_set:");
-        for item in &node.item_set {
-            let rule = &grammar.rules.get(&item.rule_id).unwrap();
-            print!("       - [{} -> ", grammar.symbol_name(rule.lhs));
-            for (i, s) in rule.rhs.iter().enumerate() {
-                if i > 0 {
-                    print!(" ");
-                }
-                if i == item.marker {
-                    print!("@ ");
-                }
-                print!("{}", grammar.symbol_name(*s));
-            }
-            if item.marker == rule.rhs.len() {
-                print!(" @");
-            }
-            println!("] {{ {} }}", grammar.symbol_name(item.lookahead));
-        }
-        if !node.edges.is_empty() {
-            println!("     edges:");
-            for (symbol, id) in &node.edges {
-                println!("       - {} -> {:02}", grammar.symbol_name(*symbol), id);
-            }
+    println!("\nDFA:\n{}", dfa.display(&grammar));
+
+    let transition_table = dfa.transition_table(&grammar);
+    println!("\nTransition table:");
+    for (id, actions) in &transition_table {
+        println!(" - {:02}", id);
+        for (input, action) in actions.iter() {
+            println!("   - {}: {}", grammar.symbol_name(*input), action);
         }
     }
 }
