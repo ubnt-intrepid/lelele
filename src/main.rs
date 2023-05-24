@@ -5,16 +5,19 @@ use std::mem;
 fn main() {
     let mut builder = lelele::Grammar::builder();
     builder
+    .start("EXPR")
         .terminals(&["NUM", "PLUS", "TIMES"])
-        .rule("EXPR", &["EXPR", "PLUS", "NUM"])
-        .rule("EXPR", &["EXPR", "TIMES", "NUM"])
-        .rule("EXPR", &["NUM"]);
+        .rule("EXPR", &["EXPR", "PLUS", "TERM"])
+        .rule("EXPR", &["TERM"])
+        .rule("TERM", &["TERM", "TIMES", "NUM"])
+        .rule("TERM", &["NUM"]);
 
     let grammar = builder.build();
     println!("Grammar:\n{}", grammar);
 
     let first_set = grammar.first_set();
     println!("First(EXPR): {:?}", first_set.get(&["EXPR"]));
+    println!("First(TERM): {:?}", first_set.get(&["TERM"]));
 
     // DFA construction
     let mut gen = DFAGenerator { grammar: &grammar };
