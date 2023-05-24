@@ -1,6 +1,6 @@
 //! LR(1) DFA generation.
 
-use crate::grammar::{Grammar, RuleID, Symbol};
+use crate::grammar::{Grammar, RuleID, SymbolID};
 use indexmap::{IndexMap, IndexSet};
 use std::mem;
 
@@ -20,7 +20,7 @@ pub struct LRItem {
     // marker位置
     pub marker: usize,
     // 先読み記号
-    pub lookahead: Symbol,
+    pub lookahead: SymbolID,
 }
 
 pub type LRItemSet = IndexSet<LRItem>;
@@ -30,15 +30,15 @@ pub struct DFANode {
     // 各DFA nodeに所属するLR item set
     pub item_set: LRItemSet,
     // 各DFAノード起点のedge
-    pub edges: IndexMap<Symbol, usize>,
+    pub edges: IndexMap<SymbolID, NodeID>,
 }
 pub type NodeID = usize;
 
 #[derive(Debug)]
 pub struct DFAGenerator<'g> {
     grammar: &'g Grammar,
-    first_set: IndexMap<Symbol, IndexSet<Symbol>>,
-    nulls: IndexSet<Symbol>,
+    first_set: IndexMap<SymbolID, IndexSet<SymbolID>>,
+    nulls: IndexSet<SymbolID>,
 }
 
 impl<'g> DFAGenerator<'g> {
@@ -74,7 +74,7 @@ impl<'g> DFAGenerator<'g> {
             item_set.insert(LRItem {
                 rule_id: RuleID::START,
                 marker: 0,
-                lookahead: "$",
+                lookahead: SymbolID::EOI,
             });
             self.expand_closures(&mut item_set);
             PendingItem {
@@ -145,7 +145,7 @@ impl<'g> DFAGenerator<'g> {
                 };
 
                 // First(beta x)
-                let new_lookahead: Vec<Symbol> = self.calc_first_set(beta, &lookahead);
+                let new_lookahead: Vec<SymbolID> = self.calc_first_set(beta, *lookahead);
                 for x in new_lookahead {
                     // Y: ... という形式の構文規則から LR(0) item を生成し追加する
                     for (id, rule) in &self.grammar.rules {
@@ -167,8 +167,8 @@ impl<'g> DFAGenerator<'g> {
     }
 
     /// 指定したLRアイテム集合から遷移先のLRアイテム集合（未展開）とラベルを抽出する
-    fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<Symbol, LRItemSet> {
-        let mut item_sets: IndexMap<Symbol, LRItemSet> = IndexMap::new();
+    fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<SymbolID, LRItemSet> {
+        let mut item_sets: IndexMap<SymbolID, LRItemSet> = IndexMap::new();
         for item in items {
             let rule = self.grammar.rules.get(&item.rule_id).unwrap();
 
@@ -190,7 +190,7 @@ impl<'g> DFAGenerator<'g> {
     }
 
     /// `First(prefix x)`
-    fn calc_first_set(&self, prefix: &[Symbol], x: Symbol) -> Vec<Symbol> {
+    fn calc_first_set(&self, prefix: &[SymbolID], x: SymbolID) -> Vec<SymbolID> {
         let mut res = IndexSet::new();
         for token in prefix.iter().chain(Some(&x)) {
             let added = self.first_set.get(token).expect("unexpected token");
@@ -204,9 +204,9 @@ impl<'g> DFAGenerator<'g> {
 }
 
 /// Calculate the set of nullable symbols in this grammar.
-fn nulls_set(grammar: &Grammar) -> IndexSet<Symbol> {
+fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
     // ruleからnullableであることが分かっている場合は追加する
-    let mut nulls: IndexSet<Symbol> = grammar
+    let mut nulls: IndexSet<SymbolID> = grammar
         .rules
         .values()
         .filter_map(|rule| rule.rhs.is_empty().then(|| rule.lhs))
@@ -217,7 +217,7 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<Symbol> {
     while changed {
         changed = false;
         for rule in grammar.rules.values() {
-            if nulls.contains(rule.lhs) {
+            if nulls.contains(&rule.lhs) {
                 continue;
             }
             // 右辺のsymbolsがすべてnullableかどうか
@@ -234,17 +234,20 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<Symbol> {
 }
 
 /// Constructs the instance for calculating first sets in this grammar.
-fn first_set(grammar: &Grammar, nulls: &IndexSet<Symbol>) -> IndexMap<Symbol, IndexSet<Symbol>> {
-    let mut map: IndexMap<Symbol, IndexSet<Symbol>> = IndexMap::new();
+fn first_set(
+    grammar: &Grammar,
+    nulls: &IndexSet<SymbolID>,
+) -> IndexMap<SymbolID, IndexSet<SymbolID>> {
+    let mut map: IndexMap<SymbolID, IndexSet<SymbolID>> = IndexMap::new();
 
     // terminal symbols については First(T) = {T} になる
-    for tok in &grammar.terminals {
-        map.insert(tok, Some(*tok).into_iter().collect());
+    for symbol in &grammar.terminals {
+        map.insert(*symbol, Some(*symbol).into_iter().collect());
     }
 
     // nonterminal symbols に関する初期値
-    for tok in &grammar.nonterminals {
-        map.insert(tok, IndexSet::new());
+    for symbol in &grammar.nonterminals {
+        map.insert(*symbol, IndexSet::new());
     }
 
     // 制約条件の抽出
@@ -254,8 +257,8 @@ fn first_set(grammar: &Grammar, nulls: &IndexSet<Symbol>) -> IndexMap<Symbol, In
     //  2. Yi (i=1,2,..,k) それぞれに対し First(X) \supseteq First(Yi) という制約を追加する
     #[derive(Debug)]
     struct Constraint {
-        sup: Symbol,
-        sub: Symbol,
+        sup: SymbolID,
+        sub: SymbolID,
     }
     let mut constraints = vec![];
     for rule in grammar
@@ -267,7 +270,7 @@ fn first_set(grammar: &Grammar, nulls: &IndexSet<Symbol>) -> IndexMap<Symbol, In
             if rule.lhs != *symbol {
                 constraints.push(Constraint {
                     sup: rule.lhs,
-                    sub: symbol,
+                    sub: *symbol,
                 });
             }
             if !nulls.contains(symbol) {
@@ -284,8 +287,8 @@ fn first_set(grammar: &Grammar, nulls: &IndexSet<Symbol>) -> IndexMap<Symbol, In
         changed = false;
 
         for Constraint { sup, sub } in &constraints {
-            let mut superset = map.remove(*sup).unwrap();
-            let subset = map.get(*sub).unwrap();
+            let mut superset = map.remove(sup).unwrap();
+            let subset = map.get(sub).unwrap();
 
             for tok in subset {
                 if !superset.contains(tok) {
@@ -294,7 +297,7 @@ fn first_set(grammar: &Grammar, nulls: &IndexSet<Symbol>) -> IndexMap<Symbol, In
                 }
             }
 
-            map.insert(sup, superset);
+            map.insert(*sup, superset);
         }
     }
 

@@ -4,13 +4,13 @@ fn main() {
     let mut builder = Grammar::builder();
     builder
         .start("A")
-        .terminals(&["EQUAL", "PLUS", "ID", "NUM"])
-        .rule("A", &["E", "EQUAL", "E"])
-        .rule("A", &["ID"])
-        .rule("E", &["E", "PLUS", "T"])
-        .rule("E", &["T"])
-        .rule("T", &["NUM"])
-        .rule("T", &["ID"]);
+        .terminals(["EQUAL", "PLUS", "ID", "NUM"])
+        .rule("A", ["E", "EQUAL", "E"])
+        .rule("A", ["ID"])
+        .rule("E", ["E", "PLUS", "T"])
+        .rule("E", ["T"])
+        .rule("T", ["NUM"])
+        .rule("T", ["ID"]);
 
     let grammar = builder.build();
     println!("Grammar:\n{}", grammar);
@@ -25,7 +25,7 @@ fn main() {
         println!("     item_set:");
         for item in &node.item_set {
             let rule = &grammar.rules.get(&item.rule_id).unwrap();
-            print!("       - [{} -> ", rule.lhs);
+            print!("       - [{} -> ", grammar.symbol_name(rule.lhs));
             for (i, s) in rule.rhs.iter().enumerate() {
                 if i > 0 {
                     print!(" ");
@@ -33,17 +33,17 @@ fn main() {
                 if i == item.marker {
                     print!("@ ");
                 }
-                print!("{}", s);
+                print!("{}", grammar.symbol_name(*s));
             }
             if item.marker == rule.rhs.len() {
                 print!(" @");
             }
-            println!("] {{ {:?} }}", item.lookahead);
+            println!("] {{ {} }}", grammar.symbol_name(item.lookahead));
         }
         if !node.edges.is_empty() {
             println!("     edges:");
             for (symbol, id) in &node.edges {
-                println!("       - {} -> {:02}", symbol, id);
+                println!("       - {} -> {:02}", grammar.symbol_name(*symbol), id);
             }
         }
     }
