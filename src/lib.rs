@@ -185,25 +185,22 @@ pub struct FirstSet {
 }
 
 impl FirstSet {
-    /// Calculate the first set of specified symbols.
-    pub fn get(&self, tokens: &[Symbol]) -> IndexSet<Symbol> {
-        match tokens {
-            [token] => self.map.get(token).expect("invalid token provided").clone(),
-            tokens => {
-                if tokens.iter().any(|t| !self.map.contains_key(t)) {
-                    panic!("invalid token provided");
-                }
-                let mut res = IndexSet::new();
-                for token in tokens {
-                    let added = self.map.get(token).expect("invalid token provided");
-                    res.extend(added.iter().copied());
-                    if !self.nulls.contains(token) {
-                        break;
-                    }
-                }
-                res
+    /// `First(prefix x)`
+    pub fn get(&self, prefix: &[Symbol], x: Symbol) -> IndexSet<Symbol> {
+        if prefix.iter().any(|t| !self.map.contains_key(t)) || !self.map.contains_key(x) {
+            panic!("invalid token provided");
+        }
+
+        let mut res = IndexSet::new();
+        for token in prefix.iter().chain(Some(&x)) {
+            let added = self.map.get(token).unwrap();
+            res.extend(added.iter().copied());
+            if !self.nulls.contains(token) {
+                break;
             }
         }
+
+        res
     }
 }
 
@@ -211,7 +208,7 @@ impl FirstSet {
 #[derive(Debug, Default)]
 pub struct Builder {
     // A collection of terminal symbols.
-    terminals: IndexSet<Symbol>,
+    terminals: Vec<Symbol>,
     rules: Vec<Rule>,
     start: Option<Symbol>,
 }
@@ -243,11 +240,15 @@ impl Builder {
 
     pub fn build(&mut self) -> Grammar {
         let Self {
-            terminals,
+            terminals: terminals_vec,
             rules: rules_vec,
             start,
             ..
         } = mem::take(self);
+
+        let mut terminals: IndexSet<Symbol> = IndexSet::new();
+        terminals.insert("$");
+        terminals.extend(terminals_vec);
 
         let nonterminals: IndexSet<_> = rules_vec.iter().map(|rule| rule.lhs).collect();
         let start = start.or_else(|| nonterminals.first().copied()).unwrap();

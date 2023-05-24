@@ -1,26 +1,32 @@
 use indexmap::{IndexMap, IndexSet};
-use lelele::{Grammar, RuleID, Symbol};
+use lelele::{FirstSet, Grammar, RuleID, Symbol};
 use std::mem;
 
 fn main() {
     let mut builder = lelele::Grammar::builder();
     builder
-        .start("EXPR")
-        .terminals(&["NUM", "PLUS", "TIMES"])
-        .rule("EXPR", &["EXPR", "PLUS", "TERM"])
-        .rule("EXPR", &["TERM"])
-        .rule("TERM", &["TERM", "TIMES", "NUM"])
-        .rule("TERM", &["NUM"]);
+        .start("A")
+        .terminals(&["EQUAL", "PLUS", "ID", "NUM"])
+        .rule("A", &["E", "EQUAL", "E"])
+        .rule("A", &["ID"])
+        .rule("E", &["E", "PLUS", "T"])
+        .rule("E", &["T"])
+        .rule("T", &["NUM"])
+        .rule("T", &["ID"]);
 
     let grammar = builder.build();
     println!("Grammar:\n{}", grammar);
 
     let first_set = grammar.first_set();
-    println!("First(EXPR): {:?}", first_set.get(&["EXPR"]));
-    println!("First(TERM): {:?}", first_set.get(&["TERM"]));
+    println!("First(A): {:?}", first_set.get(&[], "A"));
+    println!("First(E): {:?}", first_set.get(&[], "E"));
+    println!("First(T): {:?}", first_set.get(&[], "T"));
 
     // DFA construction
-    let mut gen = DFAGenerator { grammar: &grammar };
+    let mut gen = DFAGenerator {
+        grammar: &grammar,
+        first_set,
+    };
     let nodes = gen.process();
 
     println!("\nDFA nodes:");
@@ -42,7 +48,7 @@ fn main() {
             if item.marker == rule.rhs.len() {
                 print!(" @");
             }
-            println!("]");
+            println!("] {{ {:?} }}", item.lookahead);
         }
         if !node.edges.is_empty() {
             println!("     edges:");
@@ -53,25 +59,30 @@ fn main() {
     }
 }
 
-// LR(0) item
-// X: Y1 Y2 ... Yn という構文規則があったとき、それに位置情報を付与したもの
+// LR(1) item
+// X: Y1 Y2 ... Yn という構文規則があったとき、それに
+//  * マーカ位置
+//  * 先読み記号
+// を付与したもの
 // example:
 //   [ X -> @ Y1   Y2 ... Yn ]
 //   [ X ->   Y1 @ Y2 ... Yn ]
 //   [ X ->   Y1   Y2 ... Yn @ ]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct LR0Item {
+pub struct LRItem {
     // grammer内におけるruleの識別子
     rule_id: RuleID,
     // marker位置
     marker: usize,
+    // 先読み記号
+    lookahead: Symbol,
 }
-pub type LR0ItemSet = IndexSet<LR0Item>;
+pub type LRItemSet = IndexSet<LRItem>;
 
 #[derive(Debug)]
 pub struct DFANode {
-    // 各DFA nodeに所属するLR(0) item
-    pub item_set: LR0ItemSet,
+    // 各DFA nodeに所属するLR item set
+    pub item_set: LRItemSet,
     // 各DFAノード起点のedge
     pub edges: IndexMap<Symbol, usize>,
 }
@@ -79,6 +90,7 @@ pub type NodeID = usize;
 
 struct DFAGenerator<'g> {
     grammar: &'g Grammar,
+    first_set: FirstSet,
 }
 
 impl DFAGenerator<'_> {
@@ -94,16 +106,17 @@ impl DFAGenerator<'_> {
         // 遷移先の抽出が未完了なノード
         struct PendingItem {
             id: NodeID,
-            item_set: LR0ItemSet,
+            item_set: LRItemSet,
         }
         let mut pending_items: Vec<PendingItem> = vec![];
         pending_items.push({
             // 初期ノードの構築
             let mut item_set = IndexSet::new();
             // [S' -> @ S]
-            item_set.insert(LR0Item {
+            item_set.insert(LRItem {
                 rule_id: RuleID::START,
                 marker: 0,
+                lookahead: "$",
             });
             self.expand_closures(&mut item_set);
             PendingItem {
@@ -150,29 +163,42 @@ impl DFAGenerator<'_> {
     }
 
     /// クロージャ展開
-    fn expand_closures(&self, items: &mut LR0ItemSet) {
+    fn expand_closures(&self, items: &mut LRItemSet) {
         let mut changed = true;
         while changed {
             changed = false;
 
             let mut added = IndexSet::new();
-            for LR0Item { rule_id, marker } in &*items {
+            for LRItem {
+                rule_id,
+                marker,
+                lookahead,
+            } in &*items
+            {
                 let rule = self.grammar.rules.get(rule_id).unwrap();
 
-                // [X -> ... @ Y (..some symbols..)]
+                // [X -> ... @ Y beta]
                 //  Y: one nonterminal symbol
-                let y_symbol = match &rule.rhs[*marker..] {
-                    [y_symbol, ..] if self.grammar.nonterminals.contains(y_symbol) => *y_symbol,
+                let (y_symbol, beta) = match &rule.rhs[*marker..] {
+                    [y_symbol, beta @ ..] if self.grammar.nonterminals.contains(y_symbol) => {
+                        (*y_symbol, beta)
+                    }
                     _ => continue,
                 };
 
-                // Y: ... という形式の構文規則から LR(0) item を生成し追加する
-                for (id, rule) in &self.grammar.rules {
-                    if rule.lhs == y_symbol {
-                        added.insert(LR0Item {
-                            rule_id: *id,
-                            marker: 0,
-                        });
+                // First(beta x)
+                let new_lookahead: Vec<Symbol> =
+                    self.first_set.get(beta, &lookahead).into_iter().collect();
+                for x in new_lookahead {
+                    // Y: ... という形式の構文規則から LR(0) item を生成し追加する
+                    for (id, rule) in &self.grammar.rules {
+                        if rule.lhs == y_symbol {
+                            added.insert(LRItem {
+                                rule_id: *id,
+                                marker: 0,
+                                lookahead: x,
+                            });
+                        }
                     }
                 }
             }
@@ -184,8 +210,8 @@ impl DFAGenerator<'_> {
     }
 
     /// 指定したLRアイテム集合から遷移先のLRアイテム集合（未展開）とラベルを抽出する
-    fn extract_transitions(&self, items: &LR0ItemSet) -> IndexMap<Symbol, LR0ItemSet> {
-        let mut item_sets: IndexMap<Symbol, LR0ItemSet> = IndexMap::new();
+    fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<Symbol, LRItemSet> {
+        let mut item_sets: IndexMap<Symbol, LRItemSet> = IndexMap::new();
         for item in items {
             let rule = self.grammar.rules.get(&item.rule_id).unwrap();
 
@@ -198,9 +224,9 @@ impl DFAGenerator<'_> {
             let label = rule.rhs[item.marker];
 
             //
-            item_sets.entry(label).or_default().insert(LR0Item {
+            item_sets.entry(label).or_default().insert(LRItem {
                 marker: item.marker + 1,
-                ..*item
+                ..item.clone()
             });
         }
         item_sets
