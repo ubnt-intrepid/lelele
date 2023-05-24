@@ -5,6 +5,23 @@ use std::{fmt, mem};
 
 pub type Symbol = &'static str;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct RuleID(usize);
+impl RuleID {
+    pub const START: Self = Self(usize::MAX);
+    const fn new(i: usize) -> Self {
+        Self(i)
+    }
+}
+impl fmt::Display for RuleID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            &Self::START => write!(f, "START"),
+            Self(id) => fmt::Display::fmt(id, f),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Rule {
     pub lhs: Symbol,
@@ -27,7 +44,7 @@ impl fmt::Display for Rule {
 pub struct Grammar {
     pub terminals: IndexSet<Symbol>,
     pub nonterminals: IndexSet<Symbol>,
-    pub rules: Vec<Rule>,
+    pub rules: IndexMap<RuleID, Rule>,
     pub start: Symbol,
 }
 
@@ -48,8 +65,8 @@ impl fmt::Display for Grammar {
             write!(f, "{}", sym)?;
         }
         write!(f, "\nrules:\n")?;
-        for (i, rule) in self.rules.iter().enumerate() {
-            writeln!(f, "  [{:02}] {}", i, rule)?;
+        for (id, rule) in &self.rules {
+            writeln!(f, "  [{:02}] {}", id, rule)?;
         }
         writeln!(f, "start: {}", self.start)?;
         Ok(())
@@ -66,7 +83,7 @@ impl Grammar {
         // ruleからnullableであることが分かっている場合は追加する
         let mut nulls: IndexSet<Symbol> = self
             .rules
-            .iter()
+            .values()
             .filter_map(|rule| rule.rhs.is_empty().then(|| rule.lhs))
             .collect();
 
@@ -74,7 +91,7 @@ impl Grammar {
         let mut changed = true;
         while changed {
             changed = false;
-            for rule in &self.rules {
+            for rule in self.rules.values() {
                 if nulls.contains(rule.lhs) {
                     continue;
                 }
@@ -111,12 +128,17 @@ impl Grammar {
         //  1. Y1,Y2,...と検索していき、最初に来る非nullableな記号を Yk とする
         //    - Y1 Y2 ... Y(k-1) が nullable で Yk が non-nullable となる
         //  2. Yi (i=1,2,..,k) それぞれに対し First(X) \supseteq First(Yi) という制約を追加する
+        #[derive(Debug)]
         struct Constraint {
             sup: Symbol,
             sub: Symbol,
         }
         let mut constraints = vec![];
-        for rule in &self.rules {
+        for rule in self
+            .rules
+            .iter()
+            .flat_map(|(id, rule)| (*id != RuleID::START).then(|| rule))
+        {
             for symbol in &rule.rhs {
                 if rule.lhs != *symbol {
                     constraints.push(Constraint {
@@ -222,16 +244,17 @@ impl Builder {
     pub fn build(&mut self) -> Grammar {
         let Self {
             terminals,
-            rules,
+            rules: rules_vec,
             start,
             ..
         } = mem::take(self);
 
-        let nonterminals: IndexSet<_> = rules.iter().map(|rule| rule.lhs).collect();
+        let nonterminals: IndexSet<_> = rules_vec.iter().map(|rule| rule.lhs).collect();
         let start = start.or_else(|| nonterminals.first().copied()).unwrap();
 
         // rule内にterminal symbolでもnonterminal symbolでもないものが含まれていないかをチェック
-        for rule in &rules {
+        assert!(rules_vec.len() <= usize::MAX / 2, "too many rules");
+        for rule in &rules_vec {
             let mut unknown_symbols = rule.rhs.iter().filter_map(|arg| {
                 (!terminals.contains(arg) && !nonterminals.contains(arg)).then(|| arg)
             });
@@ -239,6 +262,22 @@ impl Builder {
                 panic!("unexpected symbol found in syntax rule: {}", arg);
             }
         }
+
+        let rules = Some((
+            RuleID::START,
+            Rule {
+                lhs: "$START", // dummy symbol for representing the starting point.
+                rhs: vec![start],
+            },
+        ))
+        .into_iter()
+        .chain(
+            rules_vec
+                .into_iter()
+                .enumerate()
+                .map(|(i, rule)| (RuleID::new(i), rule)),
+        )
+        .collect();
 
         Grammar {
             terminals,

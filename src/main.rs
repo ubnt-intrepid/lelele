@@ -1,11 +1,11 @@
 use indexmap::{IndexMap, IndexSet};
-use lelele::{Grammar, Symbol};
+use lelele::{Grammar, RuleID, Symbol};
 use std::mem;
 
 fn main() {
     let mut builder = lelele::Grammar::builder();
     builder
-    .start("EXPR")
+        .start("EXPR")
         .terminals(&["NUM", "PLUS", "TIMES"])
         .rule("EXPR", &["EXPR", "PLUS", "TERM"])
         .rule("EXPR", &["TERM"])
@@ -28,32 +28,21 @@ fn main() {
         println!(" - {:02}:", id);
         println!("     item_set:");
         for item in &node.item_set {
-            match item.rule_index {
-                RuleIndex::Start => {
-                    if item.marker == 0 {
-                        println!("       - [S' -> @ {}]", grammar.start);
-                    } else {
-                        println!("       - [S' -> {} @]", grammar.start);
-                    }
+            let rule = &grammar.rules.get(&item.rule_id).unwrap();
+            print!("       - [{} -> ", rule.lhs);
+            for (i, s) in rule.rhs.iter().enumerate() {
+                if i > 0 {
+                    print!(" ");
                 }
-                RuleIndex::Num(i) => {
-                    let rule = &grammar.rules[i];
-                    print!("       - [{} -> ", rule.lhs);
-                    for (i, s) in rule.rhs.iter().enumerate() {
-                        if i > 0 {
-                            print!(" ");
-                        }
-                        if i == item.marker {
-                            print!("@ ");
-                        }
-                        print!("{}", s);
-                    }
-                    if item.marker == rule.rhs.len() {
-                        print!(" @");
-                    }
-                    println!("]");
+                if i == item.marker {
+                    print!("@ ");
                 }
+                print!("{}", s);
             }
+            if item.marker == rule.rhs.len() {
+                print!(" @");
+            }
+            println!("]");
         }
         if !node.edges.is_empty() {
             println!("     edges:");
@@ -72,18 +61,12 @@ fn main() {
 //   [ X ->   Y1   Y2 ... Yn @ ]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct LR0Item {
-    // grammer内におけるruleの位置
-    rule_index: RuleIndex,
+    // grammer内におけるruleの識別子
+    rule_id: RuleID,
     // marker位置
     marker: usize,
 }
 pub type LR0ItemSet = IndexSet<LR0Item>;
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-enum RuleIndex {
-    Start,
-    Num(usize),
-}
 
 #[derive(Debug)]
 pub struct DFANode {
@@ -119,7 +102,7 @@ impl DFAGenerator<'_> {
             let mut item_set = IndexSet::new();
             // [S' -> @ S]
             item_set.insert(LR0Item {
-                rule_index: RuleIndex::Start,
+                rule_id: RuleID::START,
                 marker: 0,
             });
             self.expand_closures(&mut item_set);
@@ -136,23 +119,26 @@ impl DFAGenerator<'_> {
                 let mut edges = IndexMap::new();
 
                 // 遷移先のitems setを生成する
-                let new_item_sets = self.extract_transitions(&item_set);
-                for (symbol, new_items) in new_item_sets {
-                    let id = if let Some(id) = nodes
-                        .iter()
-                        .find_map(|(id, node)| (node.item_set == new_items).then(|| *id))
-                    {
-                        // クロージャ展開後のitem setが同じなら同一のノードとみなす
-                        id
-                    } else {
-                        // ノードを新規に作る
-                        let id = node_id();
-                        pending_items.push(PendingItem {
-                            id,
-                            item_set: new_items,
-                        });
-                        id
-                    };
+                for (symbol, mut new_item_set) in self.extract_transitions(&item_set) {
+                    self.expand_closures(&mut new_item_set);
+
+                    // クロージャ展開後のitem setが同じなら同一のノードとみなし、新規にノードを生成しない
+                    let found = nodes.iter().find(|(_, node)| node.item_set == new_item_set);
+                    if let Some((id, _node)) = found {
+                        edges.insert(symbol, *id);
+                        continue;
+                    }
+
+                    // MEMO:
+                    // 遷移先のノードに含まれるLR itemは元々のitemのmarkerをひとつずらしたものなので、遷移元のitem setと一致することはない（はず）
+                    debug_assert_ne!(item_set, new_item_set);
+
+                    // ノードを新規に作る
+                    let id = node_id();
+                    pending_items.push(PendingItem {
+                        id,
+                        item_set: new_item_set,
+                    });
                     edges.insert(symbol, id);
                 }
 
@@ -165,37 +151,28 @@ impl DFAGenerator<'_> {
 
     /// クロージャ展開
     fn expand_closures(&self, items: &mut LR0ItemSet) {
-        let grammar = self.grammar;
-
         let mut changed = true;
         while changed {
             changed = false;
 
             let mut added = IndexSet::new();
-            for LR0Item { rule_index, marker } in &*items {
-                let y_symbol = match rule_index {
-                    RuleIndex::Start if *marker == 0 => Some(grammar.start), // S' -> S @
-                    RuleIndex::Start => None,                                // S' -> S @
-                    RuleIndex::Num(i) => {
-                        let rule = &grammar.rules[*i];
-                        match &rule.rhs[*marker..] {
-                            [y_symbol, ..] => Some(*y_symbol), // X -> ... @ Y [... one or more symbols]
-                            _ => None,                         // X -> ... @ Y
-                        }
-                    }
+            for LR0Item { rule_id, marker } in &*items {
+                let rule = self.grammar.rules.get(rule_id).unwrap();
+
+                // [X -> ... @ Y (..some symbols..)]
+                //  Y: one nonterminal symbol
+                let y_symbol = match &rule.rhs[*marker..] {
+                    [y_symbol, ..] if self.grammar.nonterminals.contains(y_symbol) => *y_symbol,
+                    _ => continue,
                 };
 
-                if let Some(y_symbol) = y_symbol {
-                    if grammar.nonterminals.contains(y_symbol) {
-                        // nonterminal symbol Y に関する構文規則から LR(0) item を生成し追加する
-                        for (i, rule) in grammar.rules.iter().enumerate() {
-                            if rule.lhs == y_symbol {
-                                added.insert(LR0Item {
-                                    rule_index: RuleIndex::Num(i),
-                                    marker: 0,
-                                });
-                            }
-                        }
+                // Y: ... という形式の構文規則から LR(0) item を生成し追加する
+                for (id, rule) in &self.grammar.rules {
+                    if rule.lhs == y_symbol {
+                        added.insert(LR0Item {
+                            rule_id: *id,
+                            marker: 0,
+                        });
                     }
                 }
             }
@@ -208,41 +185,24 @@ impl DFAGenerator<'_> {
 
     /// 指定したLRアイテム集合から遷移先のLRアイテム集合（未展開）とラベルを抽出する
     fn extract_transitions(&self, items: &LR0ItemSet) -> IndexMap<Symbol, LR0ItemSet> {
-        let grammar = self.grammar;
-
         let mut item_sets: IndexMap<Symbol, LR0ItemSet> = IndexMap::new();
         for item in items {
-            match item.rule_index {
-                RuleIndex::Start if item.marker == 0 => {
-                    // add S' -> S @
-                    item_sets.entry(grammar.start).or_default().insert(LR0Item {
-                        rule_index: RuleIndex::Start,
-                        marker: 1,
-                    });
-                }
-                RuleIndex::Num(i) => {
-                    let rule = &grammar.rules[i];
-                    // markerが終わりまで到達していれば無視する
-                    if item.marker >= rule.rhs.len() {
-                        continue;
-                    }
-                    // edgeのラベルとなるsymbol
-                    let label = rule.rhs[item.marker];
-                    //
-                    item_sets.entry(label).or_default().insert(LR0Item {
-                        marker: item.marker + 1,
-                        ..*item
-                    });
-                }
-                _ => (),
+            let rule = self.grammar.rules.get(&item.rule_id).unwrap();
+
+            // markerが終わりまで到達していれば無視する
+            if item.marker >= rule.rhs.len() {
+                continue;
             }
-        }
 
-        // a
-        for item_set in item_sets.values_mut() {
-            self.expand_closures(item_set);
-        }
+            // edgeのラベルとなるsymbol
+            let label = rule.rhs[item.marker];
 
+            //
+            item_sets.entry(label).or_default().insert(LR0Item {
+                marker: item.marker + 1,
+                ..*item
+            });
+        }
         item_sets
     }
 }
