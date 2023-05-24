@@ -17,11 +17,11 @@ fn main() {
 
     // DFA construction
     let mut gen = DFAGenerator::new(&grammar);
-    let dfa = gen.process();
+    let dfa = gen.generate();
 
-    println!("\nDFA:\n{}", dfa.display(&grammar));
+    println!("\nDFA:\n{}", dfa);
 
-    let transition_table = dfa.transition_table(&grammar);
+    let transition_table = dfa.transition_table();
     println!("\nTransition table:");
     for (id, actions) in &transition_table {
         println!(" - {:02}", id);

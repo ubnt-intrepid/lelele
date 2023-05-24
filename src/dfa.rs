@@ -5,55 +5,46 @@ use indexmap::{IndexMap, IndexSet};
 use std::{fmt, mem};
 
 #[derive(Debug)]
-pub struct DFA {
+pub struct DFA<'g> {
     nodes: IndexMap<NodeID, DFANode>,
+    grammar: &'g Grammar,
 }
 
-impl DFA {
-    pub fn display<'g>(&'g self, grammar: &'g Grammar) -> impl fmt::Display + 'g {
-        struct DFADisplay<'g> {
-            grammar: &'g Grammar,
-            dfa: &'g DFA,
-        }
-        impl fmt::Display for DFADisplay<'_> {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                for (id, node) in &self.dfa.nodes {
-                    writeln!(f, "- {:02}:", id)?;
-                    writeln!(f, "  item_set:")?;
-                    for item in &node.item_set {
-                        let rule = &self.grammar.rules.get(&item.rule_id).unwrap();
-                        write!(f, "  - [{} -> ", self.grammar.symbol_name(rule.lhs))?;
-                        for (i, s) in rule.rhs.iter().enumerate() {
-                            if i > 0 {
-                                write!(f, " ")?;
-                            }
-                            if i == item.marker {
-                                write!(f, "@ ")?;
-                            }
-                            write!(f, "{}", self.grammar.symbol_name(*s))?;
-                        }
-                        if item.marker == rule.rhs.len() {
-                            write!(f, " @")?;
-                        }
-                        writeln!(f, "] {{ {} }}", self.grammar.symbol_name(item.lookahead))?;
+impl fmt::Display for DFA<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (id, node) in &self.nodes {
+            writeln!(f, "- {:02}:", id)?;
+            writeln!(f, "  item_set:")?;
+            for item in &node.item_set {
+                let rule = &self.grammar.rules.get(&item.rule_id).unwrap();
+                write!(f, "  - [{} -> ", self.grammar.symbol_name(rule.lhs))?;
+                for (i, s) in rule.rhs.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
                     }
-                    if !node.edges.is_empty() {
-                        writeln!(f, "  edges:")?;
-                        for (symbol, id) in &node.edges {
-                            writeln!(f, "  - {} -> {:02}", self.grammar.symbol_name(*symbol), id)?;
-                        }
+                    if i == item.marker {
+                        write!(f, "@ ")?;
                     }
+                    write!(f, "{}", self.grammar.symbol_name(*s))?;
                 }
-                Ok(())
+                if item.marker == rule.rhs.len() {
+                    write!(f, " @")?;
+                }
+                writeln!(f, "] {{ {} }}", self.grammar.symbol_name(item.lookahead))?;
+            }
+            if !node.edges.is_empty() {
+                writeln!(f, "  edges:")?;
+                for (symbol, id) in &node.edges {
+                    writeln!(f, "  - {} -> {:02}", self.grammar.symbol_name(*symbol), id)?;
+                }
             }
         }
-        DFADisplay { dfa: self, grammar }
+        Ok(())
     }
+}
 
-    pub fn transition_table(
-        &self,
-        grammar: &Grammar,
-    ) -> IndexMap<NodeID, IndexMap<SymbolID, Action>> {
+impl DFA<'_> {
+    pub fn transition_table(&self) -> IndexMap<NodeID, IndexMap<SymbolID, Action>> {
         let mut transition_table: IndexMap<NodeID, IndexMap<SymbolID, Action>> = IndexMap::new();
         for (id, node) in &self.nodes {
             let mut actions = IndexMap::new();
@@ -61,7 +52,7 @@ impl DFA {
             for (label, target) in &node.edges {
                 actions.insert(
                     *label,
-                    if grammar.nonterminals.contains(label) {
+                    if self.grammar.nonterminals.contains(label) {
                         Action::Goto(*target)
                     } else {
                         Action::Shift(*target)
@@ -71,7 +62,7 @@ impl DFA {
 
             // reduce, accept
             for item in &node.item_set {
-                let rule = &grammar.rules[&item.rule_id];
+                let rule = &self.grammar.rules[&item.rule_id];
                 if item.marker < rule.rhs.len() {
                     continue;
                 }
@@ -109,11 +100,11 @@ impl fmt::Display for Action {
 }
 
 #[derive(Debug)]
-pub struct DFANode {
+struct DFANode {
     // 各DFA nodeに所属するLR item set
-    pub item_set: LRItemSet,
+    item_set: LRItemSet,
     // 各DFAノード起点のedge
-    pub edges: IndexMap<SymbolID, NodeID>,
+    edges: IndexMap<SymbolID, NodeID>,
 }
 
 // LR(1) item
@@ -126,16 +117,15 @@ pub struct DFANode {
 //   [ X ->   Y1 @ Y2 ... Yn ]
 //   [ X ->   Y1   Y2 ... Yn @ ]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct LRItem {
+struct LRItem {
     // grammer内におけるruleの識別子
-    pub rule_id: RuleID,
+    rule_id: RuleID,
     // marker位置
-    pub marker: usize,
+    marker: usize,
     // 先読み記号
-    pub lookahead: SymbolID,
+    lookahead: SymbolID,
 }
-
-pub type LRItemSet = IndexSet<LRItem>;
+type LRItemSet = IndexSet<LRItem>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -171,7 +161,7 @@ impl<'g> DFAGenerator<'g> {
         }
     }
 
-    pub fn process(&mut self) -> DFA {
+    pub fn generate(&mut self) -> DFA<'g> {
         let mut nodes: IndexMap<NodeID, DFANode> = IndexMap::new();
         let mut next_node_id = 0;
         let mut node_id = || {
@@ -236,7 +226,10 @@ impl<'g> DFAGenerator<'g> {
             }
         }
 
-        DFA { nodes }
+        DFA {
+            nodes,
+            grammar: self.grammar,
+        }
     }
 
     /// クロージャ展開
