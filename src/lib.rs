@@ -2,3 +2,4 @@
 
 pub mod dfa;
 pub mod grammar;
+pub mod parser;
