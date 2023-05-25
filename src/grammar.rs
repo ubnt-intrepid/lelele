@@ -81,17 +81,21 @@ impl fmt::Display for RuleID {
 }
 
 #[derive(Debug)]
-pub struct Rule {
+pub struct Rule<R> {
+    pub context: Option<R>,
     pub lhs: SymbolID,
     pub rhs: Vec<SymbolID>,
 }
-impl Rule {
-    pub fn display<'r>(&'r self, grammar: &'r Grammar) -> impl fmt::Display + 'r {
-        struct RuleDisplay<'r> {
-            rule: &'r Rule,
-            grammar: &'r Grammar<'r>,
+impl<R> Rule<R> {
+    pub fn display<'r>(&'r self, grammar: &'r Grammar<R>) -> impl fmt::Display + 'r
+    where
+        R: fmt::Display,
+    {
+        struct RuleDisplay<'r, R: fmt::Display> {
+            rule: &'r Rule<R>,
+            grammar: &'r Grammar<'r, R>,
         }
-        impl fmt::Display for RuleDisplay<'_> {
+        impl<R: fmt::Display> fmt::Display for RuleDisplay<'_, R> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 let Self { rule, grammar } = self;
                 write!(f, "{} : ", grammar.symbol(rule.lhs).name)?;
@@ -112,14 +116,17 @@ impl Rule {
 }
 
 #[derive(Debug)]
-pub struct Grammar<'g> {
+pub struct Grammar<'g, R> {
     symbols: IndexMap<SymbolID, Symbol<'g>>,
-    rules: IndexMap<RuleID, Rule>,
+    rules: IndexMap<RuleID, Rule<R>>,
     start: SymbolID,
-    start_rule: Rule,
+    start_rule: Rule<R>,
 }
 
-impl fmt::Display for Grammar<'_> {
+impl<R> fmt::Display for Grammar<'_, R>
+where
+    R: fmt::Display,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "terminals: ")?;
         for (i, (_, sym)) in self.terminals().enumerate() {
@@ -144,10 +151,10 @@ impl fmt::Display for Grammar<'_> {
     }
 }
 
-impl<'g> Grammar<'g> {
+impl<'g, R> Grammar<'g, R> {
     pub fn define<F>(f: F) -> Self
     where
-        F: FnOnce(&mut GrammarDef<'g>),
+        F: FnOnce(&mut GrammarDef<'g, R>),
     {
         let mut def = GrammarDef {
             symbols: IndexMap::new(),
@@ -185,6 +192,7 @@ impl<'g> Grammar<'g> {
             rules: def.rules,
             start,
             start_rule: Rule {
+                context: None,
                 lhs: SymbolID::START,
                 rhs: vec![start],
             },
@@ -218,13 +226,13 @@ impl<'g> Grammar<'g> {
         }
     }
 
-    pub fn rules(&self) -> impl Iterator<Item = (RuleID, &Rule)> + '_ {
+    pub fn rules(&self) -> impl Iterator<Item = (RuleID, &Rule<R>)> + '_ {
         Some((RuleID::START, &self.start_rule))
             .into_iter()
             .chain(self.rules.iter().map(|(id, rule)| (*id, rule)))
     }
 
-    pub fn rule(&self, id: RuleID) -> &Rule {
+    pub fn rule(&self, id: RuleID) -> &Rule<R> {
         match id {
             RuleID::START => &self.start_rule,
             id => &self.rules.get(&id).unwrap(),
@@ -234,15 +242,15 @@ impl<'g> Grammar<'g> {
 
 /// A builder object for `Grammar`.
 #[derive(Debug)]
-pub struct GrammarDef<'g> {
+pub struct GrammarDef<'g, R> {
     symbols: IndexMap<SymbolID, Symbol<'g>>,
-    rules: IndexMap<RuleID, Rule>,
+    rules: IndexMap<RuleID, Rule<R>>,
     start: Option<Cow<'g, str>>,
     next_symbol_id: usize,
     next_rule_id: usize,
 }
 
-impl<'g> GrammarDef<'g> {
+impl<'g, R> GrammarDef<'g, R> {
     fn add_symbol(&mut self, added: Symbol<'g>) -> SymbolID {
         match self
             .symbols
@@ -268,7 +276,7 @@ impl<'g> GrammarDef<'g> {
         }
     }
 
-    fn add_rule(&mut self, rule: Rule) -> RuleID {
+    fn add_rule(&mut self, rule: Rule<R>) -> RuleID {
         let id = RuleID::new(self.next_rule_id);
         self.next_rule_id += 1;
         self.rules.insert(id, rule);
@@ -279,7 +287,7 @@ impl<'g> GrammarDef<'g> {
     ///
     /// The first argument `name` means the name of a non-terminal symbol,
     /// and the remaining `args` is
-    pub fn rule<I, T>(&mut self, lhs: T, rhs: I) -> RuleID
+    pub fn rule<I, T>(&mut self, context: R, lhs: T, rhs: I) -> RuleID
     where
         T: Into<Cow<'static, str>>,
         I: IntoIterator,
@@ -298,7 +306,11 @@ impl<'g> GrammarDef<'g> {
             }));
         }
 
-        self.add_rule(Rule { lhs, rhs: rhs_vec })
+        self.add_rule(Rule {
+            context: Some(context),
+            lhs,
+            rhs: rhs_vec,
+        })
     }
 
     /// Specify the start symbol.

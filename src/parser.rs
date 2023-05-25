@@ -2,7 +2,7 @@
 
 use crate::{
     dfa::{Action, NodeID, DFA},
-    grammar::{Grammar, RuleID, SymbolID},
+    grammar::{Grammar, SymbolID},
 };
 use indexmap::IndexMap;
 
@@ -21,8 +21,8 @@ where
 }
 
 #[derive(Debug)]
-pub struct Parser<'g, T> {
-    grammar: &'g Grammar<'g>,
+pub struct Parser<'g, T, R> {
+    grammar: &'g Grammar<'g, R>,
     table: IndexMap<NodeID, IndexMap<SymbolID, Action>>,
     nodes: Vec<NodeID>,
     item_stack: Vec<ParseItem<T>>,
@@ -36,8 +36,8 @@ enum ParserState {
     Accepted,
 }
 
-impl<'g, T> Parser<'g, T> {
-    pub fn new(grammar: &'g Grammar) -> Self {
+impl<'g, T, R> Parser<'g, T, R> {
+    pub fn new(grammar: &'g Grammar<R>) -> Self {
         let dfa = DFA::generate(&grammar);
         let table = dfa.transition_table();
         let initial_node = *table.first().unwrap().0;
@@ -50,7 +50,7 @@ impl<'g, T> Parser<'g, T> {
         }
     }
 
-    pub fn next_event<I>(&mut self, tokens: &mut I) -> ParseEvent<T>
+    pub fn next_event<I>(&mut self, tokens: &mut I) -> ParseEvent<'_, T, R>
     where
         I: TokenStream<T>,
     {
@@ -80,6 +80,7 @@ impl<'g, T> Parser<'g, T> {
 
                 Action::Reduce(rule_id) => {
                     let rule = self.grammar.rule(rule_id);
+                    let ctx = rule.context.as_ref().unwrap();
                     let n = rule.rhs.len();
                     let mut args = vec![];
                     for _ in 0..n {
@@ -89,7 +90,7 @@ impl<'g, T> Parser<'g, T> {
                     args.reverse();
                     self.state = ParserState::PendingGoto;
                     self.item_stack.push(ParseItem::N(rule.lhs));
-                    return ParseEvent::Reduce(rule_id, args);
+                    return ParseEvent::Reduce(ctx, args);
                 }
                 Action::Accept => {
                     self.state = ParserState::Accepted;
@@ -108,7 +109,7 @@ pub enum ParseItem<T> {
 }
 
 #[derive(Debug)]
-pub enum ParseEvent<T> {
-    Reduce(RuleID, Vec<ParseItem<T>>),
+pub enum ParseEvent<'p, T, R> {
+    Reduce(&'p R, Vec<ParseItem<T>>),
     Accept(ParseItem<T>),
 }

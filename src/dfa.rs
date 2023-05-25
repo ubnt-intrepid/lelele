@@ -5,12 +5,12 @@ use indexmap::{IndexMap, IndexSet};
 use std::{fmt, mem};
 
 #[derive(Debug)]
-pub struct DFA<'g> {
+pub struct DFA<'g, R> {
     nodes: IndexMap<NodeID, DFANode>,
-    grammar: &'g Grammar<'g>,
+    grammar: &'g Grammar<'g, R>,
 }
 
-impl fmt::Display for DFA<'_> {
+impl<R> fmt::Display for DFA<'_, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (id, node) in &self.nodes {
             writeln!(f, "- {:02}:", id)?;
@@ -48,8 +48,8 @@ impl fmt::Display for DFA<'_> {
     }
 }
 
-impl<'g> DFA<'g> {
-    pub fn generate(grammar: &'g Grammar) -> Self {
+impl<'g, R> DFA<'g, R> {
+    pub fn generate(grammar: &'g Grammar<'g, R>) -> Self {
         let nulls = nulls_set(grammar);
         let first_set = first_set(grammar, &nulls);
         DFAGenerator {
@@ -160,14 +160,14 @@ impl fmt::Display for NodeID {
 }
 
 #[derive(Debug)]
-struct DFAGenerator<'g> {
-    grammar: &'g Grammar<'g>,
+struct DFAGenerator<'g, R> {
+    grammar: &'g Grammar<'g, R>,
     first_set: IndexMap<SymbolID, IndexSet<SymbolID>>,
     nulls: IndexSet<SymbolID>,
 }
 
-impl<'g> DFAGenerator<'g> {
-    fn generate(&mut self) -> DFA<'g> {
+impl<'g, R> DFAGenerator<'g, R> {
+    fn generate(&mut self) -> DFA<'g, R> {
         let mut nodes: IndexMap<NodeID, DFANode> = IndexMap::new();
         let mut next_node_id = 0;
         let mut node_id = || {
@@ -321,7 +321,7 @@ impl<'g> DFAGenerator<'g> {
 }
 
 /// Calculate the set of nullable symbols in this grammar.
-fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
+fn nulls_set<R>(grammar: &Grammar<R>) -> IndexSet<SymbolID> {
     // ruleからnullableであることが分かっている場合は追加する
     let mut nulls: IndexSet<SymbolID> = grammar
         .rules()
@@ -350,8 +350,8 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
 }
 
 /// Constructs the instance for calculating first sets in this grammar.
-fn first_set(
-    grammar: &Grammar,
+fn first_set<R>(
+    grammar: &Grammar<R>,
     nulls: &IndexSet<SymbolID>,
 ) -> IndexMap<SymbolID, IndexSet<SymbolID>> {
     let mut map: IndexMap<SymbolID, IndexSet<SymbolID>> = IndexMap::new();

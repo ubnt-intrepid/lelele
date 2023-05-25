@@ -1,19 +1,30 @@
 use indexmap::IndexMap;
 use lelele::{
     grammar::{Grammar, SymbolID},
-    parser::{ParseEvent, ParseItem, Parser},
+    parser::{ParseEvent, Parser},
 };
+
+#[derive(Debug)]
+enum RuleName {
+    R1,
+    R2,
+    R3,
+    R4,
+    R5,
+    R6,
+}
 
 fn main() {
     // 文法定義
     let grammar = Grammar::define(|def| {
+        use RuleName::*;
         def.start("A");
-        def.rule("A", ["E", "EQUAL", "E"]);
-        def.rule("A", ["ID"]);
-        def.rule("E", ["E", "PLUS", "T"]);
-        def.rule("E", ["T"]);
-        def.rule("T", ["NUM"]);
-        def.rule("T", ["ID"]);
+        def.rule(R1, "A", ["E", "EQUAL", "E"]);
+        def.rule(R2, "A", ["ID"]);
+        def.rule(R3, "E", ["E", "PLUS", "T"]);
+        def.rule(R4, "E", ["T"]);
+        def.rule(R5, "T", ["NUM"]);
+        def.rule(R6, "T", ["ID"]);
     });
 
     // シンボル名からSymbolIDへの逆引き用map
@@ -40,26 +51,11 @@ fn main() {
     let mut parser = Parser::new(&grammar);
     loop {
         match parser.next_event(&mut tokens) {
-            ParseEvent::Reduce(rule_id, args) => {
-                let rule = grammar.rule(rule_id);
-                let lhs = grammar.symbol(rule.lhs);
-                println!(
-                    "reduce: {:?} -> {}",
-                    args.iter()
-                        .map(|s| match s {
-                            ParseItem::N(t) => format!("<{}>", grammar.symbol(*t).name()),
-                            ParseItem::T(_, value) => value.to_string(),
-                        })
-                        .collect::<Vec<_>>(),
-                    lhs.name(),
-                );
+            ParseEvent::Reduce(rule, args) => {
+                println!("reduce({:?}, {:?})", rule, args);
             }
             ParseEvent::Accept(s) => {
-                let s = match s {
-                    ParseItem::N(s) => grammar.symbol(s),
-                    ParseItem::T(s, _) => grammar.symbol(s),
-                };
-                println!("accept: {}", s.name());
+                println!("accept: {:?}", s);
                 break;
             }
         }
