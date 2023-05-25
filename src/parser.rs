@@ -25,7 +25,7 @@ pub struct Parser<'g, T, R> {
     grammar: &'g Grammar<'g, R>,
     table: IndexMap<NodeID, IndexMap<SymbolID, Action>>,
     nodes: Vec<NodeID>,
-    item_stack: Vec<ParseItem<T>>,
+    item_stack: Vec<StackItem<T>>,
     state: ParserState,
 }
 
@@ -58,8 +58,8 @@ impl<'g, T, R> Parser<'g, T, R> {
             let current = self.nodes.last().unwrap();
             let input = match self.state {
                 ParserState::PendingGoto => match self.item_stack.last().unwrap() {
-                    ParseItem::N(t) => *t,
-                    ParseItem::T(t, _) => *t,
+                    StackItem::N(t) => *t,
+                    StackItem::T(t, _) => *t,
                 },
                 _ => tokens.peek_next().map_or(SymbolID::EOI, |(id, _)| *id),
             };
@@ -68,7 +68,7 @@ impl<'g, T, R> Parser<'g, T, R> {
                     self.state = ParserState::Reading;
                     let (id, t) = tokens.next().expect("unexpected EOI");
                     self.nodes.push(n);
-                    self.item_stack.push(ParseItem::T(id, t));
+                    self.item_stack.push(StackItem::T(id, t));
                     continue;
                 }
 
@@ -85,17 +85,26 @@ impl<'g, T, R> Parser<'g, T, R> {
                     let mut args = vec![];
                     for _ in 0..n {
                         self.nodes.pop();
-                        args.push(self.item_stack.pop().unwrap());
+                        let item = self.item_stack.pop().unwrap();
+                        let arg = match item {
+                            StackItem::N(t) => ParseItem::N(self.grammar.symbol(t).name()),
+                            StackItem::T(_, token) => ParseItem::T(token),
+                        };
+                        args.push(arg);
                     }
                     args.reverse();
                     self.state = ParserState::PendingGoto;
-                    self.item_stack.push(ParseItem::N(rule.lhs));
+                    self.item_stack.push(StackItem::N(rule.lhs));
                     return ParseEvent::Reduce(ctx, args);
                 }
                 Action::Accept => {
                     self.state = ParserState::Accepted;
                     let item = self.item_stack.pop().expect("empty result stack");
-                    return ParseEvent::Accept(item);
+                    let arg = match item {
+                        StackItem::N(t) => ParseItem::N(self.grammar.symbol(t).name()),
+                        StackItem::T(_, token) => ParseItem::T(token),
+                    };
+                    return ParseEvent::Accept(arg);
                 }
             }
         }
@@ -103,13 +112,19 @@ impl<'g, T, R> Parser<'g, T, R> {
 }
 
 #[derive(Debug)]
-pub enum ParseItem<T> {
+enum StackItem<T> {
     T(SymbolID, T),
     N(SymbolID),
 }
 
 #[derive(Debug)]
+pub enum ParseItem<'p, T> {
+    T(T),
+    N(&'p str),
+}
+
+#[derive(Debug)]
 pub enum ParseEvent<'p, T, R> {
-    Reduce(&'p R, Vec<ParseItem<T>>),
-    Accept(ParseItem<T>),
+    Reduce(&'p R, Vec<ParseItem<'p, T>>),
+    Accept(ParseItem<'p, T>),
 }
