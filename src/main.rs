@@ -6,15 +6,15 @@ use lelele::{
 
 fn main() {
     // 文法定義
-    let grammar = Grammar::builder()
-        .start("A")
-        .rule("A", ["E", "EQUAL", "E"])
-        .rule("A", ["ID"])
-        .rule("E", ["E", "PLUS", "T"])
-        .rule("E", ["T"])
-        .rule("T", ["NUM"])
-        .rule("T", ["ID"])
-        .build();
+    let grammar = Grammar::define(|def| {
+        def.start("A");
+        def.rule("A", ["E", "EQUAL", "E"]);
+        def.rule("A", ["ID"]);
+        def.rule("E", ["E", "PLUS", "T"]);
+        def.rule("E", ["T"]);
+        def.rule("T", ["NUM"]);
+        def.rule("T", ["ID"]);
+    });
 
     // シンボル名からSymbolIDへの逆引き用map
     let symbol_ids: IndexMap<&str, SymbolID> = grammar
