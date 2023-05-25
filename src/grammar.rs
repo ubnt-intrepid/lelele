@@ -193,22 +193,11 @@ impl<'g> Grammar<'g> {
 /// A builder object for `Grammar`.
 #[derive(Debug, Default)]
 pub struct Builder<'g> {
-    terminals: Vec<Cow<'g, str>>,
     rules: Vec<(Cow<'g, str>, Vec<Cow<'g, str>>)>,
     start: Option<Cow<'g, str>>,
 }
 
 impl<'g> Builder<'g> {
-    /// Register some terminal symbols into this grammar.
-    pub fn terminals<I>(&mut self, symbols: I) -> &mut Self
-    where
-        I: IntoIterator,
-        I::Item: Into<Cow<'g, str>>,
-    {
-        self.terminals.extend(symbols.into_iter().map(Into::into));
-        self
-    }
-
     /// Register a syntax rule into this grammer.
     ///
     /// The first argument `name` means the name of a non-terminal symbol,
@@ -235,7 +224,6 @@ impl<'g> Builder<'g> {
 
     pub fn build(&mut self) -> Grammar<'g> {
         let Self {
-            terminals,
             rules: rules_vec,
             start,
             ..
@@ -268,17 +256,6 @@ impl<'g> Builder<'g> {
                 }
             }
         };
-
-        // terminal symbolsの登録
-        for name in terminals {
-            add_symbol(
-                &mut symbols,
-                Symbol {
-                    name,
-                    kind: SymbolKind::Terminal,
-                },
-            );
-        }
 
         // rulesの登録
         let mut rules: IndexMap<RuleID, Rule> = IndexMap::new();

@@ -8,7 +8,6 @@ fn main() {
     // 文法定義
     let grammar = Grammar::builder()
         .start("A")
-        .terminals(["EQUAL", "PLUS", "ID", "NUM"])
         .rule("A", ["E", "EQUAL", "E"])
         .rule("A", ["ID"])
         .rule("E", ["E", "PLUS", "T"])
