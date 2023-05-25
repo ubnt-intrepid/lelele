@@ -1,4 +1,4 @@
-use lelele::{dfa::DFAGenerator, grammar::Grammar};
+use lelele::{dfa::DFA, grammar::Grammar};
 
 fn main() {
     let mut builder = Grammar::builder();
@@ -16,9 +16,7 @@ fn main() {
     println!("Grammar:\n{}", grammar);
 
     // DFA construction
-    let mut gen = DFAGenerator::new(&grammar);
-    let dfa = gen.generate();
-
+    let dfa = DFA::generate(&grammar);
     println!("\nDFA:\n{}", dfa);
 
     let transition_table = dfa.transition_table();
@@ -26,7 +24,7 @@ fn main() {
     for (id, actions) in &transition_table {
         println!(" - {:02}", id);
         for (input, action) in actions.iter() {
-            println!("   - {}: {}", grammar.symbol(*input).name, action);
+            println!("   - {}: {}", grammar.symbol(*input).name(), action);
         }
     }
 }

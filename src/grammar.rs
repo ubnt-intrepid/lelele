@@ -30,8 +30,15 @@ impl fmt::Display for SymbolID {
 
 #[derive(Debug)]
 pub struct Symbol<'g> {
-    pub name: Cow<'g, str>,
-    pub kind: SymbolKind,
+    name: Cow<'g, str>,
+    kind: SymbolKind,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+enum SymbolKind {
+    Terminal,
+    Nonterminal,
+    Unspecified,
 }
 
 impl<'g> Symbol<'g> {
@@ -43,13 +50,14 @@ impl<'g> Symbol<'g> {
         name: Cow::Borrowed("$START"),
         kind: SymbolKind::Nonterminal,
     };
-}
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum SymbolKind {
-    Terminal,
-    Nonterminal,
-    Unspecified,
+    pub fn name(&self) -> &str {
+        &*self.name
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        matches!(self.kind, SymbolKind::Terminal)
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
