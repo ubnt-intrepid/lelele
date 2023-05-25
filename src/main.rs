@@ -19,14 +19,10 @@ fn main() {
     let grammar = Grammar::define(|def| {
         use RuleName::*;
 
-        def.terminal("ID");
-        def.terminal("NUM");
-        def.terminal("PLUS");
-        def.terminal("EQUAL");
-
-        def.nonterminal("A");
-        def.nonterminal("E");
-        def.nonterminal("T");
+        def.token("ID");
+        def.token("NUM");
+        def.token("PLUS");
+        def.token("EQUAL");
 
         def.rule(R1, "A", ["E", "EQUAL", "E"]);
         def.rule(R2, "A", ["ID"]);
