@@ -18,13 +18,23 @@ fn main() {
     // 文法定義
     let grammar = Grammar::define(|def| {
         use RuleName::*;
-        def.start("A");
+
+        def.terminal("ID");
+        def.terminal("NUM");
+        def.terminal("PLUS");
+        def.terminal("EQUAL");
+
+        def.nonterminal("A");
+        def.nonterminal("E");
+        def.nonterminal("T");
+
         def.rule(R1, "A", ["E", "EQUAL", "E"]);
         def.rule(R2, "A", ["ID"]);
         def.rule(R3, "E", ["E", "PLUS", "T"]);
         def.rule(R4, "E", ["T"]);
         def.rule(R5, "T", ["NUM"]);
         def.rule(R6, "T", ["ID"]);
+        def.start("A");
     });
 
     // シンボル名からSymbolIDへの逆引き用map

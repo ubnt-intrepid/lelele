@@ -283,6 +283,26 @@ impl<'g, R> GrammarDef<'g, R> {
         id
     }
 
+    pub fn terminal<T>(&mut self, name: T) -> SymbolID
+    where
+        T: Into<Cow<'g, str>>,
+    {
+        self.add_symbol(Symbol {
+            name: name.into(),
+            kind: SymbolKind::Terminal,
+        })
+    }
+
+    pub fn nonterminal<T>(&mut self, name: T) -> SymbolID
+    where
+        T: Into<Cow<'g, str>>,
+    {
+        self.add_symbol(Symbol {
+            name: name.into(),
+            kind: SymbolKind::Nonterminal,
+        })
+    }
+
     /// Register a syntax rule into this grammer.
     ///
     /// The first argument `name` means the name of a non-terminal symbol,
