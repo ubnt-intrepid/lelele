@@ -1,13 +1,13 @@
 //! LR(1) DFA generation.
 
-use crate::grammar::{Grammar, RuleID, SymbolID};
+use crate::grammar::{Grammar, RuleID, SymbolID, SymbolKind};
 use indexmap::{IndexMap, IndexSet};
 use std::{fmt, mem};
 
 #[derive(Debug)]
 pub struct DFA<'g> {
     nodes: IndexMap<NodeID, DFANode>,
-    grammar: &'g Grammar,
+    grammar: &'g Grammar<'g>,
 }
 
 impl fmt::Display for DFA<'_> {
@@ -16,8 +16,8 @@ impl fmt::Display for DFA<'_> {
             writeln!(f, "- {:02}:", id)?;
             writeln!(f, "  item_set:")?;
             for item in &node.item_set {
-                let rule = &self.grammar.rules.get(&item.rule_id).unwrap();
-                write!(f, "  - [{} -> ", self.grammar.symbol_name(rule.lhs))?;
+                let rule = &self.grammar.rule(item.rule_id);
+                write!(f, "  - [{} -> ", self.grammar.symbol(rule.lhs).name)?;
                 for (i, s) in rule.rhs.iter().enumerate() {
                     if i > 0 {
                         write!(f, " ")?;
@@ -25,17 +25,17 @@ impl fmt::Display for DFA<'_> {
                     if i == item.marker {
                         write!(f, "@ ")?;
                     }
-                    write!(f, "{}", self.grammar.symbol_name(*s))?;
+                    write!(f, "{}", self.grammar.symbol(*s).name)?;
                 }
                 if item.marker == rule.rhs.len() {
                     write!(f, " @")?;
                 }
-                writeln!(f, "] {{ {} }}", self.grammar.symbol_name(item.lookahead))?;
+                writeln!(f, "] {{ {} }}", self.grammar.symbol(item.lookahead).name)?;
             }
             if !node.edges.is_empty() {
                 writeln!(f, "  edges:")?;
                 for (symbol, id) in &node.edges {
-                    writeln!(f, "  - {} -> {:02}", self.grammar.symbol_name(*symbol), id)?;
+                    writeln!(f, "  - {} -> {:02}", self.grammar.symbol(*symbol).name, id)?;
                 }
             }
         }
@@ -52,17 +52,17 @@ impl DFA<'_> {
             for (label, target) in &node.edges {
                 actions.insert(
                     *label,
-                    if self.grammar.nonterminals.contains(label) {
-                        Action::Goto(*target)
-                    } else {
-                        Action::Shift(*target)
+                    match self.grammar.symbol(*label).kind {
+                        SymbolKind::Terminal => Action::Shift(*target),
+                        SymbolKind::Nonterminal => Action::Goto(*target),
+                        _ => unreachable!(),
                     },
                 );
             }
 
             // reduce, accept
             for item in &node.item_set {
-                let rule = &self.grammar.rules[&item.rule_id];
+                let rule = &self.grammar.rule(item.rule_id);
                 if item.marker < rule.rhs.len() {
                     continue;
                 }
@@ -145,7 +145,7 @@ impl fmt::Display for NodeID {
 
 #[derive(Debug)]
 pub struct DFAGenerator<'g> {
-    grammar: &'g Grammar,
+    grammar: &'g Grammar<'g>,
     first_set: IndexMap<SymbolID, IndexSet<SymbolID>>,
     nulls: IndexSet<SymbolID>,
 }
@@ -245,12 +245,14 @@ impl<'g> DFAGenerator<'g> {
                 lookahead,
             } in &*items
             {
-                let rule = self.grammar.rules.get(rule_id).unwrap();
+                let rule = self.grammar.rule(*rule_id);
 
                 // [X -> ... @ Y beta]
                 //  Y: one nonterminal symbol
                 let (y_symbol, beta) = match &rule.rhs[*marker..] {
-                    [y_symbol, beta @ ..] if self.grammar.nonterminals.contains(y_symbol) => {
+                    [y_symbol, beta @ ..]
+                        if self.grammar.symbol(*y_symbol).kind == SymbolKind::Nonterminal =>
+                    {
                         (*y_symbol, beta)
                     }
                     _ => continue,
@@ -260,10 +262,10 @@ impl<'g> DFAGenerator<'g> {
                 let new_lookahead: Vec<SymbolID> = self.calc_first_set(beta, *lookahead);
                 for x in new_lookahead {
                     // Y: ... という形式の構文規則から LR(0) item を生成し追加する
-                    for (id, rule) in &self.grammar.rules {
+                    for (rule_id, rule) in self.grammar.rules() {
                         if rule.lhs == y_symbol {
                             added.insert(LRItem {
-                                rule_id: *id,
+                                rule_id,
                                 marker: 0,
                                 lookahead: x,
                             });
@@ -282,7 +284,7 @@ impl<'g> DFAGenerator<'g> {
     fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<SymbolID, LRItemSet> {
         let mut item_sets: IndexMap<SymbolID, LRItemSet> = IndexMap::new();
         for item in items {
-            let rule = self.grammar.rules.get(&item.rule_id).unwrap();
+            let rule = self.grammar.rule(item.rule_id);
 
             // markerが終わりまで到達していれば無視する
             if item.marker >= rule.rhs.len() {
@@ -319,16 +321,15 @@ impl<'g> DFAGenerator<'g> {
 fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
     // ruleからnullableであることが分かっている場合は追加する
     let mut nulls: IndexSet<SymbolID> = grammar
-        .rules
-        .values()
-        .filter_map(|rule| rule.rhs.is_empty().then(|| rule.lhs))
+        .rules()
+        .filter_map(|(_id, rule)| rule.rhs.is_empty().then_some(rule.lhs))
         .collect();
 
     // 値が更新されなくなるまで繰り返す
     let mut changed = true;
     while changed {
         changed = false;
-        for rule in grammar.rules.values() {
+        for (_, rule) in grammar.rules() {
             if nulls.contains(&rule.lhs) {
                 continue;
             }
@@ -353,13 +354,13 @@ fn first_set(
     let mut map: IndexMap<SymbolID, IndexSet<SymbolID>> = IndexMap::new();
 
     // terminal symbols については First(T) = {T} になる
-    for symbol in &grammar.terminals {
-        map.insert(*symbol, Some(*symbol).into_iter().collect());
+    for (id, _) in grammar.terminals() {
+        map.insert(id, Some(id).into_iter().collect());
     }
 
-    // nonterminal symbols に関する初期値
-    for symbol in &grammar.nonterminals {
-        map.insert(*symbol, IndexSet::new());
+    // nonterminal symbols は First(T) = {} と初期化する
+    for (id, _) in grammar.nonterminals() {
+        map.insert(id, IndexSet::new());
     }
 
     // 制約条件の抽出
@@ -374,9 +375,8 @@ fn first_set(
     }
     let mut constraints = vec![];
     for rule in grammar
-        .rules
-        .iter()
-        .flat_map(|(id, rule)| (*id != RuleID::START).then(|| rule))
+        .rules()
+        .flat_map(|(id, rule)| (id != RuleID::START).then_some(rule))
     {
         for symbol in &rule.rhs {
             if rule.lhs != *symbol {

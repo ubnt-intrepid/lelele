@@ -1,6 +1,6 @@
 //! Grammar types.
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use std::{borrow::Cow, fmt, mem};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -8,6 +8,7 @@ use std::{borrow::Cow, fmt, mem};
 pub struct SymbolID {
     inner: usize,
 }
+
 impl SymbolID {
     pub const EOI: Self = Self::new(usize::MAX);
     pub const START: Self = Self::new(usize::MAX - 1);
@@ -16,6 +17,7 @@ impl SymbolID {
         Self { inner: i }
     }
 }
+
 impl fmt::Display for SymbolID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -24,6 +26,30 @@ impl fmt::Display for SymbolID {
             Self { inner } => fmt::Display::fmt(inner, f),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct Symbol<'g> {
+    pub name: Cow<'g, str>,
+    pub kind: SymbolKind,
+}
+
+impl<'g> Symbol<'g> {
+    const EOI: Self = Self {
+        name: Cow::Borrowed("$EOI"),
+        kind: SymbolKind::Terminal,
+    };
+    const START: Self = Self {
+        name: Cow::Borrowed("$START"),
+        kind: SymbolKind::Nonterminal,
+    };
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum SymbolKind {
+    Terminal,
+    Nonterminal,
+    Unspecified,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -55,17 +81,17 @@ impl Rule {
     pub fn display<'r>(&'r self, grammar: &'r Grammar) -> impl fmt::Display + 'r {
         struct RuleDisplay<'r> {
             rule: &'r Rule,
-            grammar: &'r Grammar,
+            grammar: &'r Grammar<'r>,
         }
         impl fmt::Display for RuleDisplay<'_> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 let Self { rule, grammar } = self;
-                write!(f, "{} : ", grammar.symbol_name(rule.lhs))?;
+                write!(f, "{} : ", grammar.symbol(rule.lhs).name)?;
                 for (i, symbol) in rule.rhs.iter().enumerate() {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{}", grammar.symbol_name(*symbol))?;
+                    write!(f, "{}", grammar.symbol(*symbol).name)?;
                 }
                 Ok(())
             }
@@ -78,67 +104,98 @@ impl Rule {
 }
 
 #[derive(Debug)]
-pub struct Grammar {
-    pub symbols: IndexMap<SymbolID, Cow<'static, str>>,
-    pub rules: IndexMap<RuleID, Rule>,
-    pub terminals: IndexSet<SymbolID>,
-    pub nonterminals: IndexSet<SymbolID>,
-    pub start: SymbolID,
+pub struct Grammar<'g> {
+    symbols: IndexMap<SymbolID, Symbol<'g>>,
+    rules: IndexMap<RuleID, Rule>,
+    start: SymbolID,
+    start_rule: Rule,
 }
 
-impl fmt::Display for Grammar {
+impl fmt::Display for Grammar<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "terminals: ")?;
-        for (i, sym) in self.terminals.iter().enumerate() {
+        for (i, (_, sym)) in self.terminals().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            write!(f, "{}", self.symbols[sym])?;
+            write!(f, "{}", sym.name)?;
         }
         write!(f, "\nnonterminals: ")?;
-        for (i, sym) in self.nonterminals.iter().enumerate() {
+        for (i, (_, sym)) in self.nonterminals().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            write!(f, "{}", self.symbol_name(*sym))?;
+            write!(f, "{}", sym.name)?;
         }
         write!(f, "\nrules:\n")?;
-        for (id, rule) in &self.rules {
+        for (id, rule) in self.rules() {
             writeln!(f, "  [{:02}] {}", id, rule.display(self))?;
         }
-        write!(f, "start: {}", self.symbol_name(self.start))?;
+        write!(f, "start: {}", self.symbol(self.start).name)?;
         Ok(())
     }
 }
 
-impl Grammar {
-    pub fn builder() -> Builder {
+impl<'g> Grammar<'g> {
+    pub fn builder() -> Builder<'g> {
         Builder::default()
     }
 
-    pub fn symbol_name(&self, id: SymbolID) -> &str {
+    pub fn symbols(&self) -> impl Iterator<Item = (SymbolID, &Symbol<'g>)> + '_ {
+        [
+            (SymbolID::EOI, &Symbol::EOI),
+            (SymbolID::START, &Symbol::START),
+        ]
+        .into_iter()
+        .chain(self.symbols.iter().map(|(id, sym)| (*id, sym)))
+    }
+
+    pub fn terminals(&self) -> impl Iterator<Item = (SymbolID, &Symbol<'g>)> + '_ {
+        self.symbols()
+            .filter(|(_id, sym)| sym.kind == SymbolKind::Terminal)
+    }
+
+    pub fn nonterminals(&self) -> impl Iterator<Item = (SymbolID, &Symbol<'g>)> + '_ {
+        self.symbols()
+            .filter(|(_id, sym)| sym.kind == SymbolKind::Nonterminal)
+    }
+
+    pub fn symbol(&self, id: SymbolID) -> &Symbol<'g> {
         match id {
-            SymbolID::EOI => "$end",
-            SymbolID::START => "$start",
-            id => &*self.symbols[&id],
+            SymbolID::EOI => &Symbol::EOI,
+            SymbolID::START => &Symbol::START,
+            id => &self.symbols[&id],
+        }
+    }
+
+    pub fn rules(&self) -> impl Iterator<Item = (RuleID, &Rule)> + '_ {
+        Some((RuleID::START, &self.start_rule))
+            .into_iter()
+            .chain(self.rules.iter().map(|(id, rule)| (*id, rule)))
+    }
+
+    pub fn rule(&self, id: RuleID) -> &Rule {
+        match id {
+            RuleID::START => &self.start_rule,
+            id => &self.rules.get(&id).unwrap(),
         }
     }
 }
 
 /// A builder object for `Grammar`.
 #[derive(Debug, Default)]
-pub struct Builder {
-    terminals: Vec<Cow<'static, str>>,
-    rules: Vec<(Cow<'static, str>, Vec<Cow<'static, str>>)>,
-    start: Option<Cow<'static, str>>,
+pub struct Builder<'g> {
+    terminals: Vec<Cow<'g, str>>,
+    rules: Vec<(Cow<'g, str>, Vec<Cow<'g, str>>)>,
+    start: Option<Cow<'g, str>>,
 }
 
-impl Builder {
+impl<'g> Builder<'g> {
     /// Register some terminal symbols into this grammar.
     pub fn terminals<I>(&mut self, symbols: I) -> &mut Self
     where
         I: IntoIterator,
-        I::Item: Into<Cow<'static, str>>,
+        I::Item: Into<Cow<'g, str>>,
     {
         self.terminals.extend(symbols.into_iter().map(Into::into));
         self
@@ -152,7 +209,7 @@ impl Builder {
     where
         T: Into<Cow<'static, str>>,
         I: IntoIterator,
-        I::Item: Into<Cow<'static, str>>,
+        I::Item: Into<Cow<'g, str>>,
     {
         self.rules
             .push((lhs.into(), rhs.into_iter().map(Into::into).collect()));
@@ -168,93 +225,118 @@ impl Builder {
         self
     }
 
-    pub fn build(&mut self) -> Grammar {
+    pub fn build(&mut self) -> Grammar<'g> {
         let Self {
-            terminals: terminals_vec,
+            terminals,
             rules: rules_vec,
             start,
             ..
         } = mem::take(self);
 
-        // nonterminal symbolの個数はruleの数以下なので、terminals.len() + rules.len() <= usize::MAX になるようにすれば良い。
-        assert!(
-            terminals_vec.len() <= usize::MAX / 4,
-            "too many terminal symbols"
-        );
-        assert!(rules_vec.len() <= usize::MAX / 4, "too many rules");
-
-        let mut symbols: IndexMap<SymbolID, Cow<'static, str>> = IndexMap::new();
-        symbols.insert(SymbolID::EOI, "$".into());
-        let mut next_symbol_id = 0;
-        let mut symbol_id = || {
-            let id = next_symbol_id;
-            next_symbol_id += 1;
-            SymbolID::new(id)
+        // 文法内に登場するsymbolとIDの対応表
+        let mut symbols: IndexMap<SymbolID, Symbol> = IndexMap::new();
+        // symbolがなければ追加し、IDと紐付ける。そうでない場合は登録されたsymbolのIDを返す
+        let mut add_symbol = {
+            let mut next_symbol_id = 0;
+            move |symbols: &mut IndexMap<SymbolID, Symbol<'g>>, added: Symbol<'g>| {
+                //
+                match symbols.iter_mut().find(|(_, sym)| sym.name == added.name) {
+                    Some((id, sym)) => {
+                        match (sym.kind, added.kind) {
+                            (SymbolKind::Unspecified, k) => sym.kind = k, // overwrite
+                            (_, SymbolKind::Unspecified) => (),           // do nothing
+                            (a, b) => {
+                                debug_assert!(a == b, "conflict symbol kind ({:?}, {:?})", a, b)
+                            }
+                        }
+                        *id
+                    }
+                    None => {
+                        let id = SymbolID::new(next_symbol_id);
+                        next_symbol_id += 1;
+                        symbols.insert(id, added);
+                        id
+                    }
+                }
+            }
         };
 
-        let mut terminals: IndexSet<SymbolID> = IndexSet::new();
-        terminals.insert(SymbolID::EOI);
-        for terminal in terminals_vec {
-            let id = symbol_id();
-            symbols.insert(id, terminal);
-            terminals.insert(id);
+        // terminal symbolsの登録
+        for name in terminals {
+            add_symbol(
+                &mut symbols,
+                Symbol {
+                    name,
+                    kind: SymbolKind::Terminal,
+                },
+            );
         }
 
-        // ruleのlhsに登場するsymbolをnonterminalとして抽出
-        let mut nonterminals: IndexSet<SymbolID> = IndexSet::new();
-        // 右辺のsymbolはまだ登場していない可能性があるので保留する
-        let mut rules_: Vec<(SymbolID, Vec<Cow<'static, str>>)> = vec![];
-        for (lhs, rhs) in rules_vec {
-            let id = symbols
-                .iter()
-                .filter_map(|(id, name)| (*name == lhs).then(|| *id))
-                .next()
-                .unwrap_or_else(&mut symbol_id);
-            symbols.entry(id).or_insert(lhs);
-            nonterminals.insert(id);
-            rules_.push((id, rhs));
+        // rulesの登録
+        let mut rules: IndexMap<RuleID, Rule> = IndexMap::new();
+        let mut add_rule = {
+            let mut next_rule_id = 0;
+            move |rules: &mut IndexMap<RuleID, Rule>, rule: Rule| {
+                let id = RuleID::new(next_rule_id);
+                next_rule_id += 1;
+                rules.insert(id, rule);
+                id
+            }
+        };
+        for (lhs_vec, rhs_vec) in rules_vec {
+            let lhs = add_symbol(
+                &mut symbols,
+                Symbol {
+                    name: lhs_vec,
+                    kind: SymbolKind::Nonterminal, // 左辺は常にnonterminal symbol
+                },
+            );
+
+            let mut rhs = vec![];
+            for name in rhs_vec {
+                rhs.push(add_symbol(
+                    &mut symbols,
+                    Symbol {
+                        name,
+                        kind: SymbolKind::Unspecified, // すべてのruleを走査し終えるまでは未定
+                    },
+                ));
+            }
+
+            add_rule(&mut rules, Rule { lhs, rhs });
         }
 
         // start symbolのID変換
-        // 指定されていない場合は最初のruleのlhsを使用する
+        // 指定されていない場合は最初に登録されたnonterminal symbolを用いる
         let start = match start {
-            Some(s) => symbols
+            Some(name) => add_symbol(
+                &mut symbols,
+                Symbol {
+                    name,
+                    kind: SymbolKind::Nonterminal,
+                },
+            ),
+            None => symbols
                 .iter()
-                .filter_map(|(id, name)| (*name == s).then(|| *id))
-                .next()
-                .expect("unspecified start symbol"),
-            None => nonterminals.first().copied().expect("empty rule"),
+                .find_map(|(id, sym)| (sym.kind == SymbolKind::Nonterminal).then_some(*id))
+                .unwrap(),
         };
 
-        //
-        let mut rules: IndexMap<RuleID, Rule> = IndexMap::new();
-        rules.insert(
-            RuleID::START,
-            Rule {
-                lhs: SymbolID::START,
-                rhs: vec![start],
-            },
-        );
-        for (i, (lhs, rhs)) in rules_.into_iter().enumerate() {
-            let rule_id = RuleID::new(i);
-            let rhs: Vec<SymbolID> = rhs
-                .into_iter()
-                .map(|rhs| {
-                    symbols
-                        .iter()
-                        .find_map(|(id, name)| (*name == rhs).then_some(*id))
-                        .unwrap()
-                })
-                .collect();
-            rules.insert(rule_id, Rule { lhs, rhs });
+        // rulesの左辺に一度も登場しないsymbolはterminal symbolだとみなす
+        for symbol in symbols.values_mut() {
+            if symbol.kind == SymbolKind::Unspecified {
+                symbol.kind = SymbolKind::Terminal;
+            }
         }
 
         Grammar {
             symbols,
-            terminals,
-            nonterminals,
             rules,
             start,
+            start_rule: Rule {
+                lhs: SymbolID::START,
+                rhs: vec![start],
+            },
         }
     }
 }

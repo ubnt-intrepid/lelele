@@ -26,7 +26,7 @@ fn main() {
     for (id, actions) in &transition_table {
         println!(" - {:02}", id);
         for (input, action) in actions.iter() {
-            println!("   - {}: {}", grammar.symbol_name(*input), action);
+            println!("   - {}: {}", grammar.symbol(*input).name, action);
         }
     }
 }
