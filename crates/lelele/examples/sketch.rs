@@ -1,4 +1,7 @@
-use lelele::{grammar::Grammar, parser::ParserDefinition};
+use lelele::{
+    grammar::{Grammar, SymbolID},
+    parser::ParserDefinition,
+};
 use lelele_runtime::parser::{ParseEvent, Parser};
 
 fn main() {
@@ -26,12 +29,19 @@ fn main() {
     let grammar = def.end();
 
     // 入力のトークン列
+    #[derive(Debug)]
+    struct Token(SymbolID, &'static str);
+    impl lelele_runtime::parser::Token<SymbolID> for Token {
+        fn as_symbol(&self) -> SymbolID {
+            self.0
+        }
+    }
     let mut tokens = [
-        (t_num, "1"),
-        (t_plus, "+"),
-        (t_num, "2"),
-        (t_equal, "="),
-        (t_ident, "a"),
+        Token(t_num, "1"),
+        Token(t_plus, "+"),
+        Token(t_num, "2"),
+        Token(t_equal, "="),
+        Token(t_ident, "a"),
     ]
     .into_iter()
     .peekable();

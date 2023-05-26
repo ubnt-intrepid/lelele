@@ -9,6 +9,7 @@ pub trait ParserDefinition {
     fn initial_state(&self) -> Self::State;
     fn action(&self, current: Self::State, input: Option<Self::Symbol>) -> Self::Action;
 }
+
 impl<T: ?Sized> ParserDefinition for &T
 where
     T: ParserDefinition,
@@ -26,6 +27,7 @@ where
         (**self).action(current, input)
     }
 }
+
 impl<T: ?Sized> ParserDefinition for std::rc::Rc<T>
 where
     T: ParserDefinition,
@@ -43,6 +45,7 @@ where
         (**self).action(current, input)
     }
 }
+
 impl<T: ?Sized> ParserDefinition for std::sync::Arc<T>
 where
     T: ParserDefinition,
@@ -75,16 +78,27 @@ pub enum ParserActionKind<A: ParserAction + ?Sized> {
     Accept,
 }
 
+pub trait Token<TSym> {
+    fn as_symbol(&self) -> TSym;
+}
+
 #[derive(Debug)]
-pub struct Parser<T, D>
+pub struct Parser<TDef, TTok>
 where
-    D: ParserDefinition,
+    TDef: ParserDefinition,
+    TTok: Token<TDef::Symbol>,
 {
-    def: D,
-    state_stack: Vec<D::State>,
-    item_stack: Vec<StackItem<T, D>>,
+    definition: TDef,
+    state_stack: Vec<TDef::State>,
+    item_stack: Vec<StackItem<TTok, TDef::Symbol>>,
     parser_state: ParserState,
-    peeked: Option<(D::Symbol, T)>,
+    peeked_token: Option<TTok>,
+}
+
+#[derive(Debug)]
+enum StackItem<TTok, TSym> {
+    T(TTok),
+    N(TSym),
 }
 
 #[derive(Debug)]
@@ -94,50 +108,51 @@ enum ParserState {
     Accepted,
 }
 
-impl<T, D> Parser<T, D>
+impl<TDef, TTok> Parser<TDef, TTok>
 where
-    D: ParserDefinition,
+    TDef: ParserDefinition,
+    TTok: Token<TDef::Symbol>,
 {
-    pub fn new(def: D) -> Self {
-        let initial_state = def.initial_state();
+    pub fn new(definition: TDef) -> Self {
+        let initial_state = definition.initial_state();
         Self {
-            def,
+            definition,
             state_stack: vec![initial_state],
             item_stack: vec![],
             parser_state: ParserState::Reading,
-            peeked: None,
+            peeked_token: None,
         }
     }
 
     /// a
-    pub fn next_event<I>(&mut self, tokens: &mut I) -> ParseEvent<T, D>
+    pub fn next_event<I>(&mut self, tokens: &mut I) -> ParseEvent<TDef, TTok>
     where
-        I: Iterator<Item = (D::Symbol, T)>,
+        I: Iterator<Item = TTok>,
     {
         loop {
             let current = self.state_stack.last().unwrap();
 
             let input = match self.parser_state {
                 ParserState::PendingGoto => match self.item_stack.last().unwrap() {
-                    StackItem::N(t) => Some(*t),
-                    StackItem::T(t, _) => Some(*t),
+                    StackItem::N(s) => Some(*s),
+                    StackItem::T(t) => Some(t.as_symbol()),
                 },
                 _ => {
-                    if self.peeked.is_none() {
-                        self.peeked = tokens.next();
+                    if self.peeked_token.is_none() {
+                        self.peeked_token = tokens.next();
                     }
-                    self.peeked.as_ref().map(|(id, _)| *id)
+                    self.peeked_token.as_ref().map(|t| t.as_symbol())
                 }
             };
 
-            match self.def.action(*current, input).into_kind() {
+            match self.definition.action(*current, input).into_kind() {
                 ParserActionKind::Shift(n) => {
                     if !matches!(self.parser_state, ParserState::PendingGoto) {
-                        let (id, t) = match self.peeked.take() {
+                        let t = match self.peeked_token.take() {
                             Some(t) => t,
                             None => tokens.next().expect("unexpected EOI"),
                         };
-                        self.item_stack.push(StackItem::T(id, t));
+                        self.item_stack.push(StackItem::T(t));
                     }
 
                     self.parser_state = ParserState::Reading;
@@ -150,8 +165,8 @@ where
                         self.state_stack.pop();
                         let item = self.item_stack.pop().unwrap();
                         let arg = match item {
-                            StackItem::T(_, token) => ParseItem::T(token),
-                            StackItem::N(_t) => ParseItem::N,
+                            StackItem::T(token) => ParseItem::Terminal(token),
+                            StackItem::N(symbol) => ParseItem::Nonterminal(symbol),
                         };
                         args.push(arg);
                     }
@@ -166,8 +181,8 @@ where
                     self.parser_state = ParserState::Accepted;
                     let item = self.item_stack.pop().expect("empty result stack");
                     let arg = match item {
-                        StackItem::N(_t) => ParseItem::N,
-                        StackItem::T(_, token) => ParseItem::T(token),
+                        StackItem::T(token) => ParseItem::Terminal(token),
+                        StackItem::N(symbol) => ParseItem::Nonterminal(symbol),
                     };
                     return ParseEvent::Accept(arg);
                 }
@@ -177,25 +192,16 @@ where
 }
 
 #[derive(Debug)]
-enum StackItem<T, D>
-where
-    D: ParserDefinition,
-{
-    T(D::Symbol, T),
-    N(D::Symbol),
+pub enum ParseItem<TTok, TSym> {
+    Terminal(TTok),
+    Nonterminal(TSym),
 }
 
 #[derive(Debug)]
-pub enum ParseItem<T> {
-    T(T),
-    N,
-}
-
-#[derive(Debug)]
-pub enum ParseEvent<T, D>
+pub enum ParseEvent<TDef, TTok>
 where
-    D: ParserDefinition,
+    TDef: ParserDefinition,
 {
-    Reduce(D::Reduce, Vec<ParseItem<T>>),
-    Accept(ParseItem<T>),
+    Reduce(TDef::Reduce, Vec<ParseItem<TTok, TDef::Symbol>>),
+    Accept(ParseItem<TTok, TDef::Symbol>),
 }
