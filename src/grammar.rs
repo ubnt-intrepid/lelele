@@ -284,8 +284,8 @@ impl<'g, R> GrammarDef<'g, R> {
     }
 
     /// Specify the terminal symbol used in this grammar.
-    /// 
-    /// 
+    ///
+    ///
     pub fn token<T>(&mut self, name: T) -> SymbolID
     where
         T: Into<Cow<'g, str>>,
