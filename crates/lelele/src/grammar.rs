@@ -6,7 +6,7 @@ use std::{borrow::Cow, fmt};
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct SymbolID {
-    inner: usize,
+    raw: usize,
 }
 
 impl SymbolID {
@@ -14,7 +14,11 @@ impl SymbolID {
     pub const START: Self = Self::new(usize::MAX - 1);
 
     const fn new(i: usize) -> Self {
-        Self { inner: i }
+        Self { raw: i }
+    }
+
+    pub(crate) const fn raw(self) -> usize {
+        self.raw
     }
 }
 
@@ -23,7 +27,7 @@ impl fmt::Display for SymbolID {
         match self {
             &Self::EOI => write!(f, "$end"),
             &Self::START => write!(f, "$start"),
-            Self { inner } => fmt::Display::fmt(inner, f),
+            Self { raw } => fmt::Display::fmt(raw, f),
         }
     }
 }
@@ -62,32 +66,36 @@ impl<'g> Symbol<'g> {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct RuleID {
-    inner: usize,
+    raw: usize,
 }
 impl RuleID {
     pub const START: Self = Self::new(usize::MAX);
     const fn new(i: usize) -> Self {
-        Self { inner: i }
+        Self { raw: i }
+    }
+    pub(crate) fn raw(self) -> usize {
+        self.raw
     }
 }
 impl fmt::Display for RuleID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             &Self::START => write!(f, "START"),
-            Self { inner } => fmt::Display::fmt(inner, f),
+            Self { raw } => fmt::Display::fmt(raw, f),
         }
     }
 }
 
 #[derive(Debug)]
-pub struct Rule {
+pub struct Rule<'g> {
+    pub name: Cow<'g, str>,
     pub lhs: SymbolID,
     pub rhs: Vec<SymbolID>,
 }
-impl Rule {
+impl Rule<'_> {
     pub fn display<'r>(&'r self, grammar: &'r Grammar<'r>) -> impl fmt::Display + 'r {
         struct RuleDisplay<'r> {
-            rule: &'r Rule,
+            rule: &'r Rule<'r>,
             grammar: &'r Grammar<'r>,
         }
         impl fmt::Display for RuleDisplay<'_> {
@@ -113,9 +121,9 @@ impl Rule {
 #[derive(Debug)]
 pub struct Grammar<'g> {
     symbols: IndexMap<SymbolID, Symbol<'g>>,
-    rules: IndexMap<RuleID, Rule>,
+    rules: IndexMap<RuleID, Rule<'g>>,
     start: SymbolID,
-    start_rule: Rule,
+    start_rule: Rule<'g>,
 }
 
 impl fmt::Display for Grammar<'_> {
@@ -205,7 +213,7 @@ impl<'g> Grammar<'g> {
 #[derive(Debug)]
 pub struct GrammarDef<'g> {
     symbols: IndexMap<SymbolID, Symbol<'g>>,
-    rules: IndexMap<RuleID, Rule>,
+    rules: IndexMap<RuleID, Rule<'g>>,
     start: Option<SymbolID>,
     next_symbol_id: usize,
     next_rule_id: usize,
@@ -235,7 +243,7 @@ impl<'g> GrammarDef<'g> {
         }
     }
 
-    fn add_rule(&mut self, rule: Rule) -> RuleID {
+    fn add_rule(&mut self, rule: Rule<'g>) -> RuleID {
         let id = RuleID::new(self.next_rule_id);
         self.next_rule_id += 1;
         self.rules.insert(id, rule);
@@ -262,7 +270,7 @@ impl<'g> GrammarDef<'g> {
     ///
     /// The first argument `name` means the name of a non-terminal symbol,
     /// and the remaining `args` is
-    pub fn rule<I>(&mut self, lhs: SymbolID, rhs: I) -> RuleID
+    pub fn rule<I>(&mut self, name: impl Into<Cow<'g, str>>, lhs: SymbolID, rhs: I) -> RuleID
     where
         I: IntoIterator<Item = SymbolID>,
     {
@@ -273,6 +281,7 @@ impl<'g> GrammarDef<'g> {
             "lhs must be nonterminal symbol"
         );
         self.add_rule(Rule {
+            name: name.into(),
             lhs,
             rhs: rhs.into_iter().collect(),
         })
@@ -300,6 +309,7 @@ impl<'g> GrammarDef<'g> {
             rules: self.rules,
             start,
             start_rule: Rule {
+                name: "$START".into(),
                 lhs: SymbolID::START,
                 rhs: vec![start],
             },

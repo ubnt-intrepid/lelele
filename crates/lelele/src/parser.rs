@@ -1,5 +1,7 @@
 //! Runtime parser definition.
 
+use std::io;
+
 use crate::{
     dfa::{NodeID, DFA},
     grammar::{Grammar, RuleID, SymbolID},
@@ -65,6 +67,13 @@ impl<'g> ParserDefinition<'g> {
         let table = gen_parse_table(&grammar, &dfa);
         Self { grammar, table }
     }
+
+    pub fn generate<W: ?Sized>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: io::Write,
+    {
+        generate_parser(w, &self.grammar, &self.table)
+    }
 }
 
 impl<'g> lelele_runtime::parser::ParserDefinition for ParserDefinition<'g> {
@@ -106,4 +115,179 @@ impl<'g> lelele_runtime::parser::ParserAction for ParserAction<'g> {
             Action::Accept => ParserActionKind::Accept,
         }
     }
+}
+
+fn generate_parser<W: ?Sized>(
+    w: &mut W,
+    grammar: &Grammar<'_>,
+    table: &IndexMap<NodeID, IndexMap<SymbolID, Action>>,
+) -> io::Result<()>
+where
+    W: io::Write,
+{
+    w.write_all(
+        b"\
+// auto-generated file
+
+#[derive(Copy, Clone)]
+enum Action {
+    Shift(NodeID),
+    Reduce(RuleID, SymbolID, usize),
+    Accept,
+}
+
+const PARSE_TABLE: ::lelele_runtime::phf::Map<u64, ::lelele_runtime::phf::Map<u64, Action>> = ",
+    )?;
+
+    let mut table_g = phf_codegen::Map::<u64>::new();
+    table_g.phf_path("::lelele_runtime::phf");
+    for (node, actions) in table {
+        let mut actions_g = phf_codegen::Map::<u64>::new();
+        actions_g.phf_path("::lelele_runtime::phf");
+        for (symbol, action) in actions {
+            let action_g = match action {
+                Action::Shift(n) | Action::Goto(n) => {
+                    format!("Action::Shift(NodeID {{ __raw: {}_usize }})", n.raw())
+                }
+                Action::Reduce(r) => {
+                    let rule = grammar.rule(*r);
+                    format!(
+                        "Action::Reduce(RuleID {{ __raw: {}_usize }}, SymbolID {{ __raw: {}_usize }}, {}_usize)",
+                        r.raw(),
+                        rule.lhs.raw(),
+                        rule.rhs.len()
+                    )
+                }
+                Action::Accept => format!("Action::Accept"),
+            };
+            actions_g.entry(symbol.raw() as u64, &action_g);
+        }
+        let actions_g = actions_g.build().to_string();
+        table_g.entry(node.raw() as u64, &actions_g);
+    }
+    let table_g = table_g.build();
+    write!(w, "{}", table_g)?;
+
+    w.write_all(
+        b";
+
+/// a
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(transparent)]
+pub struct NodeID { __raw: usize }
+
+///
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(transparent)]
+pub struct SymbolID { __raw: usize }
+impl SymbolID {\n",
+    )?;
+
+    for (id, symbol) in grammar
+        .symbols()
+        .filter(|(id, _)| *id != SymbolID::EOI && *id != SymbolID::START)
+    {
+        writeln!(
+            w,
+            "    pub const {}: Self = Self {{ __raw: {}_usize }};",
+            symbol.name(),
+            id.raw()
+        )?;
+    }
+
+    w.write_all(
+        b"\
+}
+
+///
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(transparent)]
+pub struct RuleID { __raw: usize }
+impl RuleID {\n",
+    )?;
+
+    for (id, rule) in grammar.rules().filter(|(id, _)| *id != RuleID::START) {
+        writeln!(
+            w,
+            "    pub const {}: Self = Self {{ __raw: {}_usize }};",
+            rule.name,
+            id.raw()
+        )?;
+    }
+
+    w.write_all(
+        b"\
+}
+
+/// The parser definition
+#[derive(Default)]
+pub struct ParserDefinition {
+    _p: (),
+}
+impl ::lelele_runtime::parser::ParserDefinition for ParserDefinition {
+    type State = NodeID;
+    type Symbol = SymbolID;
+    type Reduce = RuleID;
+    type Action = ParserAction;
+    fn initial_state(&self) -> Self::State {\n",
+    )?;
+
+    writeln!(
+        w,
+        "        NodeID {{ __raw : {}_usize }}",
+        table.first().unwrap().0
+    )?;
+
+    w.write_all(
+        b"\
+    }
+    fn action(&self, current: Self::State, input: Option<Self::Symbol>) -> Self::Action {\n",
+    )?;
+
+    writeln!(
+        w,
+        "let input = input.map_or({}_u64, |SymbolID {{ __raw: n }}| n as u64);",
+        SymbolID::EOI.raw()
+    )?;
+
+    w.write_all(
+        b"\
+        let actions = PARSE_TABLE.get(&(current.__raw as u64)).unwrap();
+        ParserAction {
+            action: actions.get(&input).copied().unwrap(),
+        }
+    }
+}
+
+/// The parser action 
+pub struct ParserAction {
+    action: Action,
+}
+impl ::lelele_runtime::parser::ParserAction for ParserAction {
+    type State = NodeID;
+    type Symbol = SymbolID;
+    type Reduce = RuleID;
+    
+    fn into_kind(self) -> ::lelele_runtime::parser::ParserActionKind<Self> {
+        match self.action {
+            Action::Shift(n) => ::lelele_runtime::parser::ParserActionKind::Shift(n),
+            Action::Reduce(r, s, n) => ::lelele_runtime::parser::ParserActionKind::Reduce(r, s, n),
+            Action::Accept => ::lelele_runtime::parser::ParserActionKind::Accept,
+        }
+    }
+}
+
+pub type Parser<TTok> = ::lelele_runtime::parser::Parser<ParserDefinition, TTok>;
+
+pub fn parser<TTok>() -> Parser<TTok>
+where
+    TTok: ::lelele_runtime::parser::Token<SymbolID>,
+{
+    ::lelele_runtime::parser::Parser::new(
+        ParserDefinition::default()
+    )
+}
+",
+    )?;
+    Ok(())
 }

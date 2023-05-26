@@ -60,16 +60,19 @@ pub struct LRItem {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct NodeID {
-    inner: usize,
+    raw: usize,
 }
 impl NodeID {
     const fn new(i: usize) -> Self {
-        Self { inner: i }
+        Self { raw: i }
+    }
+    pub(crate) const fn raw(self) -> usize {
+        self.raw
     }
 }
 impl fmt::Display for NodeID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.inner, f)
+        fmt::Display::fmt(&self.raw, f)
     }
 }
 

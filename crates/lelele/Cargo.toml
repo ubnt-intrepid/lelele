@@ -7,3 +7,4 @@ publish = false
 [dependencies]
 indexmap = "1.9.3"
 lelele-runtime = { path = "../lelele-runtime" }
+phf_codegen = "0.11.1"

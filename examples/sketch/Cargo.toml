@@ -1,0 +1,11 @@
+[package]
+name = "lelele-example-sketch"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+lelele = { path = "../../crates/lelele" }
+
+[dependencies]
+lelele-runtime = { path = "../../crates/lelele-runtime" }
