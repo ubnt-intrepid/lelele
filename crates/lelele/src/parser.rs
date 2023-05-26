@@ -15,8 +15,8 @@ pub(crate) enum Action {
     Accept,
 }
 
-fn gen_parse_table<'g, R>(
-    grammar: &Grammar<'g, R>,
+fn gen_parse_table(
+    grammar: &Grammar<'_>,
     dfa: &DFA,
 ) -> IndexMap<NodeID, IndexMap<SymbolID, Action>> {
     let mut transition_table: IndexMap<NodeID, IndexMap<SymbolID, Action>> = IndexMap::new();
@@ -54,24 +54,24 @@ fn gen_parse_table<'g, R>(
 }
 
 #[derive(Debug)]
-pub struct ParserDefinition<'g, R> {
-    grammar: &'g Grammar<'g, R>,
+pub struct ParserDefinition<'g> {
+    grammar: &'g Grammar<'g>,
     table: IndexMap<NodeID, IndexMap<SymbolID, Action>>,
 }
 
-impl<'g, R> ParserDefinition<'g, R> {
-    pub fn new(grammar: &'g Grammar<R>) -> Self {
+impl<'g> ParserDefinition<'g> {
+    pub fn new(grammar: &'g Grammar<'g>) -> Self {
         let dfa = DFA::generate(&grammar);
         let table = gen_parse_table(&grammar, &dfa);
         Self { grammar, table }
     }
 }
 
-impl<'g, R> lelele_runtime::parser::ParserDefinition for ParserDefinition<'g, R> {
+impl<'g> lelele_runtime::parser::ParserDefinition for ParserDefinition<'g> {
     type State = NodeID;
     type Symbol = SymbolID;
-    type Reduce = &'g R;
-    type Action = ParserAction<'g, R>;
+    type Reduce = RuleID;
+    type Action = ParserAction<'g>;
 
     fn initial_state(&self) -> Self::State {
         *self.table.first().unwrap().0
@@ -86,23 +86,22 @@ impl<'g, R> lelele_runtime::parser::ParserDefinition for ParserDefinition<'g, R>
     }
 }
 
-pub struct ParserAction<'g, R> {
-    grammar: &'g Grammar<'g, R>,
+pub struct ParserAction<'g> {
+    grammar: &'g Grammar<'g>,
     action: Action,
 }
-impl<'g, R> lelele_runtime::parser::ParserAction for ParserAction<'g, R> {
+impl<'g> lelele_runtime::parser::ParserAction for ParserAction<'g> {
     type State = NodeID;
     type Symbol = SymbolID;
-    type Reduce = &'g R;
+    type Reduce = RuleID;
 
     fn into_kind(self) -> ParserActionKind<Self> {
         match self.action {
             Action::Shift(n) | Action::Goto(n) => ParserActionKind::Shift(n),
             Action::Reduce(rule_id) => {
                 let rule = self.grammar.rule(rule_id);
-                let context = rule.context.as_ref().unwrap();
                 let n = rule.rhs.len();
-                ParserActionKind::Reduce(context, rule.lhs, n)
+                ParserActionKind::Reduce(rule_id, rule.lhs, n)
             }
             Action::Accept => ParserActionKind::Accept,
         }

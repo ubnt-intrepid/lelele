@@ -10,7 +10,7 @@ pub struct DFA {
 }
 
 impl DFA {
-    pub fn generate<R>(grammar: &Grammar<'_, R>) -> Self {
+    pub fn generate(grammar: &Grammar<'_>) -> Self {
         let nulls = nulls_set(grammar);
         let first_set = first_set(grammar, &nulls);
         DFAGenerator {
@@ -74,13 +74,13 @@ impl fmt::Display for NodeID {
 }
 
 #[derive(Debug)]
-struct DFAGenerator<'g, R> {
-    grammar: &'g Grammar<'g, R>,
+struct DFAGenerator<'g> {
+    grammar: &'g Grammar<'g>,
     first_set: IndexMap<SymbolID, IndexSet<SymbolID>>,
     nulls: IndexSet<SymbolID>,
 }
 
-impl<'g, R> DFAGenerator<'g, R> {
+impl<'g> DFAGenerator<'g> {
     fn generate(&mut self) -> DFA {
         let mut nodes: IndexMap<NodeID, DFANode> = IndexMap::new();
         let mut next_node_id = 0;
@@ -235,7 +235,7 @@ impl<'g, R> DFAGenerator<'g, R> {
 }
 
 /// Calculate the set of nullable symbols in this grammar.
-fn nulls_set<R>(grammar: &Grammar<R>) -> IndexSet<SymbolID> {
+fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
     // ruleからnullableであることが分かっている場合は追加する
     let mut nulls: IndexSet<SymbolID> = grammar
         .rules()
@@ -264,8 +264,8 @@ fn nulls_set<R>(grammar: &Grammar<R>) -> IndexSet<SymbolID> {
 }
 
 /// Constructs the instance for calculating first sets in this grammar.
-fn first_set<R>(
-    grammar: &Grammar<R>,
+fn first_set(
+    grammar: &Grammar,
     nulls: &IndexSet<SymbolID>,
 ) -> IndexMap<SymbolID, IndexSet<SymbolID>> {
     let mut map: IndexMap<SymbolID, IndexSet<SymbolID>> = IndexMap::new();

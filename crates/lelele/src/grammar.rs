@@ -38,7 +38,6 @@ pub struct Symbol<'g> {
 enum SymbolKind {
     Terminal,
     Nonterminal,
-    Unspecified,
 }
 
 impl<'g> Symbol<'g> {
@@ -81,21 +80,17 @@ impl fmt::Display for RuleID {
 }
 
 #[derive(Debug)]
-pub struct Rule<R> {
-    pub context: Option<R>,
+pub struct Rule {
     pub lhs: SymbolID,
     pub rhs: Vec<SymbolID>,
 }
-impl<R> Rule<R> {
-    pub fn display<'r>(&'r self, grammar: &'r Grammar<R>) -> impl fmt::Display + 'r
-    where
-        R: fmt::Display,
-    {
-        struct RuleDisplay<'r, R: fmt::Display> {
-            rule: &'r Rule<R>,
-            grammar: &'r Grammar<'r, R>,
+impl Rule {
+    pub fn display<'r>(&'r self, grammar: &'r Grammar<'r>) -> impl fmt::Display + 'r {
+        struct RuleDisplay<'r> {
+            rule: &'r Rule,
+            grammar: &'r Grammar<'r>,
         }
-        impl<R: fmt::Display> fmt::Display for RuleDisplay<'_, R> {
+        impl fmt::Display for RuleDisplay<'_> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 let Self { rule, grammar } = self;
                 write!(f, "{} : ", grammar.symbol(rule.lhs).name)?;
@@ -116,17 +111,14 @@ impl<R> Rule<R> {
 }
 
 #[derive(Debug)]
-pub struct Grammar<'g, R> {
+pub struct Grammar<'g> {
     symbols: IndexMap<SymbolID, Symbol<'g>>,
-    rules: IndexMap<RuleID, Rule<R>>,
+    rules: IndexMap<RuleID, Rule>,
     start: SymbolID,
-    start_rule: Rule<R>,
+    start_rule: Rule,
 }
 
-impl<R> fmt::Display for Grammar<'_, R>
-where
-    R: fmt::Display,
-{
+impl fmt::Display for Grammar<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "terminals: ")?;
         for (i, (_, sym)) in self.terminals().enumerate() {
@@ -151,51 +143,14 @@ where
     }
 }
 
-impl<'g, R> Grammar<'g, R> {
-    pub fn define<F>(f: F) -> Self
-    where
-        F: FnOnce(&mut GrammarDef<'g, R>),
-    {
-        let mut def = GrammarDef {
+impl<'g> Grammar<'g> {
+    pub fn definition() -> GrammarDef<'g> {
+        GrammarDef {
             symbols: IndexMap::new(),
             rules: IndexMap::new(),
             start: None,
             next_symbol_id: 0,
             next_rule_id: 0,
-        };
-
-        f(&mut def);
-
-        // start symbolのID変換
-        // 指定されていない場合は最初に登録されたnonterminal symbolを用いる
-        let start = match def.start.take() {
-            Some(name) => def.add_symbol(Symbol {
-                name,
-                kind: SymbolKind::Nonterminal,
-            }),
-            None => def
-                .symbols
-                .iter()
-                .find_map(|(id, sym)| (sym.kind == SymbolKind::Nonterminal).then_some(*id))
-                .unwrap(),
-        };
-
-        // rulesの左辺に一度も登場しないsymbolはterminal symbolだとみなす
-        for symbol in def.symbols.values_mut() {
-            if symbol.kind == SymbolKind::Unspecified {
-                symbol.kind = SymbolKind::Terminal;
-            }
-        }
-
-        Self {
-            symbols: def.symbols,
-            rules: def.rules,
-            start,
-            start_rule: Rule {
-                context: None,
-                lhs: SymbolID::START,
-                rhs: vec![start],
-            },
         }
     }
 
@@ -226,13 +181,19 @@ impl<'g, R> Grammar<'g, R> {
         }
     }
 
-    pub fn rules(&self) -> impl Iterator<Item = (RuleID, &Rule<R>)> + '_ {
+    pub fn symbol_id(&self, name: &str) -> Option<SymbolID> {
+        self.symbols
+            .iter()
+            .find_map(|(id, sym)| (sym.name == name).then_some(*id))
+    }
+
+    pub fn rules(&self) -> impl Iterator<Item = (RuleID, &Rule)> + '_ {
         Some((RuleID::START, &self.start_rule))
             .into_iter()
             .chain(self.rules.iter().map(|(id, rule)| (*id, rule)))
     }
 
-    pub fn rule(&self, id: RuleID) -> &Rule<R> {
+    pub fn rule(&self, id: RuleID) -> &Rule {
         match id {
             RuleID::START => &self.start_rule,
             id => &self.rules.get(&id).unwrap(),
@@ -242,15 +203,15 @@ impl<'g, R> Grammar<'g, R> {
 
 /// A builder object for `Grammar`.
 #[derive(Debug)]
-pub struct GrammarDef<'g, R> {
+pub struct GrammarDef<'g> {
     symbols: IndexMap<SymbolID, Symbol<'g>>,
-    rules: IndexMap<RuleID, Rule<R>>,
-    start: Option<Cow<'g, str>>,
+    rules: IndexMap<RuleID, Rule>,
+    start: Option<SymbolID>,
     next_symbol_id: usize,
     next_rule_id: usize,
 }
 
-impl<'g, R> GrammarDef<'g, R> {
+impl<'g> GrammarDef<'g> {
     fn add_symbol(&mut self, added: Symbol<'g>) -> SymbolID {
         match self
             .symbols
@@ -258,13 +219,11 @@ impl<'g, R> GrammarDef<'g, R> {
             .find(|(_, sym)| sym.name == added.name)
         {
             Some((id, sym)) => {
-                match (sym.kind, added.kind) {
-                    (SymbolKind::Unspecified, k) => sym.kind = k, // overwrite
-                    (_, SymbolKind::Unspecified) => (),           // do nothing
-                    (a, b) => {
-                        debug_assert!(a == b, "conflict symbol kind ({:?}, {:?})", a, b);
-                    }
-                }
+                debug_assert!(
+                    sym.kind == added.kind,
+                    "conflict symbol kind (name={})",
+                    sym.name
+                );
                 *id
             }
             None => {
@@ -276,7 +235,7 @@ impl<'g, R> GrammarDef<'g, R> {
         }
     }
 
-    fn add_rule(&mut self, rule: Rule<R>) -> RuleID {
+    fn add_rule(&mut self, rule: Rule) -> RuleID {
         let id = RuleID::new(self.next_rule_id);
         self.next_rule_id += 1;
         self.rules.insert(id, rule);
@@ -284,15 +243,18 @@ impl<'g, R> GrammarDef<'g, R> {
     }
 
     /// Specify the terminal symbol used in this grammar.
-    ///
-    ///
-    pub fn token<T>(&mut self, name: T) -> SymbolID
-    where
-        T: Into<Cow<'g, str>>,
-    {
+    pub fn token(&mut self, name: impl Into<Cow<'g, str>>) -> SymbolID {
         self.add_symbol(Symbol {
             name: name.into(),
             kind: SymbolKind::Terminal,
+        })
+    }
+
+    /// Specify the nonterminal symbol used in this grammar.
+    pub fn symbol(&mut self, name: impl Into<Cow<'g, str>>) -> SymbolID {
+        self.add_symbol(Symbol {
+            name: name.into(),
+            kind: SymbolKind::Nonterminal,
         })
     }
 
@@ -300,37 +262,47 @@ impl<'g, R> GrammarDef<'g, R> {
     ///
     /// The first argument `name` means the name of a non-terminal symbol,
     /// and the remaining `args` is
-    pub fn rule<I, T>(&mut self, context: R, lhs: T, rhs: I) -> RuleID
+    pub fn rule<I>(&mut self, lhs: SymbolID, rhs: I) -> RuleID
     where
-        T: Into<Cow<'static, str>>,
-        I: IntoIterator,
-        I::Item: Into<Cow<'g, str>>,
+        I: IntoIterator<Item = SymbolID>,
     {
-        let lhs = self.add_symbol(Symbol {
-            name: lhs.into(),
-            kind: SymbolKind::Nonterminal, // 左辺は常にnonterminal symbol
-        });
-
-        let mut rhs_vec = vec![];
-        for name in rhs {
-            rhs_vec.push(self.add_symbol(Symbol {
-                name: name.into(),
-                kind: SymbolKind::Unspecified, // すべてのruleを走査し終えるまでは未定
-            }));
-        }
-
+        debug_assert!(
+            self.symbols
+                .get(&lhs)
+                .map_or(false, |lhs| lhs.kind == SymbolKind::Nonterminal),
+            "lhs must be nonterminal symbol"
+        );
         self.add_rule(Rule {
-            context: Some(context),
             lhs,
-            rhs: rhs_vec,
+            rhs: rhs.into_iter().collect(),
         })
     }
 
     /// Specify the start symbol.
-    pub fn start<T>(&mut self, symbol: T)
-    where
-        T: Into<Cow<'static, str>>,
-    {
+    pub fn start(&mut self, symbol: SymbolID) {
         self.start.replace(symbol.into());
+    }
+
+    pub fn end(mut self) -> Grammar<'g> {
+        // start symbolのID変換
+        // 指定されていない場合は最初に登録されたnonterminal symbolを用いる
+        let start = match self.start.take() {
+            Some(start) => start,
+            None => self
+                .symbols
+                .iter()
+                .find_map(|(id, sym)| (sym.kind == SymbolKind::Nonterminal).then_some(*id))
+                .unwrap(),
+        };
+
+        Grammar {
+            symbols: self.symbols,
+            rules: self.rules,
+            start,
+            start_rule: Rule {
+                lhs: SymbolID::START,
+                rhs: vec![start],
+            },
+        }
     }
 }
