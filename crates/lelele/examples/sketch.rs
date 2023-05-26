@@ -1,9 +1,9 @@
 use indexmap::IndexMap;
 use lelele::{
-    dfa::ParserDefinition,
     grammar::{Grammar, SymbolID},
-    parser::{ParseEvent, Parser},
+    parser::ParserDefinition,
 };
+use lelele_runtime::{ParseEvent, Parser};
 
 #[derive(Debug)]
 enum RuleName {

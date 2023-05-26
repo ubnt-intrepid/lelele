@@ -1,0 +1,9 @@
+[package]
+name = "lelele"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+indexmap = "1.9.3"
+lelele-runtime = { path = "../lelele-runtime" }
