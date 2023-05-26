@@ -3,7 +3,7 @@ use lelele::{
     grammar::{Grammar, SymbolID},
     parser::ParserDefinition,
 };
-use lelele_runtime::{ParseEvent, Parser};
+use lelele_runtime::parser::{ParseEvent, Parser};
 
 #[derive(Debug)]
 enum RuleName {

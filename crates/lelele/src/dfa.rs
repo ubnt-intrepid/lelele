@@ -5,51 +5,12 @@ use indexmap::{IndexMap, IndexSet};
 use std::{fmt, mem};
 
 #[derive(Debug)]
-pub struct DFA<'g, R> {
+pub struct DFA {
     nodes: IndexMap<NodeID, DFANode>,
-    grammar: &'g Grammar<'g, R>,
 }
 
-impl<R> fmt::Display for DFA<'_, R> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (id, node) in &self.nodes {
-            writeln!(f, "- {:02}:", id)?;
-            writeln!(f, "  item_set:")?;
-            for item in &node.item_set {
-                let rule = &self.grammar.rule(item.rule_id);
-                write!(f, "  - [{} -> ", self.grammar.symbol(rule.lhs).name())?;
-                for (i, s) in rule.rhs.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, " ")?;
-                    }
-                    if i == item.marker {
-                        write!(f, "@ ")?;
-                    }
-                    write!(f, "{}", self.grammar.symbol(*s).name())?;
-                }
-                if item.marker == rule.rhs.len() {
-                    write!(f, " @")?;
-                }
-                writeln!(f, "] {{ {} }}", self.grammar.symbol(item.lookahead).name())?;
-            }
-            if !node.edges.is_empty() {
-                writeln!(f, "  edges:")?;
-                for (symbol, id) in &node.edges {
-                    writeln!(
-                        f,
-                        "  - {} -> {:02}",
-                        self.grammar.symbol(*symbol).name(),
-                        id
-                    )?;
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-impl<'g, R> DFA<'g, R> {
-    pub fn generate(grammar: &'g Grammar<'g, R>) -> Self {
+impl DFA {
+    pub fn generate<R>(grammar: &Grammar<'_, R>) -> Self {
         let nulls = nulls_set(grammar);
         let first_set = first_set(grammar, &nulls);
         DFAGenerator {
@@ -60,67 +21,21 @@ impl<'g, R> DFA<'g, R> {
         .generate()
     }
 
-    pub(crate) fn transition_table(&self) -> IndexMap<NodeID, IndexMap<SymbolID, Action>> {
-        let mut transition_table: IndexMap<NodeID, IndexMap<SymbolID, Action>> = IndexMap::new();
-        for (id, node) in &self.nodes {
-            let mut actions = IndexMap::new();
-            // shift, goto
-            for (label, target) in &node.edges {
-                actions.insert(
-                    *label,
-                    if self.grammar.symbol(*label).is_terminal() {
-                        Action::Shift(*target)
-                    } else {
-                        Action::Goto(*target)
-                    },
-                );
-            }
+    pub fn nodes(&self) -> impl Iterator<Item = (NodeID, &DFANode)> + '_ {
+        self.nodes.iter().map(|(id, node)| (*id, node))
+    }
 
-            // reduce, accept
-            for item in &node.item_set {
-                let rule = &self.grammar.rule(item.rule_id);
-                if item.marker < rule.rhs.len() {
-                    continue;
-                }
-
-                if item.rule_id == RuleID::START {
-                    actions.insert(SymbolID::EOI, Action::Accept);
-                } else {
-                    actions.insert(item.lookahead, Action::Reduce(item.rule_id));
-                }
-            }
-
-            transition_table.insert(*id, actions);
-        }
-        transition_table
+    pub fn node(&self, id: NodeID) -> &DFANode {
+        &self.nodes[&id]
     }
 }
 
 #[derive(Debug)]
-pub enum Action {
-    Shift(NodeID),
-    Goto(NodeID),
-    Reduce(RuleID),
-    Accept,
-}
-
-impl fmt::Display for Action {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Shift(id) => write!(f, "shift({:02})", id),
-            Self::Goto(id) => write!(f, "goto({:02})", id),
-            Self::Reduce(id) => write!(f, "reduce({})", id),
-            Self::Accept => write!(f, "accept"),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct DFANode {
+pub struct DFANode {
     // 各DFA nodeに所属するLR item set
-    item_set: LRItemSet,
+    pub item_set: IndexSet<LRItem>,
     // 各DFAノード起点のedge
-    edges: IndexMap<SymbolID, NodeID>,
+    pub edges: IndexMap<SymbolID, NodeID>,
 }
 
 // LR(1) item
@@ -133,15 +48,14 @@ struct DFANode {
 //   [ X ->   Y1 @ Y2 ... Yn ]
 //   [ X ->   Y1   Y2 ... Yn @ ]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-struct LRItem {
+pub struct LRItem {
     // grammer内におけるruleの識別子
-    rule_id: RuleID,
+    pub rule_id: RuleID,
     // marker位置
-    marker: usize,
+    pub marker: usize,
     // 先読み記号
-    lookahead: SymbolID,
+    pub lookahead: SymbolID,
 }
-type LRItemSet = IndexSet<LRItem>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -167,7 +81,7 @@ struct DFAGenerator<'g, R> {
 }
 
 impl<'g, R> DFAGenerator<'g, R> {
-    fn generate(&mut self) -> DFA<'g, R> {
+    fn generate(&mut self) -> DFA {
         let mut nodes: IndexMap<NodeID, DFANode> = IndexMap::new();
         let mut next_node_id = 0;
         let mut node_id = || {
@@ -179,7 +93,7 @@ impl<'g, R> DFAGenerator<'g, R> {
         // 遷移先の抽出が未完了なノード
         struct PendingItem {
             id: NodeID,
-            item_set: LRItemSet,
+            item_set: IndexSet<LRItem>,
         }
         let mut pending_items: Vec<PendingItem> = vec![];
         pending_items.push({
@@ -232,14 +146,11 @@ impl<'g, R> DFAGenerator<'g, R> {
             }
         }
 
-        DFA {
-            nodes,
-            grammar: self.grammar,
-        }
+        DFA { nodes }
     }
 
     /// クロージャ展開
-    fn expand_closures(&self, items: &mut LRItemSet) {
+    fn expand_closures(&self, items: &mut IndexSet<LRItem>) {
         let mut changed = true;
         while changed {
             changed = false;
@@ -284,8 +195,11 @@ impl<'g, R> DFAGenerator<'g, R> {
     }
 
     /// 指定したLRアイテム集合から遷移先のLRアイテム集合（未展開）とラベルを抽出する
-    fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<SymbolID, LRItemSet> {
-        let mut item_sets: IndexMap<SymbolID, LRItemSet> = IndexMap::new();
+    fn extract_transitions(
+        &self,
+        items: &IndexSet<LRItem>,
+    ) -> IndexMap<SymbolID, IndexSet<LRItem>> {
+        let mut item_sets: IndexMap<SymbolID, IndexSet<LRItem>> = IndexMap::new();
         for item in items {
             let rule = self.grammar.rule(item.rule_id);
 
