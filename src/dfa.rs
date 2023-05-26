@@ -60,7 +60,7 @@ impl<'g, R> DFA<'g, R> {
         .generate()
     }
 
-    pub fn transition_table(&self) -> IndexMap<NodeID, IndexMap<SymbolID, Action>> {
+    fn transition_table(&self) -> IndexMap<NodeID, IndexMap<SymbolID, Action>> {
         let mut transition_table: IndexMap<NodeID, IndexMap<SymbolID, Action>> = IndexMap::new();
         for (id, node) in &self.nodes {
             let mut actions = IndexMap::new();
@@ -114,6 +114,78 @@ impl fmt::Display for Action {
         }
     }
 }
+
+// -----
+
+#[derive(Debug)]
+pub struct ParserDefinition<'g, R> {
+    grammar: &'g Grammar<'g, R>,
+    table: IndexMap<NodeID, IndexMap<SymbolID, Action>>,
+}
+
+impl<'g, R> ParserDefinition<'g, R> {
+    pub fn new(grammar: &'g Grammar<R>) -> Self {
+        let dfa = DFA::generate(&grammar);
+        let table = dfa.transition_table();
+        Self { grammar, table }
+    }
+}
+
+impl<'g, R> crate::parser::ParserDefinition for ParserDefinition<'g, R> {
+    type NodeID = NodeID;
+    type SymbolID = SymbolID;
+    type Reduce = &'g R;
+    type Action = ParserAction<'g, R>;
+
+    fn initial_state(&self) -> Self::NodeID {
+        *self.table.first().unwrap().0
+    }
+
+    fn action(&self, current: Self::NodeID, input: Option<Self::SymbolID>) -> Self::Action {
+        let input = input.unwrap_or(SymbolID::EOI);
+        match self.table[&current][&input] {
+            Action::Shift(n) | Action::Goto(n) => ParserAction::Shift(n),
+            Action::Reduce(rule_id) => {
+                let rule = self.grammar.rule(rule_id);
+                let context = rule.context.as_ref().unwrap();
+                let n = rule.rhs.len();
+                ParserAction::Reduce {
+                    context,
+                    lhs: rule.lhs,
+                    n,
+                }
+            }
+            Action::Accept => ParserAction::Accept,
+        }
+    }
+}
+
+pub enum ParserAction<'g, R> {
+    Shift(NodeID),
+    Reduce {
+        context: &'g R,
+        lhs: SymbolID,
+        n: usize,
+    },
+    Accept,
+}
+impl<'g, R> crate::parser::ParserAction for ParserAction<'g, R> {
+    type NodeID = NodeID;
+    type SymbolID = SymbolID;
+    type Reduce = &'g R;
+
+    fn into_kind(self) -> crate::parser::ParserActionKind<Self> {
+        match self {
+            Self::Shift(n) => crate::parser::ParserActionKind::Shift(n),
+            Self::Reduce { context, lhs, n } => {
+                crate::parser::ParserActionKind::Reduce(context, lhs, n)
+            }
+            Self::Accept => crate::parser::ParserActionKind::Accept,
+        }
+    }
+}
+
+// -----
 
 #[derive(Debug)]
 struct DFANode {

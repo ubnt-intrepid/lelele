@@ -1,5 +1,6 @@
 use indexmap::IndexMap;
 use lelele::{
+    dfa::ParserDefinition,
     grammar::{Grammar, SymbolID},
     parser::{ParseEvent, Parser},
 };
@@ -54,7 +55,8 @@ fn main() {
     .into_iter()
     .peekable();
 
-    let mut parser = Parser::new(&grammar);
+    let def = ParserDefinition::new(&grammar);
+    let mut parser = Parser::new(def);
     loop {
         match parser.next_event(&mut tokens) {
             ParseEvent::Reduce(rule, args) => {
