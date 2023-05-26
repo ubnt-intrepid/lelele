@@ -132,16 +132,16 @@ impl<'g, R> ParserDefinition<'g, R> {
 }
 
 impl<'g, R> crate::parser::ParserDefinition for ParserDefinition<'g, R> {
-    type NodeID = NodeID;
-    type SymbolID = SymbolID;
+    type State = NodeID;
+    type Symbol = SymbolID;
     type Reduce = &'g R;
     type Action = ParserAction<'g, R>;
 
-    fn initial_state(&self) -> Self::NodeID {
+    fn initial_state(&self) -> Self::State {
         *self.table.first().unwrap().0
     }
 
-    fn action(&self, current: Self::NodeID, input: Option<Self::SymbolID>) -> Self::Action {
+    fn action(&self, current: Self::State, input: Option<Self::Symbol>) -> Self::Action {
         let input = input.unwrap_or(SymbolID::EOI);
         match self.table[&current][&input] {
             Action::Shift(n) | Action::Goto(n) => ParserAction::Shift(n),
@@ -170,8 +170,8 @@ pub enum ParserAction<'g, R> {
     Accept,
 }
 impl<'g, R> crate::parser::ParserAction for ParserAction<'g, R> {
-    type NodeID = NodeID;
-    type SymbolID = SymbolID;
+    type State = NodeID;
+    type Symbol = SymbolID;
     type Reduce = &'g R;
 
     fn into_kind(self) -> crate::parser::ParserActionKind<Self> {
