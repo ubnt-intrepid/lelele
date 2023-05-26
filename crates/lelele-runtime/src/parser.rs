@@ -125,7 +125,11 @@ where
     }
 
     /// a
-    pub fn next_event<I>(&mut self, tokens: &mut I) -> ParseEvent<TDef, TTok>
+    pub fn next_event<I>(
+        &mut self,
+        tokens: &mut I,
+        args: &mut Vec<ParseItem<TTok, TDef::Symbol>>,
+    ) -> ParseEvent<TDef>
     where
         I: Iterator<Item = TTok>,
     {
@@ -159,8 +163,8 @@ where
                     self.state_stack.push(n);
                     continue;
                 }
-                ParserActionKind::Reduce(context, lhs, n) => {
-                    let mut args = vec![];
+                ParserActionKind::Reduce(reduce, lhs, n) => {
+                    args.clear();
                     for _ in 0..n {
                         self.state_stack.pop();
                         let item = self.item_stack.pop().unwrap();
@@ -175,7 +179,7 @@ where
                     self.item_stack.push(StackItem::N(lhs));
                     self.parser_state = ParserState::PendingGoto;
 
-                    return ParseEvent::Reduce(context, args);
+                    return ParseEvent::Reduce(reduce);
                 }
                 ParserActionKind::Accept => {
                     self.parser_state = ParserState::Accepted;
@@ -184,7 +188,9 @@ where
                         StackItem::T(token) => ParseItem::Terminal(token),
                         StackItem::N(symbol) => ParseItem::Nonterminal(symbol),
                     };
-                    return ParseEvent::Accept(arg);
+                    args.clear();
+                    args.push(arg);
+                    return ParseEvent::Accept;
                 }
             }
         }
@@ -192,16 +198,17 @@ where
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ParseItem<TTok, TSym> {
     Terminal(TTok),
     Nonterminal(TSym),
 }
 
 #[derive(Debug)]
-pub enum ParseEvent<TDef, TTok>
+pub enum ParseEvent<TDef>
 where
     TDef: ParserDefinition,
 {
-    Reduce(TDef::Reduce, Vec<ParseItem<TTok, TDef::Symbol>>),
-    Accept(ParseItem<TTok, TDef::Symbol>),
+    Reduce(TDef::Reduce),
+    Accept,
 }

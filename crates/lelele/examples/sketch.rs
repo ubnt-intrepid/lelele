@@ -48,13 +48,14 @@ fn main() {
 
     let def = ParserDefinition::new(&grammar);
     let mut parser = Parser::new(def);
+    let mut args = vec![];
     loop {
-        match parser.next_event(&mut tokens) {
-            ParseEvent::Reduce(rule, args) => {
+        match parser.next_event(&mut tokens, &mut args) {
+            ParseEvent::Reduce(rule) => {
                 println!("reduce({:?}, {:?})", rule, args);
             }
-            ParseEvent::Accept(s) => {
-                println!("accept: {:?}", s);
+            ParseEvent::Accept => {
+                println!("accept: {:?}", args);
                 break;
             }
         }
