@@ -69,12 +69,13 @@ pub trait ParserAction {
     type Symbol: Copy;
     type Reduce;
 
-    fn into_kind(self) -> ParserActionKind<Self>;
+    fn into_kind(self) -> ParserActionKind<Self::State, Self::Symbol, Self::Reduce>;
 }
 
-pub enum ParserActionKind<A: ParserAction + ?Sized> {
-    Shift(A::State),
-    Reduce(A::Reduce, A::Symbol, usize),
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum ParserActionKind<TState, TSymbol, TReduce> {
+    Shift(TState),
+    Reduce(TReduce, TSymbol, usize),
     Accept,
 }
 
