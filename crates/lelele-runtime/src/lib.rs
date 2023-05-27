@@ -2,5 +2,9 @@
 
 pub mod parser;
 
+// internally used by codegen.
 #[doc(hidden)]
-pub use phf;
+pub mod _private {
+    pub use crate::parser::{Parser, ParserAction, ParserActionKind, ParserDefinition, Token};
+    pub use ::phf;
+}
