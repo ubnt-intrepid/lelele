@@ -3,6 +3,8 @@ use std::{env, fs, path::PathBuf};
 
 #[allow(non_snake_case)]
 fn main() {
+    println!("cargo:rerun-if-changed=dummy.txt");
+
     let mut def = Grammar::definition();
 
     let t_ident = def.token("ID");
