@@ -60,13 +60,14 @@ pub struct LRItem {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct NodeID {
-    raw: usize,
+    raw: u64,
 }
 impl NodeID {
-    const fn new(i: usize) -> Self {
-        Self { raw: i }
+    const fn new(raw: u64) -> Self {
+        Self { raw }
     }
-    pub(crate) const fn raw(self) -> usize {
+
+    pub(crate) const fn raw(self) -> u64 {
         self.raw
     }
 }

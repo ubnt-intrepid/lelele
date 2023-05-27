@@ -6,18 +6,18 @@ use std::{borrow::Cow, fmt};
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct SymbolID {
-    raw: usize,
+    raw: u64,
 }
 
 impl SymbolID {
-    pub const EOI: Self = Self::new(usize::MAX);
-    pub const START: Self = Self::new(usize::MAX - 1);
+    pub const EOI: Self = Self::new(u64::MAX);
+    pub const START: Self = Self::new(u64::MAX - 1);
 
-    const fn new(i: usize) -> Self {
-        Self { raw: i }
+    const fn new(raw: u64) -> Self {
+        Self { raw }
     }
 
-    pub(crate) const fn raw(self) -> usize {
+    pub(crate) const fn raw(self) -> u64 {
         self.raw
     }
 }
@@ -66,14 +66,14 @@ impl<'g> Symbol<'g> {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct RuleID {
-    raw: usize,
+    raw: u64,
 }
 impl RuleID {
-    pub const START: Self = Self::new(usize::MAX);
-    const fn new(i: usize) -> Self {
-        Self { raw: i }
+    pub const START: Self = Self::new(u64::MAX);
+    const fn new(raw: u64) -> Self {
+        Self { raw }
     }
-    pub(crate) fn raw(self) -> usize {
+    pub(crate) const fn raw(self) -> u64 {
         self.raw
     }
 }
@@ -215,8 +215,8 @@ pub struct GrammarDef<'g> {
     symbols: IndexMap<SymbolID, Symbol<'g>>,
     rules: IndexMap<RuleID, Rule<'g>>,
     start: Option<SymbolID>,
-    next_symbol_id: usize,
-    next_rule_id: usize,
+    next_symbol_id: u64,
+    next_rule_id: u64,
 }
 
 impl<'g> GrammarDef<'g> {
