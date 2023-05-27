@@ -8,4 +8,5 @@ publish = false
 lelele = { path = "../../crates/lelele" }
 
 [dependencies]
+anyhow = "1.0.71"
 lelele-runtime = { path = "../../crates/lelele-runtime" }

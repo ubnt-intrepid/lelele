@@ -7,7 +7,7 @@ use crate::{
     grammar::{Grammar, RuleID, SymbolID},
 };
 use indexmap::{IndexMap, IndexSet};
-use lelele_runtime::parser::ParserActionKind;
+use lelele_runtime::parser::ParserAction;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Action {
@@ -86,39 +86,26 @@ impl<'g> lelele_runtime::parser::ParserDefinition for ParserDefinition<'g> {
     type State = NodeID;
     type Symbol = SymbolID;
     type Reduce = RuleID;
-    type Action = ParserAction<'g>;
+    type Error = std::convert::Infallible; // FIXME: appropriate error type
 
     fn initial_state(&self) -> Self::State {
         self.start_node
     }
 
-    fn action(&self, current: Self::State, input: Option<Self::Symbol>) -> Self::Action {
+    fn action(
+        &self,
+        current: Self::State,
+        input: Option<Self::Symbol>,
+    ) -> Result<ParserAction<Self::State, Self::Symbol, Self::Reduce>, Self::Error> {
         let input = input.unwrap_or(SymbolID::EOI);
-        ParserAction {
-            grammar: self.grammar,
-            action: self.table[&current][&input],
-        }
-    }
-}
-
-pub struct ParserAction<'g> {
-    grammar: &'g Grammar<'g>,
-    action: Action,
-}
-impl<'g> lelele_runtime::parser::ParserAction for ParserAction<'g> {
-    type State = NodeID;
-    type Symbol = SymbolID;
-    type Reduce = RuleID;
-
-    fn into_kind(self) -> ParserActionKind<NodeID, SymbolID, RuleID> {
-        match self.action {
-            Action::Shift(n) | Action::Goto(n) => ParserActionKind::Shift(n),
+        match self.table[&current][&input] {
+            Action::Shift(n) | Action::Goto(n) => Ok(ParserAction::Shift(n)),
             Action::Reduce(rule_id) => {
                 let rule = self.grammar.rule(rule_id);
                 let n = rule.rhs.len();
-                ParserActionKind::Reduce(rule_id, rule.lhs, n)
+                Ok(ParserAction::Reduce(rule_id, rule.lhs, n))
             }
-            Action::Accept => ParserActionKind::Accept,
+            Action::Accept => Ok(ParserAction::Accept),
         }
     }
 }
@@ -161,7 +148,7 @@ use ::lelele_runtime::_private as lelele;
 const PARSE_TABLE: &[
     lelele::phf::Map<
         u64,
-        lelele::ParserActionKind<
+        lelele::ParserAction<
             NodeID,
             SymbolID,
             RuleID,
@@ -177,20 +164,20 @@ const PARSE_TABLE: &[
             let action_g = match action {
                 Action::Shift(n) | Action::Goto(n) => {
                     format!(
-                        "lelele::ParserActionKind::Shift(NodeID {{ __raw: {}_usize }})",
+                        "lelele::ParserAction::Shift(NodeID {{ __raw: {}_usize }})",
                         node_id_of(n)
                     )
                 }
                 Action::Reduce(r) => {
                     let rule = grammar.rule(*r);
                     format!(
-                        "lelele::ParserActionKind::Reduce(RuleID {{ __raw: {}_u64 }}, SymbolID {{ __raw: {}_u64 }}, {}_usize)",
+                        "lelele::ParserAction::Reduce(RuleID {{ __raw: {}_u64 }}, SymbolID {{ __raw: {}_u64 }}, {}_usize)",
                         rule_id_of(r),
                         symbol_id_of(&rule.lhs),
                         rule.rhs.len()
                     )
                 }
-                Action::Accept => format!("lelele::ParserActionKind::Accept"),
+                Action::Accept => format!("lelele::ParserAction::Accept"),
             };
             actions_g.entry(symbol_id_of(&symbol) as u64, &action_g);
         }
@@ -278,7 +265,7 @@ impl lelele::ParserDefinition for ParserDefinition {
     type State = NodeID;
     type Symbol = SymbolID;
     type Reduce = RuleID;
-    type Action = ParserAction;
+    type Error = ::std::convert::Infallible; // FIXME: should not be infallible.
 
     #[inline]
     fn initial_state(&self) -> Self::State {
@@ -286,27 +273,13 @@ impl lelele::ParserDefinition for ParserDefinition {
     }
 
     #[inline]
-    fn action(&self, current: Self::State, input: Option<Self::Symbol>) -> Self::Action {
+    fn action(
+        &self,
+        current: Self::State,
+        input: Option<Self::Symbol>,
+    ) -> Result<lelele::ParserAction<Self::State, Self::Symbol, Self::Reduce>, Self::Error> {
         let input = input.unwrap_or(SymbolID::__EOI).__raw;
-        ParserAction {
-            action: PARSE_TABLE[current.__raw][&input],
-        }
-    }
-}
-
-/// The parser action.
-pub struct ParserAction {
-    action: lelele::ParserActionKind<NodeID, SymbolID, RuleID>,
-}
-
-impl lelele::ParserAction for ParserAction {
-    type State = NodeID;
-    type Symbol = SymbolID;
-    type Reduce = RuleID;
-    
-    #[inline]
-    fn into_kind(self) -> lelele::ParserActionKind<NodeID, SymbolID, RuleID> {
-        self.action
+        Ok(PARSE_TABLE[current.__raw][&input])
     }
 }
 

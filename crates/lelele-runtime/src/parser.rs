@@ -1,13 +1,18 @@
 //! Parser.
 
+use std::error::Error;
+
 pub trait ParserDefinition {
     type State: Copy;
     type Symbol: Copy;
     type Reduce;
-    type Action: ParserAction<State = Self::State, Symbol = Self::Symbol, Reduce = Self::Reduce>;
-
+    type Error: Error + Send + Sync + 'static;
     fn initial_state(&self) -> Self::State;
-    fn action(&self, current: Self::State, input: Option<Self::Symbol>) -> Self::Action;
+    fn action(
+        &self,
+        current: Self::State,
+        input: Option<Self::Symbol>,
+    ) -> Result<ParserAction<Self::State, Self::Symbol, Self::Reduce>, Self::Error>;
 }
 
 impl<T: ?Sized> ParserDefinition for &T
@@ -17,13 +22,17 @@ where
     type State = T::State;
     type Symbol = T::Symbol;
     type Reduce = T::Reduce;
-    type Action = T::Action;
+    type Error = T::Error;
 
     fn initial_state(&self) -> Self::State {
         (**self).initial_state()
     }
 
-    fn action(&self, current: Self::State, input: Option<Self::Symbol>) -> Self::Action {
+    fn action(
+        &self,
+        current: Self::State,
+        input: Option<Self::Symbol>,
+    ) -> Result<ParserAction<Self::State, Self::Symbol, Self::Reduce>, Self::Error> {
         (**self).action(current, input)
     }
 }
@@ -35,13 +44,17 @@ where
     type State = T::State;
     type Symbol = T::Symbol;
     type Reduce = T::Reduce;
-    type Action = T::Action;
+    type Error = T::Error;
 
     fn initial_state(&self) -> Self::State {
         (**self).initial_state()
     }
 
-    fn action(&self, current: Self::State, input: Option<Self::Symbol>) -> Self::Action {
+    fn action(
+        &self,
+        current: Self::State,
+        input: Option<Self::Symbol>,
+    ) -> Result<ParserAction<Self::State, Self::Symbol, Self::Reduce>, Self::Error> {
         (**self).action(current, input)
     }
 }
@@ -53,27 +66,24 @@ where
     type State = T::State;
     type Symbol = T::Symbol;
     type Reduce = T::Reduce;
-    type Action = T::Action;
+    type Error = T::Error;
 
     fn initial_state(&self) -> Self::State {
         (**self).initial_state()
     }
 
-    fn action(&self, current: Self::State, input: Option<Self::Symbol>) -> Self::Action {
+    fn action(
+        &self,
+        current: Self::State,
+        input: Option<Self::Symbol>,
+    ) -> Result<ParserAction<Self::State, Self::Symbol, Self::Reduce>, Self::Error> {
         (**self).action(current, input)
     }
 }
 
-pub trait ParserAction {
-    type State: Copy;
-    type Symbol: Copy;
-    type Reduce;
-
-    fn into_kind(self) -> ParserActionKind<Self::State, Self::Symbol, Self::Reduce>;
-}
-
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum ParserActionKind<TState, TSymbol, TReduce> {
+#[non_exhaustive]
+pub enum ParserAction<TState, TSymbol, TReduce> {
     Shift(TState),
     Reduce(TReduce, TSymbol, usize),
     Accept,
@@ -83,6 +93,7 @@ pub trait Token<TSym> {
     fn as_symbol(&self) -> TSym;
 }
 
+/// The parser type based on generated definition.
 #[derive(Debug)]
 pub struct Parser<TDef, TTok>
 where
@@ -114,6 +125,7 @@ where
     TDef: ParserDefinition,
     TTok: Token<TDef::Symbol>,
 {
+    /// Create an instance of `Parser` using the specified parser definition.
     pub fn new(definition: TDef) -> Self {
         let initial_state = definition.initial_state();
         Self {
@@ -125,37 +137,53 @@ where
         }
     }
 
-    /// a
-    pub fn next_event<I>(
+    /// Consume some tokens and drive the state machine
+    /// until it matches a certain syntax rule.
+    pub fn next_event<I, E>(
         &mut self,
         tokens: &mut I,
         args: &mut Vec<ParseItem<TTok, TDef::Symbol>>,
-    ) -> ParseEvent<TDef>
+    ) -> Result<ParseEvent<TDef>, ParseError<E, TDef::Error>>
     where
-        I: Iterator<Item = TTok>,
+        I: Iterator<Item = Result<TTok, E>>,
     {
         loop {
-            let current = self.state_stack.last().unwrap();
+            let current = self
+                .state_stack
+                .last()
+                .ok_or_else(|| ParseError::EmptyNodeStack)?;
 
             let input = match self.parser_state {
-                ParserState::PendingGoto => match self.item_stack.last().unwrap() {
+                ParserState::PendingGoto => match self
+                    .item_stack
+                    .last()
+                    .ok_or_else(|| ParseError::EmptyItemStack)?
+                {
                     StackItem::N(s) => Some(*s),
                     StackItem::T(t) => Some(t.as_symbol()),
                 },
                 _ => {
                     if self.peeked_token.is_none() {
-                        self.peeked_token = tokens.next();
+                        self.peeked_token = tokens.next().transpose().map_err(ParseError::Lexer)?;
                     }
                     self.peeked_token.as_ref().map(|t| t.as_symbol())
                 }
             };
 
-            match self.definition.action(*current, input).into_kind() {
-                ParserActionKind::Shift(n) => {
+            match self
+                .definition
+                .action(*current, input)
+                .map_err(ParseError::ParserDef)?
+            {
+                ParserAction::Shift(n) => {
                     if !matches!(self.parser_state, ParserState::PendingGoto) {
                         let t = match self.peeked_token.take() {
                             Some(t) => t,
-                            None => tokens.next().expect("unexpected EOI"),
+                            None => tokens
+                                .next()
+                                .transpose()
+                                .map_err(ParseError::Lexer)?
+                                .ok_or_else(|| ParseError::UnexpectedEOI)?,
                         };
                         self.item_stack.push(StackItem::T(t));
                     }
@@ -164,11 +192,15 @@ where
                     self.state_stack.push(n);
                     continue;
                 }
-                ParserActionKind::Reduce(reduce, lhs, n) => {
+
+                ParserAction::Reduce(reduce, lhs, n) => {
                     args.clear();
                     for _ in 0..n {
                         self.state_stack.pop();
-                        let item = self.item_stack.pop().unwrap();
+                        let item = self
+                            .item_stack
+                            .pop()
+                            .ok_or_else(|| ParseError::EmptyItemStack)?;
                         let arg = match item {
                             StackItem::T(token) => ParseItem::Terminal(token),
                             StackItem::N(symbol) => ParseItem::Nonterminal(symbol),
@@ -180,18 +212,23 @@ where
                     self.item_stack.push(StackItem::N(lhs));
                     self.parser_state = ParserState::PendingGoto;
 
-                    return ParseEvent::Reduce(reduce);
+                    return Ok(ParseEvent::Reduce(reduce));
                 }
-                ParserActionKind::Accept => {
-                    self.parser_state = ParserState::Accepted;
-                    let item = self.item_stack.pop().expect("empty result stack");
+
+                ParserAction::Accept => {
+                    let item = self
+                        .item_stack
+                        .pop()
+                        .ok_or_else(|| ParseError::EmptyItemStack)?;
                     let arg = match item {
                         StackItem::T(token) => ParseItem::Terminal(token),
                         StackItem::N(symbol) => ParseItem::Nonterminal(symbol),
                     };
                     args.clear();
                     args.push(arg);
-                    return ParseEvent::Accept;
+
+                    self.parser_state = ParserState::Accepted;
+                    return Ok(ParseEvent::Accept);
                 }
             }
         }
@@ -212,4 +249,22 @@ where
 {
     Reduce(TDef::Reduce),
     Accept,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseError<L, D> {
+    #[error("from lexer: {}", 0)]
+    Lexer(L),
+
+    #[error("from parser definition: {}", 0)]
+    ParserDef(D),
+
+    #[error("unexpected EOI")]
+    UnexpectedEOI,
+
+    #[error("empty node stack")]
+    EmptyNodeStack,
+
+    #[error("empty item stack")]
+    EmptyItemStack,
 }

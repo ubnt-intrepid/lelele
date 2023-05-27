@@ -1,3 +1,4 @@
+use anyhow::Result;
 use lelele_example_sketch::parser::{parser, SymbolID};
 use lelele_runtime::parser::ParseEvent;
 
@@ -20,20 +21,23 @@ impl lelele_runtime::parser::Token<SymbolID> for Token<'_> {
     }
 }
 
-fn main() {
-    let mut tokens = [
-        Token::Num("1"),
-        Token::Plus,
-        Token::Num("2"),
-        Token::Equal,
-        Token::Ident("a"),
+fn tokens() -> impl Iterator<Item = Result<Token<'static>>> {
+    [
+        Ok(Token::Num("1")),
+        Ok(Token::Plus),
+        Ok(Token::Num("2")),
+        Ok(Token::Equal),
+        Ok(Token::Ident("a")),
     ]
-    .into_iter();
+    .into_iter()
+}
 
+fn main() -> anyhow::Result<()> {
     let mut parser = parser();
+    let mut tokens = tokens();
     let mut args = vec![];
     loop {
-        match parser.next_event(&mut tokens, &mut args) {
+        match parser.next_event(&mut tokens, &mut args)? {
             ParseEvent::Reduce(rule) => {
                 println!("reduce({:?}, {:?})", rule, args);
             }
@@ -43,4 +47,5 @@ fn main() {
             }
         }
     }
+    Ok(())
 }
