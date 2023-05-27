@@ -175,6 +175,18 @@ const PARSE_TABLE: ::lelele_runtime::phf::Map<u64, ::lelele_runtime::phf::Map<u6
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(transparent)]
 pub struct NodeID { __raw: u64 }
+impl NodeID {\n",
+    )?;
+
+    writeln!(
+        w,
+        "    pub const __START: Self = Self {{ __raw: {}_u64 }};",
+        table.first().unwrap().0
+    )?;
+
+    w.write_all(
+        b"\
+}
 
 ///
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -194,6 +206,11 @@ impl SymbolID {\n",
             id.raw()
         )?;
     }
+    writeln!(
+        w,
+        "    const __EOI: Self = Self {{ __raw: {}_u64 }};",
+        SymbolID::EOI.raw()
+    )?;
 
     w.write_all(
         b"\
@@ -229,32 +246,13 @@ impl ::lelele_runtime::parser::ParserDefinition for ParserDefinition {
     type Symbol = SymbolID;
     type Reduce = RuleID;
     type Action = ParserAction;
-    fn initial_state(&self) -> Self::State {\n",
-    )?;
-
-    writeln!(
-        w,
-        "        NodeID {{ __raw : {}_u64 }}",
-        table.first().unwrap().0
-    )?;
-
-    w.write_all(
-        b"\
+    fn initial_state(&self) -> Self::State {
+        NodeID::__START
     }
-    fn action(&self, current: Self::State, input: Option<Self::Symbol>) -> Self::Action {\n",
-    )?;
-
-    writeln!(
-        w,
-        "let input = input.map_or({}_u64, |SymbolID {{ __raw: n }}| n);",
-        SymbolID::EOI.raw()
-    )?;
-
-    w.write_all(
-        b"\
-        let actions = PARSE_TABLE.get(&(current.__raw)).unwrap();
+    fn action(&self, current: Self::State, input: Option<Self::Symbol>) -> Self::Action {
+        let input = input.unwrap_or(SymbolID::__EOI).__raw;
         ParserAction {
-            action: actions.get(&input).copied().unwrap(),
+            action: PARSE_TABLE[&(current.__raw)][&input],
         }
     }
 }
