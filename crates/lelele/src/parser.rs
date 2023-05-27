@@ -188,7 +188,7 @@ const PARSE_TABLE: &[
         b"];
 
 /// The type to identify DFA state nodes.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct NodeID { __raw: usize }
 impl NodeID {\n",
@@ -205,7 +205,7 @@ impl NodeID {\n",
 }
 
 /// The type to identify terminal or nonterminal symbols used in generated DFA.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct SymbolID { __raw: u64 }
 impl SymbolID {\n",
@@ -235,7 +235,7 @@ impl SymbolID {\n",
 }
 
 /// The type to identify the syntax rule that matched input sequence.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct RuleID { __raw: u64 }
 impl RuleID {\n",
