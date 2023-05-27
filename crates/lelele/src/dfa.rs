@@ -7,6 +7,7 @@ use std::{fmt, mem};
 #[derive(Debug)]
 pub struct DFA {
     nodes: IndexMap<NodeID, DFANode>,
+    start_node: NodeID,
 }
 
 impl DFA {
@@ -27,6 +28,11 @@ impl DFA {
 
     pub fn node(&self, id: NodeID) -> &DFANode {
         &self.nodes[&id]
+    }
+
+    pub fn start_node(&self) -> (NodeID, &DFANode) {
+        let (_, id, node) = self.nodes.get_full(&self.start_node).unwrap();
+        (*id, node)
     }
 }
 
@@ -66,10 +72,6 @@ impl NodeID {
     const fn new(raw: u64) -> Self {
         Self { raw }
     }
-
-    pub(crate) const fn raw(self) -> u64 {
-        self.raw
-    }
 }
 impl fmt::Display for NodeID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -100,20 +102,20 @@ impl<'g> DFAGenerator<'g> {
             item_set: IndexSet<LRItem>,
         }
         let mut pending_items: Vec<PendingItem> = vec![];
-        pending_items.push({
-            // 初期ノードの構築
-            let mut item_set = IndexSet::new();
-            // [S' -> @ S]
-            item_set.insert(LRItem {
-                rule_id: RuleID::START,
-                marker: 0,
-                lookahead: SymbolID::EOI,
-            });
-            self.expand_closures(&mut item_set);
-            PendingItem {
-                id: node_id(),
-                item_set,
-            }
+
+        // 初期ノードの構築
+        let start_node_id = node_id();
+        let mut item_set = IndexSet::new();
+        // [S' -> @ S]
+        item_set.insert(LRItem {
+            rule_id: RuleID::START,
+            marker: 0,
+            lookahead: SymbolID::EOI,
+        });
+        self.expand_closures(&mut item_set);
+        pending_items.push(PendingItem {
+            id: start_node_id,
+            item_set,
         });
 
         // 新規にノードが生成されなくなるまで繰り返す
@@ -150,7 +152,10 @@ impl<'g> DFAGenerator<'g> {
             }
         }
 
-        DFA { nodes }
+        DFA {
+            nodes,
+            start_node: start_node_id,
+        }
     }
 
     /// クロージャ展開

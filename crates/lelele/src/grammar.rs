@@ -16,10 +16,6 @@ impl SymbolID {
     const fn new(raw: u64) -> Self {
         Self { raw }
     }
-
-    pub(crate) const fn raw(self) -> u64 {
-        self.raw
-    }
 }
 
 impl fmt::Display for SymbolID {
@@ -72,9 +68,6 @@ impl RuleID {
     pub const START: Self = Self::new(u64::MAX);
     const fn new(raw: u64) -> Self {
         Self { raw }
-    }
-    pub(crate) const fn raw(self) -> u64 {
-        self.raw
     }
 }
 impl fmt::Display for RuleID {
