@@ -15,6 +15,7 @@ pub struct ParserDefinition<'g> {
     node_ids: IndexSet<NodeID>,
     symbol_ids: IndexSet<SymbolID>,
     rule_ids: IndexSet<RuleID>,
+    rule_names: IndexMap<SymbolID, Vec<RuleID>>,
 }
 
 impl<'g> ParserDefinition<'g> {
@@ -43,6 +44,12 @@ impl<'g> ParserDefinition<'g> {
             }
         }
 
+        // RuleIDごとの識別子名をつけるために集計する
+        let mut rule_names: IndexMap<SymbolID, Vec<RuleID>> = IndexMap::new();
+        for (id, rule) in grammar.rules().filter(|(id, _)| *id != RuleID::START) {
+            rule_names.entry(rule.lhs).or_default().push(id);
+        }
+
         Self {
             grammar,
             start_node,
@@ -50,6 +57,7 @@ impl<'g> ParserDefinition<'g> {
             node_ids,
             symbol_ids,
             rule_ids,
+            rule_names,
         }
     }
 
@@ -63,6 +71,22 @@ impl<'g> ParserDefinition<'g> {
 
     fn rule_id_of(&self, r: &RuleID) -> usize {
         self.rule_ids.get_index_of(r).unwrap()
+    }
+
+    fn rule_name(&self, id: RuleID) -> String {
+        let (sym_id, rules) = self
+            .rule_names
+            .iter()
+            .find(|(_, rules)| rules.contains(&id))
+            .unwrap();
+        let name = self.grammar.symbol(*sym_id).name();
+        match rules.len() {
+            1 => name.into(),
+            _ => {
+                let i = rules.iter().position(|i| *i == id).unwrap();
+                format!("{}_{}", name, i)
+            }
+        }
     }
 
     fn fmt_preamble(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -154,7 +178,7 @@ impl SymbolID {\n",
             writeln!(
                 f,
                 "    \
-    /// `\"{name}\"`
+    /// `{name}`
     pub const {name}: Self = Self {{ __raw: {id}_u64 }};",
                 name = symbol.name(),
                 id = self.symbol_id_of(&id)
@@ -183,12 +207,26 @@ impl RuleID {\n",
         )?;
 
         for (id, rule) in self.grammar.rules().filter(|(id, _)| *id != RuleID::START) {
+            let lhs = self.grammar.symbol(rule.lhs).name();
+            let rhs = rule
+                .rhs
+                .iter()
+                .enumerate()
+                .fold(String::new(), |mut acc, (i, s)| {
+                    if i > 0 {
+                        acc += " ";
+                    }
+                    acc += self.grammar.symbol(*s).name();
+                    acc
+                });
             writeln!(
                 f,
                 "    \
-    /// `\"{name}\"`
+    /// `{lhs} : {rhs}`
     pub const {name}: Self = Self {{ __raw: {id}_u64 }};",
-                name = rule.name,
+                lhs = lhs,
+                rhs = rhs,
+                name = self.rule_name(id),
                 id = self.rule_id_of(&id)
             )?;
         }

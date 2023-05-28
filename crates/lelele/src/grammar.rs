@@ -80,15 +80,14 @@ impl fmt::Display for RuleID {
 }
 
 #[derive(Debug)]
-pub struct Rule<'g> {
-    pub name: Cow<'g, str>,
+pub struct Rule {
     pub lhs: SymbolID,
     pub rhs: Vec<SymbolID>,
 }
-impl Rule<'_> {
+impl Rule {
     pub fn display<'r>(&'r self, grammar: &'r Grammar<'r>) -> impl fmt::Display + 'r {
         struct RuleDisplay<'r> {
-            rule: &'r Rule<'r>,
+            rule: &'r Rule,
             grammar: &'r Grammar<'r>,
         }
         impl fmt::Display for RuleDisplay<'_> {
@@ -114,9 +113,9 @@ impl Rule<'_> {
 #[derive(Debug)]
 pub struct Grammar<'g> {
     symbols: IndexMap<SymbolID, Symbol<'g>>,
-    rules: IndexMap<RuleID, Rule<'g>>,
+    rules: IndexMap<RuleID, Rule>,
     start: SymbolID,
-    start_rule: Rule<'g>,
+    start_rule: Rule,
 }
 
 impl fmt::Display for Grammar<'_> {
@@ -213,7 +212,7 @@ impl<'g> Grammar<'g> {
 #[derive(Debug)]
 pub struct GrammarDef<'g> {
     symbols: IndexMap<SymbolID, Symbol<'g>>,
-    rules: IndexMap<RuleID, Rule<'g>>,
+    rules: IndexMap<RuleID, Rule>,
     start: Option<SymbolID>,
     next_symbol_id: u64,
     next_rule_id: u64,
@@ -243,7 +242,7 @@ impl<'g> GrammarDef<'g> {
         }
     }
 
-    fn add_rule(&mut self, rule: Rule<'g>) -> RuleID {
+    fn add_rule(&mut self, rule: Rule) -> RuleID {
         let id = RuleID::new(self.next_rule_id);
         self.next_rule_id += 1;
         self.rules.insert(id, rule);
@@ -267,10 +266,7 @@ impl<'g> GrammarDef<'g> {
     }
 
     /// Register a syntax rule into this grammer.
-    ///
-    /// The first argument `name` means the name of a non-terminal symbol,
-    /// and the remaining `args` is
-    pub fn rule<I>(&mut self, name: impl Into<Cow<'g, str>>, lhs: SymbolID, rhs: I) -> RuleID
+    pub fn rule<I>(&mut self, lhs: SymbolID, rhs: I) -> RuleID
     where
         I: IntoIterator<Item = SymbolID>,
     {
@@ -281,7 +277,6 @@ impl<'g> GrammarDef<'g> {
             "lhs must be nonterminal symbol"
         );
         self.add_rule(Rule {
-            name: name.into(),
             lhs,
             rhs: rhs.into_iter().collect(),
         })
@@ -315,7 +310,6 @@ impl<'g> GrammarDef<'g> {
             rules: self.rules,
             start,
             start_rule: Rule {
-                name: "$START".into(),
                 lhs: SymbolID::START,
                 rhs: vec![start],
             },
@@ -345,16 +339,16 @@ mod tests {
 
             def.start_symbol(expr);
 
-            def.rule("EXPR_1", expr, [expr, plus, factor]);
-            def.rule("EXPR_2", expr, [expr, minus, factor]);
-            def.rule("EXPR_3", expr, [factor]);
+            def.rule(expr, [expr, plus, factor]);
+            def.rule(expr, [expr, minus, factor]);
+            def.rule(expr, [factor]);
 
-            def.rule("FACTOR_1", factor, [factor, star, term]);
-            def.rule("FACTOR_2", factor, [factor, slash, term]);
-            def.rule("FACTOR_3", factor, [term]);
+            def.rule(factor, [factor, star, term]);
+            def.rule(factor, [factor, slash, term]);
+            def.rule(factor, [term]);
 
-            def.rule("TERM_1", term, [num]);
-            def.rule("TERM_2", term, [lparen, expr, rparen]);
+            def.rule(term, [num]);
+            def.rule(term, [lparen, expr, rparen]);
         });
         eprintln!("{}", grammar);
 

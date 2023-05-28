@@ -41,16 +41,16 @@ fn grammar_def(def: &mut GrammarDef<'_>) {
     // declare syntax rules.
 
     // expr : expr '+' factor | expr '-' factor | factor ;
-    def.rule("EXPR_1", expr, [expr, plus, factor]);
-    def.rule("EXPR_2", expr, [expr, minus, factor]);
-    def.rule("EXPR_3", expr, [factor]);
+    def.rule(expr, [expr, plus, factor]);
+    def.rule(expr, [expr, minus, factor]);
+    def.rule(expr, [factor]);
 
     // factor : factor '*' term | factor '/' term | term ;
-    def.rule("FACTOR_1", factor, [factor, star, term]);
-    def.rule("FACTOR_2", factor, [factor, slash, term]);
-    def.rule("FACTOR_3", factor, [term]);
+    def.rule(factor, [factor, star, term]);
+    def.rule(factor, [factor, slash, term]);
+    def.rule(factor, [term]);
 
     // term : num | '(' expr ')'
-    def.rule("TERM_1", term, [num]);
-    def.rule("TERM_2", term, [lparen, expr, rparen]);
+    def.rule(term, [num]);
+    def.rule(term, [lparen, expr, rparen]);
 }
