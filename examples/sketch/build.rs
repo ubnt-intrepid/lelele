@@ -3,34 +3,11 @@ use std::{env, fs, path::PathBuf};
 
 #[allow(non_snake_case)]
 fn main() {
-    println!("cargo:rerun-if-changed=dummy.txt");
-
-    let mut def = Grammar::definition();
-
-    let t_ident = def.token("ID");
-    let t_num = def.token("NUM");
-    let t_plus = def.token("PLUS");
-    let t_equal = def.token("EQUAL");
-
-    let e_A = def.symbol("A");
-    let e_E = def.symbol("E");
-    let e_T = def.symbol("T");
-
-    def.rule("R1", e_A, [e_E, t_equal, e_E]);
-    def.rule("R2", e_A, [t_ident]);
-    def.rule("R3", e_E, [e_E, t_plus, e_T]);
-    def.rule("R4", e_E, [e_T]);
-    def.rule("R5", e_T, [t_num]);
-    def.rule("R6", e_T, [t_ident]);
-
-    def.start(e_A);
-
-    let grammar = def.end();
-
-    // 上の文法定義から導出される構文解析表
+    // 文法定義から構文解析表を導出する
+    let grammar = grammar();
     let parser_def = ParserDefinition::new(&grammar);
 
-    //
+    // 生成された構文解析表をコードに出力
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("parser.rs");
     let mut out = fs::File::options()
         .write(true)
@@ -39,4 +16,42 @@ fn main() {
         .open(out_path)
         .unwrap();
     parser_def.generate(&mut out).unwrap();
+}
+
+fn grammar() -> Grammar<'static> {
+    let mut def = Grammar::definition();
+
+    // declare terminal symbols.
+    let lparen = def.token("LPAREN");
+    let rparen = def.token("RPAREN");
+    let plus = def.token("PLUS");
+    let minus = def.token("MINUS");
+    let star = def.token("STAR");
+    let slash = def.token("SLASH");
+    let num = def.token("NUM");
+
+    // declare nonterminal symbols.
+    let expr = def.symbol("EXPR");
+    let factor = def.symbol("FACTOR");
+    let term = def.symbol("TERM");
+
+    def.start(expr);
+
+    // declare syntax rules.
+
+    // expr : expr '+' factor | expr '-' factor | factor ;
+    def.rule("EXPR_1", expr, [expr, plus, factor]);
+    def.rule("EXPR_2", expr, [expr, minus, factor]);
+    def.rule("EXPR_3", expr, [factor]);
+
+    // factor : factor '*' term | factor '/' term | term ;
+    def.rule("FACTOR_1", factor, [factor, star, term]);
+    def.rule("FACTOR_2", factor, [factor, slash, term]);
+    def.rule("FACTOR_3", factor, [term]);
+
+    // term : num | '(' expr ')'
+    def.rule("TERM_1", term, [num]);
+    def.rule("TERM_2", term, [lparen, expr, rparen]);
+
+    def.end()
 }
