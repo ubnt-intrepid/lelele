@@ -1,6 +1,6 @@
 //! Parser.
 
-use std::error::Error;
+use std::{mem,error::Error};
 
 pub trait ParserDefinition {
     type State: Copy;
@@ -102,16 +102,11 @@ where
 {
     definition: TDef,
     state_stack: Vec<TDef::State>,
-    item_stack: Vec<StackItem<TTok, TDef::Symbol>>,
+    item_stack: Vec<ParseItem<TTok, TDef::Symbol>>,
     parser_state: ParserState,
     peeked_token: Option<TTok>,
 }
 
-#[derive(Debug)]
-enum StackItem<TTok, TSym> {
-    T(TTok),
-    N(TSym),
-}
 
 #[derive(Debug)]
 enum ParserState {
@@ -159,8 +154,9 @@ where
                     .last()
                     .ok_or_else(|| ParseError::EmptyItemStack)?
                 {
-                    StackItem::N(s) => Some(*s),
-                    StackItem::T(t) => Some(t.as_symbol()),
+                    ParseItem::N(s) => Some(*s),
+                    ParseItem::T(t) => Some(t.as_symbol()),
+                    _ => unreachable!(),
                 },
                 _ => {
                     if self.peeked_token.is_none() {
@@ -185,7 +181,7 @@ where
                                 .map_err(ParseError::Lexer)?
                                 .ok_or_else(|| ParseError::UnexpectedEOI)?,
                         };
-                        self.item_stack.push(StackItem::T(t));
+                        self.item_stack.push(ParseItem::T(t));
                     }
 
                     self.parser_state = ParserState::Reading;
@@ -197,33 +193,25 @@ where
                     args.clear();
                     for _ in 0..n {
                         self.state_stack.pop();
-                        let item = self
+                        let arg = self
                             .item_stack
                             .pop()
                             .ok_or_else(|| ParseError::EmptyItemStack)?;
-                        let arg = match item {
-                            StackItem::T(token) => ParseItem::Terminal(token),
-                            StackItem::N(symbol) => ParseItem::Nonterminal(symbol),
-                        };
                         args.push(arg);
                     }
                     args.reverse();
 
-                    self.item_stack.push(StackItem::N(lhs));
+                    self.item_stack.push(ParseItem::N(lhs));
                     self.parser_state = ParserState::PendingGoto;
 
                     return Ok(ParseEvent::Reduce(reduce));
                 }
 
                 ParserAction::Accept => {
-                    let item = self
+                    let arg = self
                         .item_stack
                         .pop()
                         .ok_or_else(|| ParseError::EmptyItemStack)?;
-                    let arg = match item {
-                        StackItem::T(token) => ParseItem::Terminal(token),
-                        StackItem::N(symbol) => ParseItem::Nonterminal(symbol),
-                    };
                     args.clear();
                     args.push(arg);
 
@@ -238,8 +226,19 @@ where
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ParseItem<TTok, TSym> {
-    Terminal(TTok),
-    Nonterminal(TSym),
+    T(TTok),
+    N(TSym),
+    
+    #[doc(hidden)]
+    __Empty,
+}
+impl<TTok,TSym> ParseItem<TTok, TSym> {
+    pub fn take(&mut self) -> Option<Self> {
+        match mem::replace(self, Self::__Empty) {
+            Self::__Empty => None,
+            me => Some(me),
+        }
+    }
 }
 
 #[derive(Debug)]

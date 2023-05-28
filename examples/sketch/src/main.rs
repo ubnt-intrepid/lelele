@@ -20,12 +20,8 @@ fn main() -> anyhow::Result<()> {
         match parser.next_event(&mut tokens, &mut args)? {
             ParseEvent::Reduce(RuleID::R1) => {
                 // A : E '=' E
-                match (ast_stack.pop(), ast_stack.pop()) {
-                    (Some(StackItem::Expr(rhs)), Some(StackItem::Expr(lhs))) => {
-                        let op = match args.remove(1) {
-                            ParseItem::Terminal(t) => t,
-                            _ => anyhow::bail!("incorrect parse item"),
-                        };
+                match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
+                    (Some(StackItem::Expr(rhs)), Some(ParseItem::T(op)), Some(StackItem::Expr(lhs))) => {
                         ast_stack.push(StackItem::Ast(Ast::Equal {
                             lhs: Box::new(lhs),
                             op,
@@ -37,20 +33,16 @@ fn main() -> anyhow::Result<()> {
             }
             ParseEvent::Reduce(RuleID::R2) => {
                 // A : ID
-                let ident = match args.remove(0) {
-                    ParseItem::Terminal(t) => t,
+                let ident = match args[0].take() {
+                    Some(ParseItem::T(t)) => t,
                     _ => anyhow::bail!("incorrect parse item"),
                 };
                 ast_stack.push(StackItem::Ast(Ast::Ident(ident)));
             }
             ParseEvent::Reduce(RuleID::R3) => {
                 // E : E '+' T
-                match (ast_stack.pop(), ast_stack.pop()) {
-                    (Some(StackItem::Term(rhs)), Some(StackItem::Expr(lhs))) => {
-                        let op = match args.remove(1) {
-                            ParseItem::Terminal(t) => t,
-                            _ => anyhow::bail!("incorrect parse item"),
-                        };
+                match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
+                    (Some(StackItem::Term(rhs)), Some(ParseItem::T(op)), Some(StackItem::Expr(lhs))) => {
                         ast_stack.push(StackItem::Expr(Expr::Plus {
                             lhs: Box::new(lhs),
                             op,
@@ -71,16 +63,16 @@ fn main() -> anyhow::Result<()> {
             }
             ParseEvent::Reduce(RuleID::R5) => {
                 // T : NUM
-                let num = match args.remove(0) {
-                    ParseItem::Terminal(t) => t,
+                let num = match args[0].take() {
+                    Some(ParseItem::T(t)) => t,
                     _ => anyhow::bail!("incorrect parse item"),
                 };
                 ast_stack.push(StackItem::Term(Term::Num(num)));
             }
             ParseEvent::Reduce(RuleID::R6) => {
                 // T : ID
-                let ident = match args.remove(0) {
-                    ParseItem::Terminal(t) => t,
+                let ident = match args[0].take() {
+                    Some(ParseItem::T(t)) => t,
                     _ => anyhow::bail!("incorrect parse item"),
                 };
                 ast_stack.push(StackItem::Term(Term::Ident(ident)));
