@@ -326,7 +326,7 @@ impl<'g> GrammarDef<'g> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::ParserDefinition;
+    use crate::codegen::ParserDefinition;
 
     #[test]
     fn smoketest() {

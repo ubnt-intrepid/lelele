@@ -1,17 +1,18 @@
 //! LR(1) DFA generation.
 
 use crate::grammar::{Grammar, RuleID, SymbolID};
-use indexmap::{IndexMap, IndexSet};
+use indexmap::{map::Entry, IndexMap, IndexSet};
 use std::{fmt, mem};
 
 #[derive(Debug)]
-pub struct DFA {
+pub struct DFA<'g> {
+    grammar: &'g Grammar<'g>,
     nodes: IndexMap<NodeID, DFANode>,
     start_node: NodeID,
 }
 
-impl DFA {
-    pub fn generate(grammar: &Grammar<'_>) -> Self {
+impl<'g> DFA<'g> {
+    pub fn generate(grammar: &'g Grammar<'g>) -> Self {
         let nulls = nulls_set(grammar);
         let first_set = first_set(grammar, &nulls);
         DFAGenerator {
@@ -34,6 +35,61 @@ impl DFA {
         let (_, id, node) = self.nodes.get_full(&self.start_node).unwrap();
         (*id, node)
     }
+
+    pub(crate) fn parse_table(&self) -> IndexMap<NodeID, IndexMap<SymbolID, Action>> {
+        let mut transition_table: IndexMap<NodeID, IndexMap<SymbolID, Action>> = IndexMap::new();
+        for (id, node) in self.nodes() {
+            let mut actions = IndexMap::new();
+            // shift, goto
+            for (label, target) in &node.edges {
+                match actions.entry(*label) {
+                    Entry::Occupied(..) => panic!("conflict"),
+                    Entry::Vacant(entry) => {
+                        if self.grammar.symbol(*label).is_terminal() {
+                            entry.insert(Action::Shift(*target));
+                        } else {
+                            entry.insert(Action::Goto(*target));
+                        }
+                    }
+                }
+            }
+
+            // reduce, accept
+            for item in &node.item_set {
+                let rule = &self.grammar.rule(item.rule_id);
+                if item.marker < rule.rhs.len() {
+                    continue;
+                }
+
+                if item.rule_id == RuleID::START {
+                    match actions.entry(SymbolID::EOI) {
+                        Entry::Occupied(..) => panic!("conflict"),
+                        Entry::Vacant(e) => {
+                            e.insert(Action::Accept);
+                        }
+                    }
+                } else {
+                    match actions.entry(item.lookahead) {
+                        Entry::Occupied(..) => panic!("conflict"),
+                        Entry::Vacant(e) => {
+                            e.insert(Action::Reduce(item.rule_id));
+                        }
+                    }
+                }
+            }
+
+            transition_table.insert(id, actions);
+        }
+        transition_table
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum Action {
+    Shift(NodeID),
+    Goto(NodeID),
+    Reduce(RuleID),
+    Accept,
 }
 
 #[derive(Debug)]
@@ -87,7 +143,7 @@ struct DFAGenerator<'g> {
 }
 
 impl<'g> DFAGenerator<'g> {
-    fn generate(&mut self) -> DFA {
+    fn generate(&mut self) -> DFA<'g> {
         let mut nodes: IndexMap<NodeID, DFANode> = IndexMap::new();
         let mut next_node_id = 0;
         let mut node_id = || {
@@ -153,6 +209,7 @@ impl<'g> DFAGenerator<'g> {
         }
 
         DFA {
+            grammar: self.grammar,
             nodes,
             start_node: start_node_id,
         }

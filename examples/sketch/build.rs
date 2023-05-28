@@ -1,8 +1,8 @@
 use lelele::{
+    codegen::ParserDefinition,
     grammar::{Grammar, GrammarDef},
-    parser::ParserDefinition,
 };
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, io::Write, path::PathBuf};
 
 #[allow(non_snake_case)]
 fn main() {
@@ -18,7 +18,7 @@ fn main() {
         .create(true)
         .open(out_path)
         .unwrap();
-    parser_def.generate(&mut out).unwrap();
+    write!(out, "{}", parser_def).unwrap();
 }
 
 fn grammar_def(def: &mut GrammarDef<'_>) {
