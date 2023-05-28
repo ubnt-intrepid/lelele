@@ -1,93 +1,7 @@
 //! Parser.
 
-use std::{mem,error::Error};
-
-pub trait ParserDefinition {
-    type State: Copy;
-    type Symbol: Copy;
-    type Reduce;
-    type Error: Error + Send + Sync + 'static;
-    fn initial_state(&self) -> Self::State;
-    fn action(
-        &self,
-        current: Self::State,
-        input: Option<Self::Symbol>,
-    ) -> Result<ParserAction<Self::State, Self::Symbol, Self::Reduce>, Self::Error>;
-}
-
-impl<T: ?Sized> ParserDefinition for &T
-where
-    T: ParserDefinition,
-{
-    type State = T::State;
-    type Symbol = T::Symbol;
-    type Reduce = T::Reduce;
-    type Error = T::Error;
-
-    fn initial_state(&self) -> Self::State {
-        (**self).initial_state()
-    }
-
-    fn action(
-        &self,
-        current: Self::State,
-        input: Option<Self::Symbol>,
-    ) -> Result<ParserAction<Self::State, Self::Symbol, Self::Reduce>, Self::Error> {
-        (**self).action(current, input)
-    }
-}
-
-impl<T: ?Sized> ParserDefinition for std::rc::Rc<T>
-where
-    T: ParserDefinition,
-{
-    type State = T::State;
-    type Symbol = T::Symbol;
-    type Reduce = T::Reduce;
-    type Error = T::Error;
-
-    fn initial_state(&self) -> Self::State {
-        (**self).initial_state()
-    }
-
-    fn action(
-        &self,
-        current: Self::State,
-        input: Option<Self::Symbol>,
-    ) -> Result<ParserAction<Self::State, Self::Symbol, Self::Reduce>, Self::Error> {
-        (**self).action(current, input)
-    }
-}
-
-impl<T: ?Sized> ParserDefinition for std::sync::Arc<T>
-where
-    T: ParserDefinition,
-{
-    type State = T::State;
-    type Symbol = T::Symbol;
-    type Reduce = T::Reduce;
-    type Error = T::Error;
-
-    fn initial_state(&self) -> Self::State {
-        (**self).initial_state()
-    }
-
-    fn action(
-        &self,
-        current: Self::State,
-        input: Option<Self::Symbol>,
-    ) -> Result<ParserAction<Self::State, Self::Symbol, Self::Reduce>, Self::Error> {
-        (**self).action(current, input)
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[non_exhaustive]
-pub enum ParserAction<TState, TSymbol, TReduce> {
-    Shift(TState),
-    Reduce(TReduce, TSymbol, usize),
-    Accept,
-}
+use crate::definition::{ParserAction, ParserActionError, ParserDefinition};
+use std::mem;
 
 pub trait Token<TSym> {
     fn as_symbol(&self) -> TSym;
@@ -106,7 +20,6 @@ where
     parser_state: ParserState,
     peeked_token: Option<TTok>,
 }
-
 
 #[derive(Debug)]
 enum ParserState {
@@ -138,7 +51,7 @@ where
         &mut self,
         tokens: &mut I,
         args: &mut Vec<ParseItem<TTok, TDef::Symbol>>,
-    ) -> Result<ParseEvent<TDef>, ParseError<E, TDef::Error>>
+    ) -> Result<ParseEvent<TDef>, ParseError<E>>
     where
         I: Iterator<Item = Result<TTok, E>>,
     {
@@ -228,11 +141,11 @@ where
 pub enum ParseItem<TTok, TSym> {
     T(TTok),
     N(TSym),
-    
+
     #[doc(hidden)]
     __Empty,
 }
-impl<TTok,TSym> ParseItem<TTok, TSym> {
+impl<TTok, TSym> ParseItem<TTok, TSym> {
     pub fn take(&mut self) -> Option<Self> {
         match mem::replace(self, Self::__Empty) {
             Self::__Empty => None,
@@ -251,12 +164,12 @@ where
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ParseError<L, D> {
+pub enum ParseError<L> {
     #[error("from lexer: {}", 0)]
     Lexer(L),
 
     #[error("from parser definition: {}", 0)]
-    ParserDef(D),
+    ParserDef(ParserActionError),
 
     #[error("unexpected EOI")]
     UnexpectedEOI,

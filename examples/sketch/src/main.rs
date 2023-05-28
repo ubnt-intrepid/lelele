@@ -21,13 +21,15 @@ fn main() -> anyhow::Result<()> {
             ParseEvent::Reduce(RuleID::R1) => {
                 // A : E '=' E
                 match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
-                    (Some(StackItem::Expr(rhs)), Some(ParseItem::T(op)), Some(StackItem::Expr(lhs))) => {
-                        ast_stack.push(StackItem::Ast(Ast::Equal {
-                            lhs: Box::new(lhs),
-                            op,
-                            rhs: Box::new(rhs),
-                        }))
-                    }
+                    (
+                        Some(StackItem::Expr(rhs)),
+                        Some(ParseItem::T(op)),
+                        Some(StackItem::Expr(lhs)),
+                    ) => ast_stack.push(StackItem::Ast(Ast::Equal {
+                        lhs: Box::new(lhs),
+                        op,
+                        rhs: Box::new(rhs),
+                    })),
                     _ => anyhow::bail!("unexpected stack item"),
                 }
             }
@@ -42,13 +44,15 @@ fn main() -> anyhow::Result<()> {
             ParseEvent::Reduce(RuleID::R3) => {
                 // E : E '+' T
                 match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
-                    (Some(StackItem::Term(rhs)), Some(ParseItem::T(op)), Some(StackItem::Expr(lhs))) => {
-                        ast_stack.push(StackItem::Expr(Expr::Plus {
-                            lhs: Box::new(lhs),
-                            op,
-                            rhs: Box::new(rhs),
-                        }))
-                    }
+                    (
+                        Some(StackItem::Term(rhs)),
+                        Some(ParseItem::T(op)),
+                        Some(StackItem::Expr(lhs)),
+                    ) => ast_stack.push(StackItem::Expr(Expr::Plus {
+                        lhs: Box::new(lhs),
+                        op,
+                        rhs: Box::new(rhs),
+                    })),
                     _ => anyhow::bail!("unexpected stack item"),
                 }
             }
