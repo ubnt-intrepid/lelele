@@ -3,27 +3,27 @@
 use crate::lexer::Token;
 
 #[derive(Debug)]
-pub enum Ast<'t> {
+pub enum Ast<'source> {
     Equal {
-        lhs: Box<Expr<'t>>,
-        op: Token<'t>,
-        rhs: Box<Expr<'t>>,
+        lhs: Box<Expr<'source>>,
+        op: Token<'source>,
+        rhs: Box<Expr<'source>>,
     },
-    Ident(Token<'t>),
+    Ident(Token<'source>),
 }
 
 #[derive(Debug)]
-pub enum Expr<'t> {
+pub enum Expr<'source> {
     Plus {
-        lhs: Box<Expr<'t>>,
-        op: Token<'t>,
-        rhs: Box<Term<'t>>,
+        lhs: Box<Expr<'source>>,
+        op: Token<'source>,
+        rhs: Box<Term<'source>>,
     },
-    Term(Box<Term<'t>>),
+    Term(Box<Term<'source>>),
 }
 
 #[derive(Debug)]
-pub enum Term<'t> {
-    Num(Token<'t>),
-    Ident(Token<'t>),
+pub enum Term<'source> {
+    Num(Token<'source>),
+    Ident(Token<'source>),
 }

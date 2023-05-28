@@ -1,12 +1,21 @@
 use crate::parser::SymbolID;
+use logos::Logos;
 
 // 入力のトークン列
-#[derive(Debug)]
-pub enum Token<'t> {
+#[derive(Debug, Logos, PartialEq)]
+#[logos(skip r"[ \t\n\f]+")]
+pub enum Token<'source> {
+    #[token("+")]
     Plus,
+
+    #[token("=")]
     Equal,
-    Num(&'static str),
-    Ident(&'t str),
+
+    #[regex(r"[0-9]+")]
+    Num(&'source str),
+
+    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*")]
+    Ident(&'source str),
 }
 
 impl lelele_runtime::parser::Token<SymbolID> for Token<'_> {
@@ -20,14 +29,6 @@ impl lelele_runtime::parser::Token<SymbolID> for Token<'_> {
     }
 }
 
-/// `1 + 2 = a`
-pub fn tokens() -> impl Iterator<Item = anyhow::Result<Token<'static>>> {
-    [
-        Ok(Token::Num("1")),
-        Ok(Token::Plus),
-        Ok(Token::Num("2")),
-        Ok(Token::Equal),
-        Ok(Token::Ident("a")),
-    ]
-    .into_iter()
+pub fn lexer<'source>(input: &'source str) -> impl Iterator<Item = anyhow::Result<Token>> {
+    Token::lexer(input).map(|res| res.map_err(|_| anyhow::anyhow!("lexer error")))
 }

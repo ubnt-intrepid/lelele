@@ -1,9 +1,11 @@
+use anyhow::Context;
 use lelele_example_sketch::{
-    self as me,
+    lexer::lexer,
+    parser::{parser, RuleID},
     syntax::{Ast, Expr, Term},
 };
 use lelele_runtime::parser::{ParseEvent, ParseItem};
-use me::parser::RuleID;
+use std::env;
 
 enum StackItem<'t> {
     Ast(Ast<'t>),
@@ -12,8 +14,9 @@ enum StackItem<'t> {
 }
 
 fn main() -> anyhow::Result<()> {
-    let mut tokens = me::lexer::tokens();
-    let mut parser = me::parser::parser();
+    let input = env::args().nth(1).context("missing input")?;
+    let mut tokens = lexer(&input);
+    let mut parser = parser();
     let mut args = vec![];
     let mut ast_stack = vec![];
     loop {
@@ -87,7 +90,7 @@ fn main() -> anyhow::Result<()> {
                     Some(StackItem::Ast(ast)) => ast,
                     _ => anyhow::bail!("unexpected stack item"),
                 };
-                println!("parsed: {:#?}", ast);
+                println!("parsed: {:?}", ast);
                 break;
             }
             _ => unreachable!(),

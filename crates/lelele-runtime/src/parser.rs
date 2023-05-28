@@ -1,7 +1,7 @@
 //! Parser.
 
 use crate::definition::{ParserAction, ParserActionError, ParserDefinition};
-use std::mem;
+use std::{fmt, mem};
 
 pub trait Token<TSym> {
     fn as_symbol(&self) -> TSym;
@@ -54,6 +54,7 @@ where
     ) -> Result<ParseEvent<TDef>, ParseError<E>>
     where
         I: Iterator<Item = Result<TTok, E>>,
+        E: fmt::Display,
     {
         loop {
             let current = self
@@ -164,11 +165,11 @@ where
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ParseError<L> {
-    #[error("from lexer: {}", 0)]
+pub enum ParseError<L: fmt::Display> {
+    #[error("from lexer: {}", _0)]
     Lexer(L),
 
-    #[error("from parser definition: {}", 0)]
+    #[error("from parser definition: {}", _0)]
     ParserDef(ParserActionError),
 
     #[error("unexpected EOI")]
