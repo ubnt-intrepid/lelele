@@ -309,3 +309,46 @@ impl<'g> GrammarDef<'g> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::ParserDefinition;
+
+    use super::*;
+
+    #[test]
+    fn smoketest() {
+        let mut def = Grammar::definition();
+
+        let lparen = def.token("LPAREN");
+        let rparen = def.token("RPAREN");
+        let plus = def.token("PLUS");
+        let minus = def.token("MINUS");
+        let star = def.token("STAR");
+        let slash = def.token("SLASH");
+        let num = def.token("NUM");
+
+        let expr = def.symbol("EXPR");
+        let factor = def.symbol("FACTOR");
+        let term = def.symbol("TERM");
+
+        def.rule("EXPR_1", expr, [expr, plus, factor]);
+        def.rule("EXPR_2", expr, [expr, minus, factor]);
+        def.rule("EXPR_3", expr, [factor]);
+
+        def.rule("FACTOR_1", factor, [factor, star, term]);
+        def.rule("FACTOR_2", factor, [factor, slash, term]);
+        def.rule("FACTOR_3", factor, [term]);
+
+        def.rule("TERM_1", term, [num]);
+        def.rule("TERM_2", term, [lparen, expr, rparen]);
+
+        def.start(expr);
+
+        let grammar = def.end();
+        eprintln!("{}", grammar);
+
+        let parser_def = ParserDefinition::new(&grammar);
+        eprintln!("{:#?}", parser_def);
+    }
+}

@@ -6,7 +6,7 @@ use crate::{
     dfa::{NodeID, DFA},
     grammar::{Grammar, RuleID, SymbolID},
 };
-use indexmap::{IndexMap, IndexSet};
+use indexmap::{map::Entry, IndexMap, IndexSet};
 use lelele_runtime::definition::{ParserAction, ParserActionError};
 
 #[derive(Debug, Copy, Clone)]
@@ -26,14 +26,16 @@ fn gen_parse_table(
         let mut actions = IndexMap::new();
         // shift, goto
         for (label, target) in &node.edges {
-            actions.insert(
-                *label,
-                if grammar.symbol(*label).is_terminal() {
-                    Action::Shift(*target)
-                } else {
-                    Action::Goto(*target)
-                },
-            );
+            match actions.entry(*label) {
+                Entry::Occupied(..) => panic!("conflict"),
+                Entry::Vacant(entry) => {
+                    if grammar.symbol(*label).is_terminal() {
+                        entry.insert(Action::Shift(*target));
+                    } else {
+                        entry.insert(Action::Goto(*target));
+                    }
+                }
+            }
         }
 
         // reduce, accept
@@ -44,9 +46,19 @@ fn gen_parse_table(
             }
 
             if item.rule_id == RuleID::START {
-                actions.insert(SymbolID::EOI, Action::Accept);
+                match actions.entry(SymbolID::EOI) {
+                    Entry::Occupied(..) => panic!("conflict"),
+                    Entry::Vacant(e) => {
+                        e.insert(Action::Accept);
+                    }
+                }
             } else {
-                actions.insert(item.lookahead, Action::Reduce(item.rule_id));
+                match actions.entry(item.lookahead) {
+                    Entry::Occupied(..) => panic!("conflict"),
+                    Entry::Vacant(e) => {
+                        e.insert(Action::Reduce(item.rule_id));
+                    }
+                }
             }
         }
 

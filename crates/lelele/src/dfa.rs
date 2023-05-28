@@ -129,15 +129,15 @@ impl<'g> DFAGenerator<'g> {
                     self.expand_closures(&mut new_item_set);
 
                     // クロージャ展開後のitem setが同じなら同一のノードとみなし、新規にノードを生成しない
-                    let found = nodes.iter().find(|(_, node)| node.item_set == new_item_set);
-                    if let Some((id, _node)) = found {
-                        edges.insert(symbol, *id);
+                    let found = nodes
+                        .iter()
+                        .map(|(id, node)| (*id, &node.item_set))
+                        .chain(Some((id, &item_set))) // DFANodeが生成されていないが候補には入れる
+                        .find_map(|(id, item_set)| (*item_set == new_item_set).then_some(id));
+                    if let Some(id) = found {
+                        edges.insert(symbol, id);
                         continue;
                     }
-
-                    // MEMO:
-                    // 遷移先のノードに含まれるLR itemは元々のitemのmarkerをひとつずらしたものなので、遷移元のitem setと一致することはない（はず）
-                    debug_assert_ne!(item_set, new_item_set);
 
                     // ノードを新規に作る
                     let id = node_id();
