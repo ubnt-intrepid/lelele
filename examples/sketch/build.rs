@@ -1,10 +1,13 @@
-use lelele::{grammar::Grammar, parser::ParserDefinition};
+use lelele::{
+    grammar::{Grammar, GrammarDef},
+    parser::ParserDefinition,
+};
 use std::{env, fs, path::PathBuf};
 
 #[allow(non_snake_case)]
 fn main() {
     // 文法定義から構文解析表を導出する
-    let grammar = grammar();
+    let grammar = Grammar::define(grammar_def);
     let parser_def = ParserDefinition::new(&grammar);
 
     // 生成された構文解析表をコードに出力
@@ -18,9 +21,7 @@ fn main() {
     parser_def.generate(&mut out).unwrap();
 }
 
-fn grammar() -> Grammar<'static> {
-    let mut def = Grammar::definition();
-
+fn grammar_def(def: &mut GrammarDef<'_>) {
     // declare terminal symbols.
     let lparen = def.token("LPAREN");
     let rparen = def.token("RPAREN");
@@ -35,7 +36,7 @@ fn grammar() -> Grammar<'static> {
     let factor = def.symbol("FACTOR");
     let term = def.symbol("TERM");
 
-    def.start(expr);
+    def.start_symbol(expr);
 
     // declare syntax rules.
 
@@ -52,6 +53,4 @@ fn grammar() -> Grammar<'static> {
     // term : num | '(' expr ')'
     def.rule("TERM_1", term, [num]);
     def.rule("TERM_2", term, [lparen, expr, rparen]);
-
-    def.end()
 }

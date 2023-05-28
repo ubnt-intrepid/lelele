@@ -7,7 +7,6 @@ use crate::{
     grammar::{Grammar, RuleID, SymbolID},
 };
 use indexmap::{map::Entry, IndexMap, IndexSet};
-use lelele_runtime::definition::{ParserAction, ParserActionError};
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Action {
@@ -91,39 +90,6 @@ impl<'g> ParserDefinition<'g> {
         W: io::Write,
     {
         generate_parser(w, &self.grammar, self.start_node, &self.table)
-    }
-}
-
-impl<'g> lelele_runtime::definition::ParserDefinition for ParserDefinition<'g> {
-    type State = NodeID;
-    type Symbol = SymbolID;
-    type Reduce = RuleID;
-
-    fn initial_state(&self) -> Self::State {
-        self.start_node
-    }
-
-    fn action(
-        &self,
-        current: Self::State,
-        input: Option<Self::Symbol>,
-    ) -> Result<ParserAction<Self::State, Self::Symbol, Self::Reduce>, ParserActionError> {
-        let input = input.unwrap_or(SymbolID::EOI);
-        let action = self
-            .table
-            .get(&current)
-            .ok_or_else(|| ParserActionError::IncorrectState)?
-            .get(&input)
-            .ok_or_else(|| ParserActionError::IncorrectSymbol)?;
-        match *action {
-            Action::Shift(n) | Action::Goto(n) => Ok(ParserAction::Shift(n)),
-            Action::Reduce(rule_id) => {
-                let rule = self.grammar.rule(rule_id);
-                let n = rule.rhs.len();
-                Ok(ParserAction::Reduce(rule_id, rule.lhs, n))
-            }
-            Action::Accept => Ok(ParserAction::Accept),
-        }
     }
 }
 

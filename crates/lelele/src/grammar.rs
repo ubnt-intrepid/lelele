@@ -145,14 +145,21 @@ impl fmt::Display for Grammar<'_> {
 }
 
 impl<'g> Grammar<'g> {
-    pub fn definition() -> GrammarDef<'g> {
-        GrammarDef {
+    pub fn define<F>(f: F) -> Self
+    where
+        F: FnOnce(&mut GrammarDef<'g>),
+    {
+        let mut def = GrammarDef {
             symbols: IndexMap::new(),
             rules: IndexMap::new(),
             start: None,
             next_symbol_id: 0,
             next_rule_id: 0,
-        }
+        };
+
+        f(&mut def);
+
+        def.end()
     }
 
     pub fn symbols(&self) -> impl Iterator<Item = (SymbolID, &Symbol<'g>)> + '_ {
@@ -281,11 +288,17 @@ impl<'g> GrammarDef<'g> {
     }
 
     /// Specify the start symbol.
-    pub fn start(&mut self, symbol: SymbolID) {
-        self.start.replace(symbol.into());
+    pub fn start_symbol(&mut self, symbol: SymbolID) {
+        debug_assert!(
+            self.symbols
+                .get(&symbol)
+                .map_or(false, |s| s.kind == SymbolKind::Nonterminal),
+            "the start symbol must be nonterminal"
+        );
+        self.start.replace(symbol);
     }
 
-    pub fn end(mut self) -> Grammar<'g> {
+    fn end(mut self) -> Grammar<'g> {
         // start symbolのID変換
         // 指定されていない場合は最初に登録されたnonterminal symbolを用いる
         let start = match self.start.take() {
@@ -312,40 +325,37 @@ impl<'g> GrammarDef<'g> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::ParserDefinition;
-
     use super::*;
+    use crate::parser::ParserDefinition;
 
     #[test]
     fn smoketest() {
-        let mut def = Grammar::definition();
+        let grammar = Grammar::define(|def| {
+            let lparen = def.token("LPAREN");
+            let rparen = def.token("RPAREN");
+            let plus = def.token("PLUS");
+            let minus = def.token("MINUS");
+            let star = def.token("STAR");
+            let slash = def.token("SLASH");
+            let num = def.token("NUM");
 
-        let lparen = def.token("LPAREN");
-        let rparen = def.token("RPAREN");
-        let plus = def.token("PLUS");
-        let minus = def.token("MINUS");
-        let star = def.token("STAR");
-        let slash = def.token("SLASH");
-        let num = def.token("NUM");
+            let expr = def.symbol("EXPR");
+            let factor = def.symbol("FACTOR");
+            let term = def.symbol("TERM");
 
-        let expr = def.symbol("EXPR");
-        let factor = def.symbol("FACTOR");
-        let term = def.symbol("TERM");
+            def.start_symbol(expr);
 
-        def.rule("EXPR_1", expr, [expr, plus, factor]);
-        def.rule("EXPR_2", expr, [expr, minus, factor]);
-        def.rule("EXPR_3", expr, [factor]);
+            def.rule("EXPR_1", expr, [expr, plus, factor]);
+            def.rule("EXPR_2", expr, [expr, minus, factor]);
+            def.rule("EXPR_3", expr, [factor]);
 
-        def.rule("FACTOR_1", factor, [factor, star, term]);
-        def.rule("FACTOR_2", factor, [factor, slash, term]);
-        def.rule("FACTOR_3", factor, [term]);
+            def.rule("FACTOR_1", factor, [factor, star, term]);
+            def.rule("FACTOR_2", factor, [factor, slash, term]);
+            def.rule("FACTOR_3", factor, [term]);
 
-        def.rule("TERM_1", term, [num]);
-        def.rule("TERM_2", term, [lparen, expr, rparen]);
-
-        def.start(expr);
-
-        let grammar = def.end();
+            def.rule("TERM_1", term, [num]);
+            def.rule("TERM_2", term, [lparen, expr, rparen]);
+        });
         eprintln!("{}", grammar);
 
         let parser_def = ParserDefinition::new(&grammar);
