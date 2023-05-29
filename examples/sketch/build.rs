@@ -4,8 +4,10 @@ use lelele::{
 };
 use std::{env, fs, io::Write, path::PathBuf};
 
-#[allow(non_snake_case)]
 fn main() {
+    // 冗長なコード生成の抑制
+    println!("cargo:rerun-if-changed=build.rs");
+
     // 文法定義から構文解析表を導出する
     let grammar = Grammar::define(grammar_def);
     let parser_def = ParserDefinition::new(&grammar);
