@@ -139,7 +139,7 @@ impl NodeID {\n",
 
         writeln!(
             f,
-            "    const __START: Self = Self {{ __raw: {}_usize }};",
+            "    const __START: Self = Self {{ __raw: {} }};",
             self.node_id_of(&self.start_node)
         )?;
 
@@ -160,7 +160,7 @@ impl SymbolID {\n",
 
         writeln!(
             f,
-            "const __EOI: Self = Self {{ __raw: {}_u64 }};",
+            "const __EOI: Self = Self {{ __raw: {} }};",
             self.symbol_id_of(&SymbolID::EOI),
         )?;
 
@@ -173,7 +173,7 @@ impl SymbolID {\n",
                 f,
                 "\
 /// `{name}`
-pub const {name}: Self = Self {{ __raw: {id}_u64 }};",
+pub const {name}: Self = Self {{ __raw: {id} }};",
                 name = symbol.name(),
                 id = self.symbol_id_of(&id)
             )?;
@@ -212,7 +212,7 @@ impl RuleID {\n",
                 writeln!(f, "    /// `{} : {}`", comment_lhs, comment_rhs,)?;
                 writeln!(
                     f,
-                    "    pub const {symbol_name}_{i}: Self = Self {{ __raw: {id}_u64 }};",
+                    "    pub const {symbol_name}_{i}: Self = Self {{ __raw: {id} }};",
                     symbol_name = self.grammar.symbol(sym).name(),
                     i = i,
                     id = id
@@ -247,14 +247,14 @@ const PARSE_TABLE: &[
                 let action_g = match action {
                     Action::Shift(n) | Action::Goto(n) => {
                         format!(
-                            "lelele::ParserAction::Shift(NodeID {{ __raw: {}_usize }})",
+                            "lelele::ParserAction::Shift(NodeID {{ __raw: {} }})",
                             self.node_id_of(n)
                         )
                     }
                     Action::Reduce(r) => {
                         let rule = self.grammar.rule(*r);
                         format!(
-                        "lelele::ParserAction::Reduce(RuleID {{ __raw: {}_u64 }}, SymbolID {{ __raw: {}_u64 }}, {}_usize)",
+                        "lelele::ParserAction::Reduce(RuleID {{ __raw: {} }}, SymbolID {{ __raw: {} }}, {})",
                         self.rule_id_and_name(r).0,
                         self.symbol_id_of(&rule.lhs),
                         rule.rhs.len()
