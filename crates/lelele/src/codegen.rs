@@ -26,20 +26,16 @@ impl<'g> ParserDefinition<'g> {
 
         // 使用されている NodeID, RuleID, SymbolID を集計し、コード生成用に並び換える
         let node_ids: IndexSet<NodeID> = table.keys().copied().collect();
-        let mut symbol_ids: IndexSet<SymbolID> = IndexSet::new();
-        let mut rule_ids: IndexSet<RuleID> = IndexSet::new();
 
-        // reserved IDs
+        let mut symbol_ids: IndexSet<SymbolID> = IndexSet::new();
         symbol_ids.insert(SymbolID::EOI);
         symbol_ids.insert(SymbolID::START);
-        rule_ids.insert(RuleID::START);
+        symbol_ids.extend(grammar.symbols().map(|(id, _)| id));
 
-        for (symbol, action) in table.values().flatten() {
-            symbol_ids.insert(*symbol);
+        let mut rule_ids: IndexSet<RuleID> = IndexSet::new();
+        rule_ids.insert(RuleID::START);
+        for action in table.values().flat_map(|actions| actions.values()) {
             if let Action::Reduce(r) = action {
-                let rule = grammar.rule(*r);
-                symbol_ids.insert(rule.lhs);
-                symbol_ids.extend(rule.rhs.iter().copied());
                 rule_ids.insert(*r);
             }
         }
@@ -170,6 +166,12 @@ pub struct SymbolID { __raw: u64 }
 impl SymbolID {\n",
         )?;
 
+        writeln!(
+            f,
+            "const __EOI: Self = Self {{ __raw: {}_u64 }};",
+            self.symbol_id_of(&SymbolID::EOI),
+        )?;
+
         for (id, symbol) in self
             .grammar
             .symbols()
@@ -177,19 +179,13 @@ impl SymbolID {\n",
         {
             writeln!(
                 f,
-                "    \
-    /// `{name}`
-    pub const {name}: Self = Self {{ __raw: {id}_u64 }};",
+                "\
+/// `{name}`
+pub const {name}: Self = Self {{ __raw: {id}_u64 }};",
                 name = symbol.name(),
                 id = self.symbol_id_of(&id)
             )?;
         }
-
-        writeln!(
-            f,
-            "    const __EOI: Self = Self {{ __raw: {}_u64 }};",
-            self.symbol_id_of(&SymbolID::EOI)
-        )?;
 
         f.write_str("}\n")?;
 

@@ -32,11 +32,13 @@ fn grammar_def(def: &mut GrammarDef<'_>) {
     let star = def.token("STAR");
     let slash = def.token("SLASH");
     let num = def.token("NUM");
+    let _ = def.token("UNUSED_0");
 
     // declare nonterminal symbols.
     let expr = def.symbol("EXPR");
     let factor = def.symbol("FACTOR");
     let term = def.symbol("TERM");
+    let _ = def.symbol("UNUSED_1");
 
     def.start_symbol(expr);
 
