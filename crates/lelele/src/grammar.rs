@@ -3,18 +3,28 @@
 use indexmap::IndexMap;
 use std::{borrow::Cow, fmt};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct SymbolID {
     raw: u64,
 }
 
 impl SymbolID {
-    pub const EOI: Self = Self::new(u64::MAX);
-    pub const START: Self = Self::new(u64::MAX - 1);
+    /// Reserved symbol used as a terminal symbol that means the end of input.
+    pub(crate) const EOI: Self = Self { raw: u64::MAX };
+    /// Reserved symbol used as a nonterminal symbol to match when the parsing is complete.
+    pub(crate) const ACCEPT: Self = Self { raw: u64::MAX - 1 };
 
+    #[inline]
     const fn new(raw: u64) -> Self {
+        assert!(raw < u64::MAX / 2, "too large SymbolID");
         Self { raw }
+    }
+}
+
+impl fmt::Debug for SymbolID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
     }
 }
 
@@ -22,8 +32,8 @@ impl fmt::Display for SymbolID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             &Self::EOI => write!(f, "$end"),
-            &Self::START => write!(f, "$start"),
-            Self { raw } => fmt::Display::fmt(raw, f),
+            &Self::ACCEPT => write!(f, "$accept"),
+            Self { raw } => write!(f, "SymbolID({})", raw),
         }
     }
 }
@@ -42,14 +52,16 @@ enum SymbolKind {
 
 impl<'g> Symbol<'g> {
     const EOI: Self = Self {
-        name: Cow::Borrowed("$EOI"),
+        name: Cow::Borrowed("$eoi"),
         kind: SymbolKind::Terminal,
     };
-    const START: Self = Self {
-        name: Cow::Borrowed("$START"),
+    const ACCEPT: Self = Self {
+        name: Cow::Borrowed("$accept"),
         kind: SymbolKind::Nonterminal,
     };
+}
 
+impl<'g> Symbol<'g> {
     pub fn name(&self) -> &str {
         &*self.name
     }
@@ -65,57 +77,70 @@ pub struct RuleID {
     raw: u64,
 }
 impl RuleID {
-    pub const START: Self = Self::new(u64::MAX);
+    /// Reserved ID that represents the top-level rule
+    /// `$accept : <start-symbol> $`.
+    pub(crate) const ACCEPT: Self = Self { raw: u64::MAX };
+
+    #[inline]
     const fn new(raw: u64) -> Self {
+        assert!(raw < u64::MAX / 2, "too large RuleID");
         Self { raw }
     }
 }
 impl fmt::Display for RuleID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            &Self::START => write!(f, "START"),
+            &Self::ACCEPT => write!(f, "$accept"),
             Self { raw } => fmt::Display::fmt(raw, f),
         }
     }
 }
 
 #[derive(Debug)]
-pub struct Rule {
-    pub lhs: SymbolID,
-    pub rhs: Vec<SymbolID>,
-}
-impl Rule {
-    pub fn display<'r>(&'r self, grammar: &'r Grammar<'r>) -> impl fmt::Display + 'r {
-        struct RuleDisplay<'r> {
-            rule: &'r Rule,
-            grammar: &'r Grammar<'r>,
-        }
-        impl fmt::Display for RuleDisplay<'_> {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let Self { rule, grammar } = self;
-                write!(f, "{} : ", grammar.symbol(rule.lhs).name)?;
-                for (i, symbol) in rule.rhs.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, " ")?;
-                    }
-                    write!(f, "{}", grammar.symbol(*symbol).name)?;
-                }
-                Ok(())
-            }
-        }
-        RuleDisplay {
-            rule: self,
-            grammar,
-        }
-    }
+pub struct Rule<'g> {
+    grammar: &'g Grammar<'g>,
+    inner: &'g RuleInner,
 }
 
 #[derive(Debug)]
+struct RuleInner {
+    lhs: SymbolID,
+    rhs: Vec<SymbolID>,
+}
+
+impl fmt::Display for Rule<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            grammar,
+            inner: RuleInner { lhs, rhs },
+        } = self;
+        write!(f, "{} : ", grammar.symbol(*lhs).name())?;
+        for (i, symbol) in rhs.iter().enumerate() {
+            if i > 0 {
+                write!(f, " ")?;
+            }
+            write!(f, "{}", grammar.symbol(*symbol).name())?;
+        }
+        Ok(())
+    }
+}
+
+impl Rule<'_> {
+    pub fn lhs(&self) -> SymbolID {
+        self.inner.lhs
+    }
+    pub fn rhs(&self) -> &[SymbolID] {
+        &self.inner.rhs[..]
+    }
+}
+
+/// The grammar definition used to derive the parser tables.
+#[derive(Debug)]
 pub struct Grammar<'g> {
     symbols: IndexMap<SymbolID, Symbol<'g>>,
-    rules: IndexMap<RuleID, Rule>,
+    rules: IndexMap<RuleID, RuleInner>,
     start: SymbolID,
-    start_rule: Rule,
+    start_rule: RuleInner,
 }
 
 impl fmt::Display for Grammar<'_> {
@@ -125,25 +150,26 @@ impl fmt::Display for Grammar<'_> {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            write!(f, "{}", sym.name)?;
+            write!(f, "{}", sym.name())?;
         }
         write!(f, "\nnonterminals: ")?;
         for (i, (_, sym)) in self.nonterminals().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            write!(f, "{}", sym.name)?;
+            write!(f, "{}", sym.name())?;
         }
         write!(f, "\nrules:\n")?;
         for (id, rule) in self.rules() {
-            writeln!(f, "  [{:02}] {}", id, rule.display(self))?;
+            writeln!(f, "  [{:02}] {}", id, rule)?;
         }
-        write!(f, "start: {}", self.symbol(self.start).name)?;
+        write!(f, "start: {}", self.symbol(self.start).name())?;
         Ok(())
     }
 }
 
 impl<'g> Grammar<'g> {
+    /// Define a grammar using the specified function.
     pub fn define<F>(f: F) -> Self
     where
         F: FnOnce(&mut GrammarDef<'g>),
@@ -164,26 +190,24 @@ impl<'g> Grammar<'g> {
     pub fn symbols(&self) -> impl Iterator<Item = (SymbolID, &Symbol<'g>)> + '_ {
         [
             (SymbolID::EOI, &Symbol::EOI),
-            (SymbolID::START, &Symbol::START),
+            (SymbolID::ACCEPT, &Symbol::ACCEPT),
         ]
         .into_iter()
         .chain(self.symbols.iter().map(|(id, sym)| (*id, sym)))
     }
 
     pub fn terminals(&self) -> impl Iterator<Item = (SymbolID, &Symbol<'g>)> + '_ {
-        self.symbols()
-            .filter(|(_id, sym)| sym.kind == SymbolKind::Terminal)
+        self.symbols().filter(|(_id, sym)| sym.is_terminal())
     }
 
     pub fn nonterminals(&self) -> impl Iterator<Item = (SymbolID, &Symbol<'g>)> + '_ {
-        self.symbols()
-            .filter(|(_id, sym)| sym.kind == SymbolKind::Nonterminal)
+        self.symbols().filter(|(_id, sym)| !sym.is_terminal())
     }
 
-    pub fn symbol(&self, id: SymbolID) -> &Symbol<'g> {
+    pub fn symbol(&'g self, id: SymbolID) -> &Symbol<'g> {
         match id {
             SymbolID::EOI => &Symbol::EOI,
-            SymbolID::START => &Symbol::START,
+            SymbolID::ACCEPT => &Symbol::ACCEPT,
             id => &self.symbols[&id],
         }
     }
@@ -194,25 +218,43 @@ impl<'g> Grammar<'g> {
             .find_map(|(id, sym)| (sym.name == name).then_some(*id))
     }
 
-    pub fn rules(&self) -> impl Iterator<Item = (RuleID, &Rule)> + '_ {
-        Some((RuleID::START, &self.start_rule))
-            .into_iter()
-            .chain(self.rules.iter().map(|(id, rule)| (*id, rule)))
+    pub fn rules(&self) -> impl Iterator<Item = (RuleID, Rule<'_>)> + '_ {
+        Some((
+            RuleID::ACCEPT,
+            Rule {
+                grammar: self,
+                inner: &self.start_rule,
+            },
+        ))
+        .into_iter()
+        .chain(self.rules.iter().map(|(id, rule)| {
+            (
+                *id,
+                Rule {
+                    grammar: self,
+                    inner: rule,
+                },
+            )
+        }))
     }
 
-    pub fn rule(&self, id: RuleID) -> &Rule {
-        match id {
-            RuleID::START => &self.start_rule,
+    pub fn rule(&self, id: RuleID) -> Rule<'_> {
+        let inner = match id {
+            RuleID::ACCEPT => &self.start_rule,
             id => &self.rules.get(&id).unwrap(),
+        };
+        Rule {
+            grammar: self,
+            inner,
         }
     }
 }
 
-/// A builder object for `Grammar`.
+/// The contextural values for building a `Grammar`.
 #[derive(Debug)]
 pub struct GrammarDef<'g> {
     symbols: IndexMap<SymbolID, Symbol<'g>>,
-    rules: IndexMap<RuleID, Rule>,
+    rules: IndexMap<RuleID, RuleInner>,
     start: Option<SymbolID>,
     next_symbol_id: u64,
     next_rule_id: u64,
@@ -242,7 +284,7 @@ impl<'g> GrammarDef<'g> {
         }
     }
 
-    fn add_rule(&mut self, rule: Rule) -> RuleID {
+    fn add_rule(&mut self, rule: RuleInner) -> RuleID {
         let id = RuleID::new(self.next_rule_id);
         self.next_rule_id += 1;
         self.rules.insert(id, rule);
@@ -276,7 +318,7 @@ impl<'g> GrammarDef<'g> {
                 .map_or(false, |lhs| lhs.kind == SymbolKind::Nonterminal),
             "lhs must be nonterminal symbol"
         );
-        self.add_rule(Rule {
+        self.add_rule(RuleInner {
             lhs,
             rhs: rhs.into_iter().collect(),
         })
@@ -309,8 +351,8 @@ impl<'g> GrammarDef<'g> {
             symbols: self.symbols,
             rules: self.rules,
             start,
-            start_rule: Rule {
-                lhs: SymbolID::START,
+            start_rule: RuleInner {
+                lhs: SymbolID::ACCEPT,
                 rhs: vec![start],
             },
         }
