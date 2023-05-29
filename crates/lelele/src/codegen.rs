@@ -12,10 +12,11 @@ pub struct ParserDefinition<'g> {
     grammar: &'g Grammar<'g>,
     table: IndexMap<NodeID, IndexMap<SymbolID, Action>>,
     start_node: NodeID,
+
+    // re-ordered identifiers and export names.
     node_ids: IndexSet<NodeID>,
     symbol_ids: IndexSet<SymbolID>,
-    rule_ids: IndexSet<RuleID>,
-    rule_names: IndexMap<SymbolID, Vec<RuleID>>,
+    rule_ids: IndexMap<RuleID, Option<(SymbolID, usize)>>,
 }
 
 impl<'g> ParserDefinition<'g> {
@@ -32,18 +33,25 @@ impl<'g> ParserDefinition<'g> {
         symbol_ids.insert(SymbolID::START);
         symbol_ids.extend(grammar.symbols().map(|(id, _)| id));
 
-        let mut rule_ids: IndexSet<RuleID> = IndexSet::new();
-        rule_ids.insert(RuleID::START);
-        for action in table.values().flat_map(|actions| actions.values()) {
-            if let Action::Reduce(r) = action {
-                rule_ids.insert(*r);
+        // 各 rule は `<LHS_NAME>_<i>` という名称で export される (iはgrammarへの登録順)
+        // reordering と同時にその対応表も作成する
+        let mut rule_ids: IndexMap<RuleID, Option<(SymbolID, usize)>> = IndexMap::new();
+        let mut rule_names: IndexMap<SymbolID, IndexSet<RuleID>> = IndexMap::new();
+        for (rule_id, rule) in grammar.rules() {
+            match rule_id {
+                RuleID::START => {
+                    // identifier としては存在するが export しない
+                    rule_ids.insert(RuleID::START, None);
+                }
+                rule_id => {
+                    let lhs_rules = rule_names.entry(rule.lhs).or_default();
+                    lhs_rules.insert(rule_id);
+                    rule_ids.insert(
+                        rule_id,
+                        Some((rule.lhs, lhs_rules.get_index_of(&rule_id).unwrap())),
+                    );
+                }
             }
-        }
-
-        // RuleIDごとの識別子名をつけるために集計する
-        let mut rule_names: IndexMap<SymbolID, Vec<RuleID>> = IndexMap::new();
-        for (id, rule) in grammar.rules().filter(|(id, _)| *id != RuleID::START) {
-            rule_names.entry(rule.lhs).or_default().push(id);
         }
 
         Self {
@@ -53,7 +61,6 @@ impl<'g> ParserDefinition<'g> {
             node_ids,
             symbol_ids,
             rule_ids,
-            rule_names,
         }
     }
 
@@ -65,24 +72,9 @@ impl<'g> ParserDefinition<'g> {
         self.symbol_ids.get_index_of(s).unwrap()
     }
 
-    fn rule_id_of(&self, r: &RuleID) -> usize {
-        self.rule_ids.get_index_of(r).unwrap()
-    }
-
-    fn rule_name(&self, id: RuleID) -> String {
-        let (sym_id, rules) = self
-            .rule_names
-            .iter()
-            .find(|(_, rules)| rules.contains(&id))
-            .unwrap();
-        let name = self.grammar.symbol(*sym_id).name();
-        match rules.len() {
-            1 => name.into(),
-            _ => {
-                let i = rules.iter().position(|i| *i == id).unwrap();
-                format!("{}_{}", name, i)
-            }
-        }
+    fn rule_id_and_name(&self, id: &RuleID) -> (usize, Option<(SymbolID, usize)>) {
+        let (i, _, v) = self.rule_ids.get_full(id).unwrap();
+        (i, *v)
     }
 
     fn fmt_preamble(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -202,29 +194,30 @@ pub struct RuleID { __raw: u64 }
 impl RuleID {\n",
         )?;
 
-        for (id, rule) in self.grammar.rules().filter(|(id, _)| *id != RuleID::START) {
-            let lhs = self.grammar.symbol(rule.lhs).name();
-            let rhs = rule
-                .rhs
-                .iter()
-                .enumerate()
-                .fold(String::new(), |mut acc, (i, s)| {
-                    if i > 0 {
-                        acc += " ";
-                    }
-                    acc += self.grammar.symbol(*s).name();
-                    acc
-                });
-            writeln!(
-                f,
-                "    \
-    /// `{lhs} : {rhs}`
-    pub const {name}: Self = Self {{ __raw: {id}_u64 }};",
-                lhs = lhs,
-                rhs = rhs,
-                name = self.rule_name(id),
-                id = self.rule_id_of(&id)
-            )?;
+        for (rule_id, rule) in self.grammar.rules().filter(|(id, _)| *id != RuleID::START) {
+            let (id, name) = self.rule_id_and_name(&rule_id);
+            if let Some((sym, i)) = name {
+                let comment_lhs = self.grammar.symbol(rule.lhs).name();
+                let comment_rhs =
+                    rule.rhs
+                        .iter()
+                        .enumerate()
+                        .fold(String::new(), |mut acc, (i, s)| {
+                            if i > 0 {
+                                acc += " ";
+                            }
+                            acc += self.grammar.symbol(*s).name();
+                            acc
+                        });
+                writeln!(f, "    /// `{} : {}`", comment_lhs, comment_rhs,)?;
+                writeln!(
+                    f,
+                    "    pub const {symbol_name}_{i}: Self = Self {{ __raw: {id}_u64 }};",
+                    symbol_name = self.grammar.symbol(sym).name(),
+                    i = i,
+                    id = id
+                )?;
+            }
         }
 
         f.write_str("}\n")?;
@@ -262,7 +255,7 @@ const PARSE_TABLE: &[
                         let rule = self.grammar.rule(*r);
                         format!(
                         "lelele::ParserAction::Reduce(RuleID {{ __raw: {}_u64 }}, SymbolID {{ __raw: {}_u64 }}, {}_usize)",
-                        self.rule_id_of(r),
+                        self.rule_id_and_name(r).0,
                         self.symbol_id_of(&rule.lhs),
                         rule.rhs.len()
                     )
