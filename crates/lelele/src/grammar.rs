@@ -104,18 +104,18 @@ pub struct Rule<'g> {
 
 #[derive(Debug)]
 struct RuleInner {
-    lhs: SymbolID,
-    rhs: Vec<SymbolID>,
+    start: SymbolID,
+    production: Vec<SymbolID>,
 }
 
 impl fmt::Display for Rule<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
             grammar,
-            inner: RuleInner { lhs, rhs },
+            inner: RuleInner { start, production },
         } = self;
-        write!(f, "{} : ", grammar.symbol(*lhs).name())?;
-        for (i, symbol) in rhs.iter().enumerate() {
+        write!(f, "{} : ", grammar.symbol(*start).name())?;
+        for (i, symbol) in production.iter().enumerate() {
             if i > 0 {
                 write!(f, " ")?;
             }
@@ -126,11 +126,12 @@ impl fmt::Display for Rule<'_> {
 }
 
 impl Rule<'_> {
-    pub fn lhs(&self) -> SymbolID {
-        self.inner.lhs
+    pub fn start(&self) -> SymbolID {
+        self.inner.start
     }
-    pub fn rhs(&self) -> &[SymbolID] {
-        &self.inner.rhs[..]
+
+    pub fn production(&self) -> &[SymbolID] {
+        &self.inner.production[..]
     }
 }
 
@@ -291,7 +292,7 @@ impl<'g> GrammarDef<'g> {
         id
     }
 
-    /// Specify the terminal symbol used in this grammar.
+    /// Specify a terminal symbol used in this grammar.
     pub fn token(&mut self, name: impl Into<Cow<'g, str>>) -> SymbolID {
         self.add_symbol(Symbol {
             name: name.into(),
@@ -299,7 +300,7 @@ impl<'g> GrammarDef<'g> {
         })
     }
 
-    /// Specify the nonterminal symbol used in this grammar.
+    /// Specify a nonterminal symbol used in this grammar.
     pub fn symbol(&mut self, name: impl Into<Cow<'g, str>>) -> SymbolID {
         self.add_symbol(Symbol {
             name: name.into(),
@@ -307,20 +308,20 @@ impl<'g> GrammarDef<'g> {
         })
     }
 
-    /// Register a syntax rule into this grammer.
-    pub fn rule<I>(&mut self, lhs: SymbolID, rhs: I) -> RuleID
+    /// Register a production rule into this grammer.
+    pub fn rule<I>(&mut self, start: SymbolID, production: I) -> RuleID
     where
         I: IntoIterator<Item = SymbolID>,
     {
         debug_assert!(
             self.symbols
-                .get(&lhs)
+                .get(&start)
                 .map_or(false, |lhs| lhs.kind == SymbolKind::Nonterminal),
-            "lhs must be nonterminal symbol"
+            "The starting symbol in production rule must be nonterminal"
         );
         self.add_rule(RuleInner {
-            lhs,
-            rhs: rhs.into_iter().collect(),
+            start,
+            production: production.into_iter().collect(),
         })
     }
 
@@ -352,8 +353,8 @@ impl<'g> GrammarDef<'g> {
             rules: self.rules,
             start,
             start_rule: RuleInner {
-                lhs: SymbolID::ACCEPT,
-                rhs: vec![start],
+                start: SymbolID::ACCEPT,
+                production: vec![start],
             },
         }
     }

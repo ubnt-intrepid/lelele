@@ -57,7 +57,7 @@ impl<'g> DFA<'g> {
             // reduce, accept
             for item in &node.item_set {
                 let rule = &self.grammar.rule(item.rule_id);
-                if item.marker < rule.rhs().len() {
+                if item.marker < rule.production().len() {
                     continue;
                 }
 
@@ -232,7 +232,7 @@ impl<'g> DFAGenerator<'g> {
 
                 // [X -> ... @ Y beta]
                 //  Y: one nonterminal symbol
-                let (y_symbol, beta) = match &rule.rhs()[*marker..] {
+                let (y_symbol, beta) = match &rule.production()[*marker..] {
                     [y_symbol, beta @ ..] if !self.grammar.symbol(*y_symbol).is_terminal() => {
                         (*y_symbol, beta)
                     }
@@ -243,7 +243,7 @@ impl<'g> DFAGenerator<'g> {
                 for x in self.calc_first_set(beta, *lookahead) {
                     // Y: ... という形式の構文規則から LR(0) item を生成し追加する
                     for (rule_id, rule) in self.grammar.rules() {
-                        if rule.lhs() == y_symbol {
+                        if rule.start() == y_symbol {
                             added.insert(LRItem {
                                 rule_id,
                                 marker: 0,
@@ -270,12 +270,12 @@ impl<'g> DFAGenerator<'g> {
             let rule = self.grammar.rule(item.rule_id);
 
             // markerが終わりまで到達していれば無視する
-            if item.marker >= rule.rhs().len() {
+            if item.marker >= rule.production().len() {
                 continue;
             }
 
             // edgeのラベルとなるsymbol
-            let label = rule.rhs()[item.marker];
+            let label = rule.production()[item.marker];
 
             //
             item_sets.entry(label).or_default().insert(LRItem {
@@ -305,7 +305,7 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
     // ruleからnullableであることが分かっている場合は追加する
     let mut nulls: IndexSet<SymbolID> = grammar
         .rules()
-        .filter_map(|(_id, rule)| rule.rhs().is_empty().then_some(rule.lhs()))
+        .filter_map(|(_id, rule)| rule.production().is_empty().then_some(rule.start()))
         .collect();
 
     // 値が更新されなくなるまで繰り返す
@@ -313,14 +313,14 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
     while changed {
         changed = false;
         for (_, rule) in grammar.rules() {
-            if nulls.contains(&rule.lhs()) {
+            if nulls.contains(&rule.start()) {
                 continue;
             }
             // 右辺のsymbolsがすべてnullableかどうか
-            let is_rhs_nullable = rule.rhs().iter().all(|t| nulls.contains(t));
+            let is_rhs_nullable = rule.production().iter().all(|t| nulls.contains(t));
             if is_rhs_nullable {
                 changed = true;
-                nulls.insert(rule.lhs());
+                nulls.insert(rule.start());
                 continue;
             }
         }
@@ -361,10 +361,10 @@ fn first_set(
         .rules()
         .flat_map(|(id, rule)| (id != RuleID::ACCEPT).then_some(rule))
     {
-        for symbol in rule.rhs() {
-            if rule.lhs() != *symbol {
+        for symbol in rule.production() {
+            if rule.start() != *symbol {
                 constraints.push(Constraint {
-                    sup: rule.lhs(),
+                    sup: rule.start(),
                     sub: *symbol,
                 });
             }

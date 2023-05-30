@@ -44,11 +44,11 @@ impl<'g> ParserDefinition<'g> {
                     rule_ids.insert(RuleID::ACCEPT, None);
                 }
                 rule_id => {
-                    let lhs_rules = rule_names.entry(rule.lhs()).or_default();
+                    let lhs_rules = rule_names.entry(rule.start()).or_default();
                     lhs_rules.insert(rule_id);
                     rule_ids.insert(
                         rule_id,
-                        Some((rule.lhs(), lhs_rules.get_index_of(&rule_id).unwrap())),
+                        Some((rule.start(), lhs_rules.get_index_of(&rule_id).unwrap())),
                     );
                 }
             }
@@ -197,9 +197,9 @@ impl RuleID {\n",
         for (rule_id, rule) in self.grammar.rules().filter(|(id, _)| *id != RuleID::ACCEPT) {
             let (id, name) = self.rule_id_and_name(&rule_id);
             if let Some((sym, i)) = name {
-                let comment_lhs = self.grammar.symbol(rule.lhs()).name();
+                let comment_lhs = self.grammar.symbol(rule.start()).name();
                 let comment_rhs =
-                    rule.rhs()
+                    rule.production()
                         .iter()
                         .enumerate()
                         .fold(String::new(), |mut acc, (i, s)| {
@@ -256,8 +256,8 @@ const PARSE_TABLE: &[
                         format!(
                         "lelele::ParserAction::Reduce(RuleID {{ __raw: {} }}, SymbolID {{ __raw: {} }}, {})",
                         self.rule_id_and_name(r).0,
-                        self.symbol_id_of(&rule.lhs()),
-                        rule.rhs().len()
+                        self.symbol_id_of(&rule.start()),
+                        rule.production().len()
                     )
                     }
                     Action::Accept => format!("lelele::ParserAction::Accept"),
