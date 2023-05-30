@@ -104,16 +104,15 @@ where
                 }
 
                 ParserAction::Reduce(reduce, lhs, n) => {
-                    args.clear();
-                    for _ in 0..n {
+                    args.resize_with(n, Default::default);
+                    for i in 0..n {
                         self.state_stack.pop();
                         let arg = self
                             .item_stack
                             .pop()
                             .ok_or_else(|| ParseError::EmptyItemStack)?;
-                        args.push(arg);
+                        args[n - i - 1] = arg;
                     }
-                    args.reverse();
 
                     self.item_stack.push(ParseItem::N(lhs));
                     self.parser_state = ParserState::PendingGoto;
@@ -146,6 +145,13 @@ pub enum ParseItem<TTok, TSym> {
     #[doc(hidden)]
     __Empty,
 }
+
+impl<TTok, TSym> Default for ParseItem<TTok, TSym> {
+    fn default() -> Self {
+        Self::__Empty
+    }
+}
+
 impl<TTok, TSym> ParseItem<TTok, TSym> {
     pub fn take(&mut self) -> Option<Self> {
         match mem::replace(self, Self::__Empty) {
