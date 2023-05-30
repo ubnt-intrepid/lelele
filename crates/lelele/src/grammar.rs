@@ -309,9 +309,9 @@ impl<'g> GrammarDef<'g> {
     }
 
     /// Register a production rule into this grammer.
-    pub fn rule<I>(&mut self, start: SymbolID, production: I) -> RuleID
+    pub fn rule<P>(&mut self, start: SymbolID, production: P) -> Vec<RuleID>
     where
-        I: IntoIterator<Item = SymbolID>,
+        P: Production<'g>,
     {
         debug_assert!(
             self.symbols
@@ -319,10 +319,13 @@ impl<'g> GrammarDef<'g> {
                 .map_or(false, |lhs| lhs.kind == SymbolKind::Nonterminal),
             "The starting symbol in production rule must be nonterminal"
         );
-        self.add_rule(RuleInner {
+        let mut ids = vec![];
+        production.add_rules(&mut ProductionContext {
+            def: self,
             start,
-            production: production.into_iter().collect(),
-        })
+            ids: &mut ids,
+        });
+        ids
     }
 
     /// Specify the start symbol.
@@ -360,6 +363,91 @@ impl<'g> GrammarDef<'g> {
     }
 }
 
+///
+pub trait ProductionWord<'g> {
+    fn to_symbol_id(self, def: &mut GrammarDef<'g>) -> SymbolID;
+}
+
+impl ProductionWord<'_> for SymbolID {
+    fn to_symbol_id(self, _def: &mut GrammarDef<'_>) -> SymbolID {
+        self
+    }
+}
+
+#[derive(Debug)]
+pub struct ProductionContext<'g, 'cx> {
+    def: &'cx mut GrammarDef<'g>,
+    start: SymbolID,
+    ids: &'cx mut Vec<RuleID>,
+}
+impl<'g> ProductionContext<'g, '_> {
+    fn add_rule(&mut self, production: Vec<SymbolID>) {
+        let rule = RuleInner {
+            start: self.start,
+            production,
+        };
+        let id = self.def.add_rule(rule);
+        self.ids.push(id);
+    }
+}
+
+pub trait Production<'g> {
+    fn add_rules(self, cx: &mut ProductionContext<'g, '_>);
+}
+
+impl<'g, T> Production<'g> for T
+where
+    T: ProductionWord<'g>,
+{
+    #[inline]
+    fn add_rules(self, cx: &mut ProductionContext<'g, '_>) {
+        (self,).add_rules(cx)
+    }
+}
+
+macro_rules! impl_production_for_tuple {
+    ($($P:ident),*) => {
+        impl<'g, $($P),*> Production<'g> for ($($P,)*)
+        where $( $P: ProductionWord<'g>, )* {
+            #[allow(non_snake_case)]
+            #[inline]
+            fn add_rules(self, cx: &mut ProductionContext<'g, '_>) {
+                let ($($P,)*) = self;
+                let production = vec![$( $P.to_symbol_id(cx.def) ),*];
+                cx.add_rule(production);
+            }
+        }
+    };
+}
+impl_production_for_tuple!(P1);
+impl_production_for_tuple!(P1, P2);
+impl_production_for_tuple!(P1, P2, P3);
+impl_production_for_tuple!(P1, P2, P3, P4);
+impl_production_for_tuple!(P1, P2, P3, P4, P5);
+impl_production_for_tuple!(P1, P2, P3, P4, P5, P6);
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Choice<T>(pub T);
+
+macro_rules! impl_production_for_choice {
+    ($($P:ident),*) => {
+        impl<'g, $($P),*> Production<'g> for Choice<($($P),*)>
+        where $( $P: Production<'g>, )* {
+            #[allow(non_snake_case)]
+            #[inline]
+            fn add_rules(self, cx: &mut ProductionContext<'g, '_>) {
+                let Choice(($($P),*)) = self;
+                $( $P.add_rules(cx); )*
+            }
+        }
+    };
+}
+impl_production_for_choice!(P1, P2);
+impl_production_for_choice!(P1, P2, P3);
+impl_production_for_choice!(P1, P2, P3, P4);
+impl_production_for_choice!(P1, P2, P3, P4, P5);
+impl_production_for_choice!(P1, P2, P3, P4, P5, P6);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -382,16 +470,31 @@ mod tests {
 
             def.start_symbol(expr);
 
-            def.rule(expr, [expr, plus, factor]);
-            def.rule(expr, [expr, minus, factor]);
-            def.rule(expr, [factor]);
+            def.rule(
+                expr,
+                Choice((
+                    (expr, plus, factor),  //
+                    (expr, minus, factor), //
+                    factor,                //
+                )),
+            );
 
-            def.rule(factor, [factor, star, term]);
-            def.rule(factor, [factor, slash, term]);
-            def.rule(factor, [term]);
+            def.rule(
+                factor,
+                Choice((
+                    (factor, star, term),  //
+                    (factor, slash, term), //
+                    term,                  //
+                )),
+            );
 
-            def.rule(term, [num]);
-            def.rule(term, [lparen, expr, rparen]);
+            def.rule(
+                term,
+                Choice((
+                    num,                    //
+                    (lparen, expr, rparen), //
+                )),
+            );
         });
         eprintln!("{}", grammar);
 

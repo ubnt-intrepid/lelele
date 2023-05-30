@@ -1,6 +1,6 @@
 use lelele::{
     codegen::ParserDefinition,
-    grammar::{Grammar, GrammarDef},
+    grammar::{Choice, Grammar, GrammarDef},
 };
 use std::{env, fs, io::Write, path::PathBuf};
 
@@ -10,6 +10,8 @@ fn main() {
 
     // 文法定義から構文解析表を導出する
     let grammar = Grammar::define(grammar_def);
+    eprintln!("Grammar:\n{}", grammar);
+
     let parser_def = ParserDefinition::new(&grammar);
 
     // 生成された構文解析表をコードに出力
@@ -43,18 +45,27 @@ fn grammar_def(def: &mut GrammarDef<'_>) {
     def.start_symbol(expr);
 
     // declare syntax rules.
-
-    // expr : expr '+' factor | expr '-' factor | factor ;
-    def.rule(expr, [expr, plus, factor]);
-    def.rule(expr, [expr, minus, factor]);
-    def.rule(expr, [factor]);
-
-    // factor : factor '*' term | factor '/' term | term ;
-    def.rule(factor, [factor, star, term]);
-    def.rule(factor, [factor, slash, term]);
-    def.rule(factor, [term]);
-
-    // term : num | '(' expr ')'
-    def.rule(term, [num]);
-    def.rule(term, [lparen, expr, rparen]);
+    def.rule(
+        expr,
+        Choice((
+            (expr, plus, factor),  // expr '+' factor
+            (expr, minus, factor), // expr '-' factor
+            factor,                // factor
+        )),
+    );
+    def.rule(
+        factor,
+        Choice((
+            (factor, star, term),  // factor '*' term
+            (factor, slash, term), // factor '/' term
+            term,                  // term
+        )),
+    );
+    def.rule(
+        term,
+        Choice((
+            num,                    // num
+            (lparen, expr, rparen), // '(' expr ')'
+        )),
+    );
 }
