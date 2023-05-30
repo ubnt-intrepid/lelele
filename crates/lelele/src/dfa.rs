@@ -2,7 +2,7 @@
 
 use crate::grammar::{Grammar, RuleID, SymbolID};
 use indexmap::{map::Entry, IndexMap, IndexSet};
-use std::{fmt, mem};
+use std::{collections::VecDeque, fmt};
 
 #[derive(Debug)]
 pub struct DFA<'g> {
@@ -157,7 +157,7 @@ impl<'g> DFAGenerator<'g> {
             id: NodeID,
             item_set: IndexSet<LRItem>,
         }
-        let mut pending_items: Vec<PendingItem> = vec![];
+        let mut pending_items = VecDeque::new();
 
         // 初期ノードの構築
         let start_node_id = node_id();
@@ -169,43 +169,40 @@ impl<'g> DFAGenerator<'g> {
             lookahead: SymbolID::EOI,
         });
         self.expand_closures(&mut item_set);
-        pending_items.push(PendingItem {
+        pending_items.push_back(PendingItem {
             id: start_node_id,
             item_set,
         });
 
         // 新規にノードが生成されなくなるまで繰り返す
-        while !pending_items.is_empty() {
-            // ループ内でpending_itemsに要素を追加するのでdrainは使用しない
-            for PendingItem { id, item_set } in mem::take(&mut pending_items) {
-                let mut edges = IndexMap::new();
+        while let Some(PendingItem { id, item_set }) = pending_items.pop_front() {
+            let mut edges = IndexMap::new();
 
-                // 遷移先のitems setを生成する
-                for (symbol, mut new_item_set) in self.extract_transitions(&item_set) {
-                    self.expand_closures(&mut new_item_set);
+            // 遷移先のitems setを生成する
+            for (symbol, mut new_item_set) in self.extract_transitions(&item_set) {
+                self.expand_closures(&mut new_item_set);
 
-                    // クロージャ展開後のitem setが同じなら同一のノードとみなし、新規にノードを生成しない
-                    let found = nodes
-                        .iter()
-                        .map(|(id, node)| (*id, &node.item_set))
-                        .chain(Some((id, &item_set))) // DFANodeが生成されていないが候補には入れる
-                        .find_map(|(id, item_set)| (*item_set == new_item_set).then_some(id));
-                    if let Some(id) = found {
-                        edges.insert(symbol, id);
-                        continue;
-                    }
-
-                    // ノードを新規に作る
-                    let id = node_id();
-                    pending_items.push(PendingItem {
-                        id,
-                        item_set: new_item_set,
-                    });
+                // クロージャ展開後のitem setが同じなら同一のノードとみなし、新規にノードを生成しない
+                let found = nodes
+                    .iter()
+                    .map(|(id, node)| (*id, &node.item_set))
+                    .chain(Some((id, &item_set))) // DFANodeが生成されていないが候補には入れる
+                    .find_map(|(id, item_set)| (*item_set == new_item_set).then_some(id));
+                if let Some(id) = found {
                     edges.insert(symbol, id);
+                    continue;
                 }
 
-                nodes.insert(id, DFANode { item_set, edges });
+                // ノードを新規に作る
+                let id = node_id();
+                pending_items.push_back(PendingItem {
+                    id,
+                    item_set: new_item_set,
+                });
+                edges.insert(symbol, id);
             }
+
+            nodes.insert(id, DFANode { item_set, edges });
         }
 
         DFA {
