@@ -451,7 +451,7 @@ impl_production_for_choice!(P1, P2, P3, P4, P5, P6);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::codegen::ParserDefinition;
+    use crate::dfa::DFA;
 
     #[test]
     fn smoketest() {
@@ -498,7 +498,7 @@ mod tests {
         });
         eprintln!("{}", grammar);
 
-        let parser_def = ParserDefinition::new(&grammar);
-        eprintln!("{:#?}", parser_def);
+        let dfa = DFA::generate(&grammar);
+        eprintln!("DFA Nodes:\n---\n{}", dfa);
     }
 }

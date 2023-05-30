@@ -85,6 +85,43 @@ impl<'g> DFA<'g> {
     }
 }
 
+impl fmt::Display for DFA<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (id, node) in &self.nodes {
+            writeln!(f, "- id: {:02}", id)?;
+            writeln!(f, "  item_sets:")?;
+            for item in &node.item_set {
+                let LRItem {
+                    rule_id,
+                    marker,
+                    lookahead,
+                } = item;
+                let rule = self.grammar.rule(*rule_id);
+                let start = self.grammar.symbol(rule.start());
+                let lookahead = self.grammar.symbol(*lookahead);
+                write!(f, "  - {} :", start.name())?;
+                for (i, prod) in rule.production().iter().enumerate() {
+                    let prod = self.grammar.symbol(*prod);
+                    if i == *marker {
+                        f.write_str(" @")?;
+                    }
+                    write!(f, " {}", prod.name())?;
+                }
+                if *marker == rule.production().len() {
+                    f.write_str(" @")?;
+                }
+                writeln!(f, " [{}]", lookahead.name())?;
+            }
+            writeln!(f, "  edges:")?;
+            for (label, target) in &node.edges {
+                let label = self.grammar.symbol(*label);
+                writeln!(f, "  - {} -> {:02}", label.name(), target)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Action {
     Shift(NodeID),
