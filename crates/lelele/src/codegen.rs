@@ -23,7 +23,10 @@ impl<'g> ParserDefinition<'g> {
     pub fn new(grammar: &'g Grammar<'g>) -> Self {
         let dfa = DFA::generate(&grammar);
         let start_node = dfa.start_node().0;
-        let table = dfa.parse_table();
+        let table: IndexMap<NodeID, _> = dfa
+            .nodes()
+            .map(|(id, node)| (id, node.parse_actions()))
+            .collect();
 
         // 使用されている NodeID, RuleID, SymbolID を集計し、コード生成用に並び換える
         let node_ids: IndexSet<NodeID> = table.keys().copied().collect();
@@ -245,7 +248,7 @@ const PARSE_TABLE: &[
             actions_g.phf_path("lelele::phf");
             for (symbol, action) in actions {
                 let action_g = match action {
-                    Action::Shift(n) | Action::Goto(n) => {
+                    Action::Shift(n) => {
                         format!(
                             "lelele::ParserAction::Shift(NodeID {{ __raw: {} }})",
                             self.node_id_of(n)

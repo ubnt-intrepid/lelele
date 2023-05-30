@@ -10,7 +10,7 @@ use std::{collections::VecDeque, fmt};
 #[derive(Debug)]
 pub struct DFA<'g> {
     grammar: &'g Grammar<'g>,
-    nodes: IndexMap<NodeID, DFANode>,
+    nodes: IndexMap<NodeID, DFANodeInner>,
     start_node: NodeID,
 }
 
@@ -24,64 +24,34 @@ impl<'g> DFA<'g> {
         .generate()
     }
 
-    pub fn nodes(&self) -> impl Iterator<Item = (NodeID, &DFANode)> + '_ {
-        self.nodes.iter().map(|(id, node)| (*id, node))
+    pub fn nodes(&self) -> impl Iterator<Item = (NodeID, DFANode<'_>)> + '_ {
+        self.nodes.iter().map(|(id, node)| {
+            (
+                *id,
+                DFANode {
+                    inner: node,
+                    grammar: self.grammar,
+                },
+            )
+        })
     }
 
-    pub fn node(&self, id: NodeID) -> &DFANode {
-        &self.nodes[&id]
-    }
-
-    pub fn start_node(&self) -> (NodeID, &DFANode) {
-        let (_, id, node) = self.nodes.get_full(&self.start_node).unwrap();
-        (*id, node)
-    }
-
-    pub(crate) fn parse_table(&self) -> IndexMap<NodeID, IndexMap<SymbolID, Action>> {
-        let mut transition_table: IndexMap<NodeID, IndexMap<SymbolID, Action>> = IndexMap::new();
-        for (id, node) in self.nodes() {
-            let mut actions = IndexMap::new();
-            // shift, goto
-            for (label, target) in &node.edges {
-                match actions.entry(*label) {
-                    Entry::Occupied(..) => panic!("conflict"),
-                    Entry::Vacant(entry) => {
-                        if self.grammar.symbol(*label).is_terminal() {
-                            entry.insert(Action::Shift(*target));
-                        } else {
-                            entry.insert(Action::Goto(*target));
-                        }
-                    }
-                }
-            }
-
-            // reduce, accept
-            for item in &node.item_set {
-                let rule = &self.grammar.rule(item.rule_id);
-                if item.marker < rule.production().len() {
-                    continue;
-                }
-
-                if item.rule_id == RuleID::ACCEPT {
-                    match actions.entry(SymbolID::EOI) {
-                        Entry::Occupied(..) => panic!("conflict"),
-                        Entry::Vacant(e) => {
-                            e.insert(Action::Accept);
-                        }
-                    }
-                } else {
-                    match actions.entry(item.lookahead) {
-                        Entry::Occupied(..) => panic!("conflict"),
-                        Entry::Vacant(e) => {
-                            e.insert(Action::Reduce(item.rule_id));
-                        }
-                    }
-                }
-            }
-
-            transition_table.insert(id, actions);
+    pub fn node(&self, id: NodeID) -> DFANode<'_> {
+        DFANode {
+            inner: &self.nodes[&id],
+            grammar: self.grammar,
         }
-        transition_table
+    }
+
+    pub fn start_node(&self) -> (NodeID, DFANode<'_>) {
+        let (_, id, node) = self.nodes.get_full(&self.start_node).unwrap();
+        (
+            *id,
+            DFANode {
+                inner: node,
+                grammar: self.grammar,
+            },
+        )
     }
 }
 
@@ -122,20 +92,67 @@ impl fmt::Display for DFA<'_> {
     }
 }
 
+#[derive(Debug)]
+pub struct DFANode<'g> {
+    grammar: &'g Grammar<'g>,
+    inner: &'g DFANodeInner,
+}
+
+#[derive(Debug)]
+struct DFANodeInner {
+    // 各DFA nodeに所属するLR item set
+    item_set: IndexSet<LRItem>,
+    // 各DFAノード起点のedge
+    edges: IndexMap<SymbolID, NodeID>,
+}
+
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Action {
     Shift(NodeID),
-    Goto(NodeID),
     Reduce(RuleID),
     Accept,
 }
 
-#[derive(Debug)]
-pub struct DFANode {
-    // 各DFA nodeに所属するLR item set
-    pub item_set: IndexSet<LRItem>,
-    // 各DFAノード起点のedge
-    pub edges: IndexMap<SymbolID, NodeID>,
+impl DFANode<'_> {
+    pub(crate) fn parse_actions(&self) -> IndexMap<SymbolID, Action> {
+        let mut actions = IndexMap::new();
+
+        // shift, goto
+        for (label, target) in &self.inner.edges {
+            match actions.entry(*label) {
+                Entry::Occupied(..) => panic!("conflict"),
+                Entry::Vacant(entry) => {
+                    entry.insert(Action::Shift(*target));
+                }
+            }
+        }
+
+        // reduce, accept
+        for item in &self.inner.item_set {
+            let rule = &self.grammar.rule(item.rule_id);
+            if item.marker < rule.production().len() {
+                continue;
+            }
+
+            if item.rule_id == RuleID::ACCEPT {
+                match actions.entry(SymbolID::EOI) {
+                    Entry::Occupied(..) => panic!("conflict"),
+                    Entry::Vacant(e) => {
+                        e.insert(Action::Accept);
+                    }
+                }
+            } else {
+                match actions.entry(item.lookahead) {
+                    Entry::Occupied(..) => panic!("conflict"),
+                    Entry::Vacant(e) => {
+                        e.insert(Action::Reduce(item.rule_id));
+                    }
+                }
+            }
+        }
+
+        actions
+    }
 }
 
 // LR(1) item
@@ -181,7 +198,7 @@ struct DFAGenerator<'g> {
 
 impl<'g> DFAGenerator<'g> {
     fn generate(&mut self) -> DFA<'g> {
-        let mut nodes: IndexMap<NodeID, DFANode> = IndexMap::new();
+        let mut nodes: IndexMap<NodeID, DFANodeInner> = IndexMap::new();
         let mut next_node_id = 0;
         let mut node_id = || {
             let id = next_node_id;
@@ -239,7 +256,7 @@ impl<'g> DFAGenerator<'g> {
                 edges.insert(symbol, id);
             }
 
-            nodes.insert(id, DFANode { item_set, edges });
+            nodes.insert(id, DFANodeInner { item_set, edges });
         }
 
         DFA {
