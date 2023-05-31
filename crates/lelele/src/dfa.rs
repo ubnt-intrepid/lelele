@@ -4,7 +4,7 @@ use crate::{
     first_sets::FirstSets,
     grammar::{Grammar, RuleID, SymbolID},
 };
-use indexmap::{map::Entry, IndexMap, IndexSet};
+use indexmap::{indexmap, indexset, map::Entry, IndexMap, IndexSet};
 use std::{collections::VecDeque, fmt};
 
 #[derive(Debug)]
@@ -25,45 +25,24 @@ impl<'g> DFA<'g> {
         };
 
         // 初期ノードの構築
-        // [S' -> @ S]
-        let start_node = {
-            let mut item_set = IndexSet::new();
-            item_set.insert(PendingLRItem {
+        // [S' -> @ S] {$eoi}
+        let mut item_set = indexmap! {
+            LRCoreItem {
                 rule_id: RuleID::ACCEPT,
                 marker: 0,
-                lookahead: SymbolID::EOI,
-            });
-            gen.expand_closures(&mut item_set);
-            gen.enqueue_node(item_set)
+            } => indexset! { SymbolID::EOI },
         };
+        gen.expand_closures(&mut item_set);
+        let start_node = gen.enqueue_node(item_set);
 
         // 変化がなくなるまでクロージャ展開とノード追加を繰り返す
         gen.populate_nodes();
 
         // TODO: LALR(1) への変換
 
-        // 同じcoreを持つLR(1)アイテムを集計する
-        let nodes = gen
-            .nodes
-            .into_iter()
-            .map(|(id, (item_set, edges))| {
-                let mut lr_items: IndexMap<LRCoreItem, IndexSet<SymbolID>> = IndexMap::new();
-                for item in item_set {
-                    lr_items
-                        .entry(LRCoreItem {
-                            rule_id: item.rule_id,
-                            marker: item.marker,
-                        })
-                        .or_default()
-                        .insert(item.lookahead);
-                }
-                (id, DFANodeInner { lr_items, edges })
-            })
-            .collect();
-
         Self {
             grammar,
-            nodes,
+            nodes: gen.nodes,
             start_node,
         }
     }
@@ -104,7 +83,7 @@ impl fmt::Display for DFA<'_> {
         for (id, node) in &self.nodes {
             writeln!(f, "- id: {:02}", id)?;
             writeln!(f, "  item_sets:")?;
-            for (core_item, lookaheads) in &node.lr_items {
+            for (core_item, lookaheads) in &node.item_set {
                 let LRCoreItem { rule_id, marker } = core_item;
                 let rule = self.grammar.rule(*rule_id);
                 let start = self.grammar.symbol(rule.start());
@@ -166,9 +145,7 @@ pub struct DFANode<'g> {
 #[derive(Debug)]
 struct DFANodeInner {
     // 各DFA nodeに所属するLR(1) itemの集合
-    //  - key: core item
-    //  - value: 紐付けられた先読み記号 (Eq,Hashを実装できないので別に持つ)
-    lr_items: IndexMap<LRCoreItem, IndexSet<SymbolID>>,
+    item_set: LRItemSet,
     // 各DFAノード起点のedge
     edges: IndexMap<SymbolID, NodeID>,
 }
@@ -182,6 +159,10 @@ struct LRCoreItem {
     // marker位置
     marker: usize,
 }
+
+//  - key: core item
+//  - value: 紐付けられた先読み記号 (Eq,Hashを実装できないので別に持つ)
+type LRItemSet = IndexMap<LRCoreItem, IndexSet<SymbolID>>;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Action {
@@ -205,7 +186,7 @@ impl DFANode<'_> {
         }
 
         // reduce, accept
-        for (core_item, lookaheads) in &self.inner.lr_items {
+        for (core_item, lookaheads) in &self.inner.item_set {
             let rule = &self.grammar.rule(core_item.rule_id);
             if core_item.marker < rule.production().len() {
                 continue;
@@ -236,35 +217,25 @@ impl DFANode<'_> {
 
 // === DFAGenerator ===
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-struct PendingLRItem {
-    // grammer内におけるruleの識別子
-    rule_id: RuleID,
-    // marker位置
-    marker: usize,
-    // 先読み記号
-    lookahead: SymbolID,
-}
-
 #[derive(Debug)]
 struct DFAGenerator<'g> {
     grammar: &'g Grammar<'g>,
     first_sets: FirstSets,
-    nodes: IndexMap<NodeID, (IndexSet<PendingLRItem>, IndexMap<SymbolID, NodeID>)>,
+    nodes: IndexMap<NodeID, DFANodeInner>,
     next_node_id: u64,
-    pending_nodes: VecDeque<(NodeID, IndexSet<PendingLRItem>)>,
+    pending_nodes: VecDeque<(NodeID, LRItemSet)>,
 }
 
 impl<'g> DFAGenerator<'g> {
-    fn enqueue_node(&mut self, item_set: IndexSet<PendingLRItem>) -> NodeID {
+    fn enqueue_node(&mut self, item_set: LRItemSet) -> NodeID {
         let id = NodeID::new(self.next_node_id);
         self.next_node_id += 1;
         self.pending_nodes.push_back((id, item_set));
         id
     }
 
-    fn fixed_nodes(&self) -> impl Iterator<Item = (NodeID, &IndexSet<PendingLRItem>)> {
-        self.nodes.iter().map(|(id, node)| (*id, &node.0))
+    fn fixed_nodes(&self) -> impl Iterator<Item = (NodeID, &LRItemSet)> {
+        self.nodes.iter().map(|(id, node)| (*id, &node.item_set))
     }
 
     fn populate_nodes(&mut self) {
@@ -291,77 +262,83 @@ impl<'g> DFAGenerator<'g> {
                 edges.insert(symbol, id);
             }
 
-            self.nodes.insert(id, (item_set, edges));
+            self.nodes.insert(id, DFANodeInner { item_set, edges });
         }
     }
 
     /// クロージャ展開
-    fn expand_closures(&self, items: &mut IndexSet<PendingLRItem>) {
+    fn expand_closures(&self, items: &mut LRItemSet) {
         let mut changed = true;
         while changed {
             changed = false;
 
-            let mut added = IndexSet::new();
-            for PendingLRItem {
-                rule_id,
-                marker,
-                lookahead,
-            } in &*items
-            {
-                let rule = self.grammar.rule(*rule_id);
+            // 候補の抽出
+            let mut added: IndexMap<LRCoreItem, IndexSet<SymbolID>> = IndexMap::new();
+            for (core, lookaheads) in &mut *items {
+                let rule = self.grammar.rule(core.rule_id);
 
                 // [X -> ... @ Y beta]
                 //  Y: one nonterminal symbol
-                let (y_symbol, beta) = match &rule.production()[*marker..] {
+                let (y_symbol, beta) = match &rule.production()[core.marker..] {
                     [y_symbol, beta @ ..] if !self.grammar.symbol(*y_symbol).is_terminal() => {
                         (*y_symbol, beta)
                     }
                     _ => continue,
                 };
 
-                // x \in First(beta x)
-                for x in self.first_sets.get(beta, *lookahead) {
-                    // Y: ... という形式の構文規則から LR(0) item を生成し追加する
+                // lookaheads = {x1,x2,...,xk} としたとき、
+                //   x \in First(beta x1) \cup ... \cup First(beta xk)
+                // を満たすすべての終端記号を考える
+                for x in lookaheads
+                    .iter()
+                    .flat_map(|l| self.first_sets.get(beta, *l))
+                {
                     for (rule_id, rule) in self.grammar.rules() {
-                        if rule.start() == y_symbol {
-                            added.insert(PendingLRItem {
-                                rule_id,
-                                marker: 0,
-                                lookahead: x,
-                            });
+                        // Y: ... という形式の構文規則のみを対象にする
+                        if rule.start() != y_symbol {
+                            continue;
                         }
+
+                        added
+                            .entry(LRCoreItem { rule_id, marker: 0 })
+                            .or_default()
+                            .insert(x);
                     }
                 }
             }
 
-            for item in added {
-                changed |= items.insert(item);
+            for (core, lookaheads) in added {
+                let slot = items.entry(core).or_insert_with(|| {
+                    changed = true;
+                    IndexSet::new()
+                });
+                for l in lookaheads {
+                    changed |= slot.insert(l);
+                }
             }
         }
     }
 
     /// 指定したLRアイテム集合から遷移先のLRアイテム集合（未展開）とラベルを抽出する
-    fn extract_transitions(
-        &self,
-        items: &IndexSet<PendingLRItem>,
-    ) -> IndexMap<SymbolID, IndexSet<PendingLRItem>> {
-        let mut item_sets: IndexMap<SymbolID, IndexSet<PendingLRItem>> = IndexMap::new();
-        for item in items {
-            let rule = self.grammar.rule(item.rule_id);
+    fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<SymbolID, LRItemSet> {
+        let mut item_sets: IndexMap<SymbolID, LRItemSet> = IndexMap::new();
+        for (core, lookaheads) in items {
+            let rule = self.grammar.rule(core.rule_id);
 
             // markerが終わりまで到達していれば無視する
-            if item.marker >= rule.production().len() {
+            if core.marker >= rule.production().len() {
                 continue;
             }
 
-            // edgeのラベルとなるsymbol
-            let label = rule.production()[item.marker];
-
-            //
-            item_sets.entry(label).or_default().insert(PendingLRItem {
-                marker: item.marker + 1,
-                ..item.clone()
-            });
+            let label = rule.production()[core.marker];
+            let new_item_set = item_sets.entry(label).or_default();
+            new_item_set
+                .entry(LRCoreItem {
+                    marker: core.marker + 1,
+                    ..core.clone()
+                })
+                .or_default()
+                .extend(lookaheads);
         }
         item_sets
     }
