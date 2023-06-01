@@ -456,45 +456,20 @@ mod tests {
     #[test]
     fn smoketest() {
         let grammar = Grammar::define(|def| {
-            let lparen = def.token("LPAREN");
-            let rparen = def.token("RPAREN");
+            let equal = def.token("EQUAL");
             let plus = def.token("PLUS");
-            let minus = def.token("MINUS");
-            let star = def.token("STAR");
-            let slash = def.token("SLASH");
+            let ident = def.token("ID");
             let num = def.token("NUM");
 
-            let expr = def.symbol("EXPR");
-            let factor = def.symbol("FACTOR");
-            let term = def.symbol("TERM");
+            let a = def.symbol("A");
+            let e = def.symbol("E");
+            let t = def.symbol("T");
 
-            def.start_symbol(expr);
+            def.start_symbol(a);
 
-            def.rule(
-                expr,
-                Choice((
-                    (expr, plus, factor),  //
-                    (expr, minus, factor), //
-                    factor,                //
-                )),
-            );
-
-            def.rule(
-                factor,
-                Choice((
-                    (factor, star, term),  //
-                    (factor, slash, term), //
-                    term,                  //
-                )),
-            );
-
-            def.rule(
-                term,
-                Choice((
-                    num,                    //
-                    (lparen, expr, rparen), //
-                )),
-            );
+            def.rule(a, Choice(((e, equal, e), ident)));
+            def.rule(e, Choice(((e, plus, t), t)));
+            def.rule(t, Choice((num, ident)));
         });
         eprintln!("{}", grammar);
 
