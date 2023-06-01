@@ -17,28 +17,34 @@ pub struct DFA<'g> {
 impl<'g> DFA<'g> {
     pub fn generate(grammar: &'g Grammar<'g>) -> Self {
         let mut gen = DFAGenerator {
-            grammar,
-            first_sets: FirstSets::new(grammar),
+            extractor: NodeExtractor {
+                grammar,
+                first_sets: FirstSets::new(grammar),
+            },
+            pending_nodes: PendingNodes::new(),
             nodes: IndexMap::new(),
-            next_node_id: 0,
-            pending_nodes: VecDeque::new(),
+            remapped_nodes: IndexMap::new(),
         };
 
-        // 初期ノードの構築
-        // [S' -> @ S] {$eoi}
-        let mut item_set = indexmap! {
+        // 初期ノード: [S' -> @ S] {$eoi}
+        let start_node = gen.pending_nodes.enqueue(indexmap! {
             LRCoreItem {
                 rule_id: RuleID::ACCEPT,
                 marker: 0,
             } => indexset! { SymbolID::EOI },
-        };
-        gen.expand_closures(&mut item_set);
-        let start_node = gen.enqueue_node(item_set);
+        });
 
         // 変化がなくなるまでクロージャ展開とノード追加を繰り返す
         gen.populate_nodes();
 
-        // TODO: LALR(1) への変換
+        // a
+        for node in gen.nodes.values_mut() {
+            for target in node.edges.values_mut() {
+                if let Some(remapped) = gen.remapped_nodes.get(target) {
+                    *target = *remapped;
+                }
+            }
+        }
 
         Self {
             grammar,
@@ -52,8 +58,8 @@ impl<'g> DFA<'g> {
             (
                 *id,
                 DFANode {
-                    inner: node,
                     grammar: self.grammar,
+                    inner: node,
                 },
             )
         })
@@ -61,29 +67,22 @@ impl<'g> DFA<'g> {
 
     pub fn node(&self, id: NodeID) -> DFANode<'_> {
         DFANode {
-            inner: &self.nodes[&id],
             grammar: self.grammar,
+            inner: &self.nodes[&id],
         }
     }
 
     pub fn start_node(&self) -> (NodeID, DFANode<'_>) {
-        let (_, id, node) = self.nodes.get_full(&self.start_node).unwrap();
-        (
-            *id,
-            DFANode {
-                inner: node,
-                grammar: self.grammar,
-            },
-        )
+        (self.start_node, self.node(self.start_node))
     }
 }
 
 impl fmt::Display for DFA<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (id, node) in &self.nodes {
+        for (id, node) in self.nodes() {
             writeln!(f, "- id: {:02}", id)?;
             writeln!(f, "  item_sets:")?;
-            for (core_item, lookaheads) in &node.item_set {
+            for (core_item, lookaheads) in &node.inner.item_set {
                 let LRCoreItem { rule_id, marker } = core_item;
                 let rule = self.grammar.rule(*rule_id);
                 let start = self.grammar.symbol(rule.start());
@@ -109,7 +108,7 @@ impl fmt::Display for DFA<'_> {
                 writeln!(f, "]")?;
             }
             writeln!(f, "  edges:")?;
-            for (label, target) in &node.edges {
+            for (label, target) in &node.inner.edges {
                 let label = self.grammar.symbol(*label);
                 writeln!(f, "  - {} -> {:02}", label.name(), target)?;
             }
@@ -144,9 +143,7 @@ pub struct DFANode<'g> {
 
 #[derive(Debug)]
 struct DFANodeInner {
-    // 各DFA nodeに所属するLR(1) itemの集合
     item_set: LRItemSet,
-    // 各DFAノード起点のedge
     edges: IndexMap<SymbolID, NodeID>,
 }
 
@@ -218,71 +215,39 @@ impl DFANode<'_> {
 // === DFAGenerator ===
 
 #[derive(Debug)]
-struct DFAGenerator<'g> {
-    grammar: &'g Grammar<'g>,
-    first_sets: FirstSets,
-    nodes: IndexMap<NodeID, DFANodeInner>,
+struct PendingNodes {
     next_node_id: u64,
     pending_nodes: VecDeque<(NodeID, LRItemSet)>,
 }
+impl PendingNodes {
+    fn new() -> Self {
+        Self {
+            next_node_id: 0,
+            pending_nodes: VecDeque::new(),
+        }
+    }
 
-impl<'g> DFAGenerator<'g> {
-    fn enqueue_node(&mut self, item_set: LRItemSet) -> NodeID {
+    /// Push a LR(1) item set into the queue, and obtain registered NodeID.
+    fn enqueue(&mut self, item_set: LRItemSet) -> NodeID {
         let id = NodeID::new(self.next_node_id);
         self.next_node_id += 1;
         self.pending_nodes.push_back((id, item_set));
         id
     }
 
-    fn populate_nodes(&mut self) {
-        // 新規にノードが生成されなくなるまで繰り返す
-        while let Some((id, mut item_set)) = self.pending_nodes.pop_front() {
-            let mut edges = IndexMap::new();
-
-            // 遷移先のitems setを生成する
-            'outer: for (symbol, mut new_item_set) in self.extract_transitions(&item_set) {
-                self.expand_closures(&mut new_item_set);
-
-                let same_nodes = self
-                    .nodes
-                    .iter_mut()
-                    .map(|(id, node)| (*id, &mut node.item_set))
-                    .chain(Some((id, &mut item_set))) // DFANodeが生成されていないが候補には入れる
-                    .filter_map(|(id, item_set)| {
-                        compare_item_sets(item_set, &new_item_set).map(|diff| (id, item_set, diff))
-                    });
-
-                for (id, item_set, diff) in same_nodes {
-                    match diff {
-                        ItemSetDiff::Canonical => {
-                            // クロージャ展開後のitem setが同じなら同一のノードとみなし、新規にノードを生成しない
-                            edges.insert(symbol, id);
-                            continue 'outer;
-                        }
-
-                        ItemSetDiff::LALR => {
-                            // マージ後のノードをクロージャ展開しても変化がないと仮定
-                            // 新規にノードを生成せず、lookaheadsのマージのみを行う
-                            for (new_core, new_lookaheads) in new_item_set {
-                                let lookaheads =
-                                    item_set.entry(new_core).or_insert_with(|| unreachable!());
-                                lookaheads.extend(new_lookaheads);
-                            }
-                            edges.insert(symbol, id); // NodeIDは
-                            continue 'outer;
-                        }
-                    }
-                }
-
-                // マージ候補がなければノードを新規に作る
-                let id = self.enqueue_node(new_item_set);
-                edges.insert(symbol, id);
-            }
-
-            self.nodes.insert(id, DFANodeInner { item_set, edges });
-        }
+    /// Pop a LR(1) item set from the queue.
+    fn dequeue(&mut self) -> Option<(NodeID, LRItemSet)> {
+        self.pending_nodes.pop_front()
     }
+}
 
+#[derive(Debug)]
+struct NodeExtractor<'g> {
+    grammar: &'g Grammar<'g>,
+    first_sets: FirstSets,
+}
+
+impl NodeExtractor<'_> {
     /// クロージャ展開
     fn expand_closures(&self, items: &mut LRItemSet) {
         let mut changed = true;
@@ -358,6 +323,72 @@ impl<'g> DFAGenerator<'g> {
                 .extend(lookaheads);
         }
         item_sets
+    }
+}
+
+#[derive(Debug)]
+struct DFAGenerator<'g> {
+    extractor: NodeExtractor<'g>,
+    pending_nodes: PendingNodes,
+    nodes: IndexMap<NodeID, DFANodeInner>,
+    remapped_nodes: IndexMap<NodeID, NodeID>,
+}
+
+impl<'g> DFAGenerator<'g> {
+    fn populate_nodes(&mut self) {
+        // 新規にノードが生成されなくなるまで繰り返す
+        'outer: while let Some((new_id, mut new_item_set)) = self.pending_nodes.dequeue() {
+            // クロージャ展開
+            self.extractor.expand_closures(&mut new_item_set);
+
+            // 互換性のあるノードを検索する
+            // FIXME: hashを使って O(1) にする
+            let same_nodes = self.nodes.iter_mut().filter_map(|(id, node)| {
+                compare_item_sets(&node.item_set, &new_item_set)
+                    .map(|diff| (*id, &mut node.item_set, diff))
+            });
+            'same_nodes: for (orig_id, orig_item_set, diff) in same_nodes {
+                // 互換性のあるノードが既にある場合、そのノードを修正し新規にノードは生成しない
+                match diff {
+                    ItemSetDiff::Canonical => {
+                        // 完全に一致しているので修正すら不要
+                    }
+                    ItemSetDiff::LALR => {
+                        // lookaheadsをマージする
+                        for (new_core, new_lookaheads) in new_item_set {
+                            let lookaheads = orig_item_set.get_mut(&new_core).unwrap();
+                            for l in new_lookaheads {
+                                lookaheads.insert(l);
+                            }
+                        }
+                    }
+
+                    // LALR が無効化されている場合など
+                    #[allow(unreachable_patterns)]
+                    _ => continue 'same_nodes,
+                }
+
+                // 使用する予定だったNodeIDはenqueueされた時点で遷移前のnodeに登録されているので、
+                // 後で書き換えるためにメモしておく
+                self.remapped_nodes.insert(new_id, orig_id);
+                continue 'outer;
+            }
+
+            // 遷移先のitems setを生成し、ノード生成のキューに登録する
+            let mut edges = IndexMap::new();
+            for (symbol, new_item_set) in self.extractor.extract_transitions(&new_item_set) {
+                let id = self.pending_nodes.enqueue(new_item_set);
+                edges.insert(symbol, id);
+            }
+
+            self.nodes.insert(
+                new_id,
+                DFANodeInner {
+                    item_set: new_item_set,
+                    edges,
+                },
+            );
+        }
     }
 }
 
