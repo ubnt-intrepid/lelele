@@ -337,41 +337,47 @@ struct DFAGenerator<'g> {
 impl<'g> DFAGenerator<'g> {
     fn populate_nodes(&mut self) {
         // 新規にノードが生成されなくなるまで繰り返す
-        'outer: while let Some((new_id, mut new_item_set)) = self.pending_nodes.dequeue() {
+        'dequeue: while let Some((new_id, mut new_item_set)) = self.pending_nodes.dequeue() {
             // クロージャ展開
             self.extractor.expand_closures(&mut new_item_set);
 
             // 互換性のあるノードを検索する
             // FIXME: hashを使って O(1) にする
-            let same_nodes = self.nodes.iter_mut().filter_map(|(id, node)| {
-                compare_item_sets(&node.item_set, &new_item_set)
-                    .map(|diff| (*id, &mut node.item_set, diff))
-            });
-            'same_nodes: for (orig_id, orig_item_set, diff) in same_nodes {
+            for (orig_id, orig_node) in &mut self.nodes {
                 // 互換性のあるノードが既にある場合、そのノードを修正し新規にノードは生成しない
-                match diff {
-                    ItemSetDiff::Canonical => {
+                match compare_item_sets(&orig_node.item_set, &new_item_set) {
+                    Some(ItemSetDiff::Canonical) => {
                         // 完全に一致しているので修正すら不要
                     }
-                    ItemSetDiff::LALR => {
+                    Some(ItemSetDiff::LALR) => {
                         // lookaheadsをマージする
-                        for (new_core, new_lookaheads) in new_item_set {
-                            let lookaheads = orig_item_set.get_mut(&new_core).unwrap();
+                        let mut modified = false;
+                        for (new_core, new_lookaheads) in &new_item_set {
+                            let lookaheads = orig_node.item_set.get_mut(new_core).unwrap();
                             for l in new_lookaheads {
-                                lookaheads.insert(l);
+                                modified |= lookaheads.insert(*l);
+                            }
+                        }
+
+                        // a
+                        if modified {
+                            for (symbol, new_item_set) in
+                                self.extractor.extract_transitions(&new_item_set)
+                            {
+                                let id = self.pending_nodes.enqueue(new_item_set);
+                                orig_node.edges.insert(symbol, id);
                             }
                         }
                     }
 
                     // LALR が無効化されている場合など
-                    #[allow(unreachable_patterns)]
-                    _ => continue 'same_nodes,
+                    _ => continue,
                 }
 
                 // 使用する予定だったNodeIDはenqueueされた時点で遷移前のnodeに登録されているので、
                 // 後で書き換えるためにメモしておく
-                self.remapped_nodes.insert(new_id, orig_id);
-                continue 'outer;
+                self.remapped_nodes.insert(new_id, *orig_id);
+                continue 'dequeue;
             }
 
             // 遷移先のitems setを生成し、ノード生成のキューに登録する
@@ -410,12 +416,94 @@ fn compare_item_sets(left: &LRItemSet, right: &LRItemSet) -> Option<ItemSetDiff>
 
     let mut diff = ItemSetDiff::Canonical;
 
-    for (key, value) in left {
-        let v = right.get(key)?;
-        if value != v {
+    for (key_l, value_l) in left {
+        let value_r = right.get(key_l)?;
+        if value_l != value_r {
             diff = ItemSetDiff::LALR;
         }
     }
 
     Some(diff)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::grammar::Choice;
+
+    #[test]
+    fn smoketest1() {
+        let grammar = Grammar::define(|def| {
+            let equal = def.token("EQUAL");
+            let plus = def.token("PLUS");
+            let ident = def.token("ID");
+            let num = def.token("NUM");
+
+            let a = def.symbol("A");
+            let e = def.symbol("E");
+            let t = def.symbol("T");
+
+            def.start_symbol(a);
+
+            def.rule(a, Choice(((e, equal, e), ident)));
+            def.rule(e, Choice(((e, plus, t), t)));
+            def.rule(t, Choice((num, ident)));
+        });
+        eprintln!("{}", grammar);
+
+        let dfa = DFA::generate(&grammar);
+        eprintln!("DFA Nodes:\n---\n{}", dfa);
+    }
+
+    #[test]
+    fn smoketest2() {
+        let grammar = Grammar::define(|def| {
+            // declare terminal symbols.
+            let lparen = def.token("LPAREN");
+            let rparen = def.token("RPAREN");
+            let plus = def.token("PLUS");
+            let minus = def.token("MINUS");
+            let star = def.token("STAR");
+            let slash = def.token("SLASH");
+            let num = def.token("NUM");
+            let _ = def.token("UNUSED_0");
+
+            // declare nonterminal symbols.
+            let expr = def.symbol("EXPR");
+            let factor = def.symbol("FACTOR");
+            let term = def.symbol("TERM");
+            let _ = def.symbol("UNUSED_1");
+
+            def.start_symbol(expr);
+
+            // declare syntax rules.
+            def.rule(
+                expr,
+                Choice((
+                    (expr, plus, factor),  // expr '+' factor
+                    (expr, minus, factor), // expr '-' factor
+                    factor,                // factor
+                )),
+            );
+            def.rule(
+                factor,
+                Choice((
+                    (factor, star, term),  // factor '*' term
+                    (factor, slash, term), // factor '/' term
+                    term,                  // term
+                )),
+            );
+            def.rule(
+                term,
+                Choice((
+                    num,                    // num
+                    (lparen, expr, rparen), // '(' expr ')'
+                )),
+            );
+        });
+        eprintln!("{}", grammar);
+
+        let dfa = DFA::generate(&grammar);
+        eprintln!("DFA Nodes:\n---\n{}", dfa);
+    }
 }

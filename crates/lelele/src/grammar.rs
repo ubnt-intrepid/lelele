@@ -447,33 +447,3 @@ impl_production_for_choice!(P1, P2, P3);
 impl_production_for_choice!(P1, P2, P3, P4);
 impl_production_for_choice!(P1, P2, P3, P4, P5);
 impl_production_for_choice!(P1, P2, P3, P4, P5, P6);
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::dfa::DFA;
-
-    #[test]
-    fn smoketest() {
-        let grammar = Grammar::define(|def| {
-            let equal = def.token("EQUAL");
-            let plus = def.token("PLUS");
-            let ident = def.token("ID");
-            let num = def.token("NUM");
-
-            let a = def.symbol("A");
-            let e = def.symbol("E");
-            let t = def.symbol("T");
-
-            def.start_symbol(a);
-
-            def.rule(a, Choice(((e, equal, e), ident)));
-            def.rule(e, Choice(((e, plus, t), t)));
-            def.rule(t, Choice((num, ident)));
-        });
-        eprintln!("{}", grammar);
-
-        let dfa = DFA::generate(&grammar);
-        eprintln!("DFA Nodes:\n---\n{}", dfa);
-    }
-}
