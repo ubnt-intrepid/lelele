@@ -234,30 +234,47 @@ impl<'g> DFAGenerator<'g> {
         id
     }
 
-    fn fixed_nodes(&self) -> impl Iterator<Item = (NodeID, &LRItemSet)> {
-        self.nodes.iter().map(|(id, node)| (*id, &node.item_set))
-    }
-
     fn populate_nodes(&mut self) {
         // 新規にノードが生成されなくなるまで繰り返す
-        while let Some((id, item_set)) = self.pending_nodes.pop_front() {
+        while let Some((id, mut item_set)) = self.pending_nodes.pop_front() {
             let mut edges = IndexMap::new();
 
             // 遷移先のitems setを生成する
-            for (symbol, mut new_item_set) in self.extract_transitions(&item_set) {
+            'outer: for (symbol, mut new_item_set) in self.extract_transitions(&item_set) {
                 self.expand_closures(&mut new_item_set);
 
-                // クロージャ展開後のitem setが同じなら同一のノードとみなし、新規にノードを生成しない
-                let found = self
-                    .fixed_nodes()
-                    .chain(Some((id, &item_set))) // DFANodeが生成されていないが候補には入れる
-                    .find(|(_, item_set)| **item_set == new_item_set);
-                if let Some((id, _)) = found {
-                    edges.insert(symbol, id);
-                    continue;
+                let same_nodes = self
+                    .nodes
+                    .iter_mut()
+                    .map(|(id, node)| (*id, &mut node.item_set))
+                    .chain(Some((id, &mut item_set))) // DFANodeが生成されていないが候補には入れる
+                    .filter_map(|(id, item_set)| {
+                        compare_item_sets(item_set, &new_item_set).map(|diff| (id, item_set, diff))
+                    });
+
+                for (id, item_set, diff) in same_nodes {
+                    match diff {
+                        ItemSetDiff::Canonical => {
+                            // クロージャ展開後のitem setが同じなら同一のノードとみなし、新規にノードを生成しない
+                            edges.insert(symbol, id);
+                            continue 'outer;
+                        }
+
+                        ItemSetDiff::LALR => {
+                            // マージ後のノードをクロージャ展開しても変化がないと仮定
+                            // 新規にノードを生成せず、lookaheadsのマージのみを行う
+                            for (new_core, new_lookaheads) in new_item_set {
+                                let lookaheads =
+                                    item_set.entry(new_core).or_insert_with(|| unreachable!());
+                                lookaheads.extend(new_lookaheads);
+                            }
+                            edges.insert(symbol, id); // NodeIDは
+                            continue 'outer;
+                        }
+                    }
                 }
 
-                // ノードを新規に作る
+                // マージ候補がなければノードを新規に作る
                 let id = self.enqueue_node(new_item_set);
                 edges.insert(symbol, id);
             }
@@ -342,4 +359,32 @@ impl<'g> DFAGenerator<'g> {
         }
         item_sets
     }
+}
+
+enum ItemSetDiff {
+    /// Items are equivalent in the sense of of Knuth's canonical LR(1) method,
+    /// that is, each item sets have the same LR(0) cores and their lookahead symbols
+    /// are also equal.
+    Canonical,
+
+    /// Items are compatible in the sense of DeRemer's LALR(1) method, that is,
+    /// each item sets have the same LR(0) cores but different lookahead symbols.
+    LALR,
+}
+
+fn compare_item_sets(left: &LRItemSet, right: &LRItemSet) -> Option<ItemSetDiff> {
+    if left.len() != right.len() {
+        return None;
+    }
+
+    let mut diff = ItemSetDiff::Canonical;
+
+    for (key, value) in left {
+        let v = right.get(key)?;
+        if value != v {
+            diff = ItemSetDiff::LALR;
+        }
+    }
+
+    Some(diff)
 }
