@@ -1,0 +1,13 @@
+[package]
+name = "lelele-runtime-tests"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+anyhow = "1.0.71"
+lelele = { path = "../lelele" }
+lelele-tests = { path = "../lelele-tests" }
+
+[dependencies]
+lelele-runtime = { path = "../lelele-runtime" }

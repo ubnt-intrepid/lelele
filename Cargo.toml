@@ -3,3 +3,7 @@ members = [
     "crates/*",
     "examples/*",
 ]
+
+exclude = [
+    # "crates/lelele-runtime-tests",
+]
