@@ -1,10 +1,9 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use lelele::{
-    dfa::DFA,
+    dfa::Config,
     grammar::{Grammar, GrammarDef},
 };
 use lelele_tests::grammars;
-use std::hint::black_box;
 
 criterion_main!(benches);
 criterion_group!(benches, bench_simple_1, bench_simple_2, bench_min_caml);
@@ -21,14 +20,17 @@ fn bench_simple_2(c: &mut Criterion) {
 }
 
 fn bench_min_caml(c: &mut Criterion) {
-    bench_dfa_gen(c, "min_caml", grammars::min_caml);
+    bench_dfa_gen(c, "MinCaml", grammars::min_caml);
 }
 
-fn bench_dfa_gen(c: &mut Criterion, name: &str, f: impl FnOnce(&mut GrammarDef<'static>)) {
+fn bench_dfa_gen(c: &mut Criterion, group_name: &str, f: impl FnOnce(&mut GrammarDef<'static>)) {
+    let mut group = c.benchmark_group(group_name);
     let grammar = Grammar::define(f);
-    c.bench_function(name, |b| {
-        b.iter(|| {
-            let _dfa = black_box(DFA::generate(&grammar));
-        });
+    group.bench_function("Canonical", |b| {
+        b.iter(|| Config::new(&grammar).use_canonical().generate());
     });
+    group.bench_function("LALR", |b| {
+        b.iter(|| Config::new(&grammar).use_lalr().generate());
+    });
+    group.finish();
 }

@@ -1,5 +1,5 @@
 use lelele::{
-    dfa::DFA,
+    dfa::Config,
     grammar::{Grammar, GrammarDef},
 };
 use lelele_tests::grammars;
@@ -8,8 +8,17 @@ fn smoketest_grammar(f: impl FnOnce(&mut GrammarDef<'static>)) {
     let grammar = Grammar::define(f);
     eprintln!("grammar:\n{}", grammar);
     eprintln!();
-    let dfa = DFA::generate(&grammar);
-    eprintln!("DFA nodes (num={}):\n---\n{}", dfa.nodes().count(), dfa);
+
+    eprintln!("DFA(canonical):");
+    let dfa = Config::new(&grammar).generate();
+    eprintln!("num_nodes: {}", dfa.nodes().count());
+    eprintln!("---\n{}\n", dfa);
+    eprintln!();
+
+    eprintln!("DFA(LALR):");
+    let dfa = Config::new(&grammar).use_lalr().generate();
+    eprintln!("num_nodes: {}", dfa.nodes().count());
+    eprintln!("---\n{}\n", dfa);
 }
 
 #[test]

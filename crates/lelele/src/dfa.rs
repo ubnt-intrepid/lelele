@@ -9,22 +9,39 @@ use indexmap::map::Entry;
 use std::{collections::VecDeque, fmt};
 
 #[derive(Debug)]
-pub struct DFA<'g> {
+pub struct Config<'g> {
     grammar: &'g Grammar<'g>,
-    nodes: IndexMap<NodeID, DFANodeInner>,
-    start_node: NodeID,
+    mode: DFAMode,
 }
 
-impl<'g> DFA<'g> {
-    pub fn generate(grammar: &'g Grammar<'g>) -> Self {
+impl<'g> Config<'g> {
+    pub fn new(grammar: &'g Grammar<'g>) -> Self {
+        Self {
+            grammar,
+            mode: DFAMode::Canonical,
+        }
+    }
+
+    pub fn use_canonical(&mut self) -> &mut Self {
+        self.mode = DFAMode::Canonical;
+        self
+    }
+
+    pub fn use_lalr(&mut self) -> &mut Self {
+        self.mode = DFAMode::LALR;
+        self
+    }
+
+    pub fn generate(&self) -> DFA<'g> {
         let mut gen = DFAGenerator {
             extractor: NodeExtractor {
-                grammar,
-                first_sets: FirstSets::new(grammar),
+                grammar: self.grammar,
+                first_sets: FirstSets::new(self.grammar),
             },
             pending_nodes: PendingNodes::new(),
             nodes: IndexMap::default(),
             remapped_nodes: IndexMap::default(),
+            mode: self.mode,
         };
 
         // 初期ノード: [S' -> @ S] {$eoi}
@@ -53,11 +70,24 @@ impl<'g> DFA<'g> {
             }
         }
 
-        Self {
-            grammar,
+        DFA {
+            grammar: self.grammar,
             nodes: gen.nodes,
             start_node,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct DFA<'g> {
+    grammar: &'g Grammar<'g>,
+    nodes: IndexMap<NodeID, DFANodeInner>,
+    start_node: NodeID,
+}
+
+impl<'g> DFA<'g> {
+    pub fn generate(grammar: &'g Grammar<'g>) -> Self {
+        Config::new(grammar).generate()
     }
 
     pub fn nodes(&self) -> impl Iterator<Item = (NodeID, DFANode<'_>)> + '_ {
@@ -221,6 +251,12 @@ impl DFANode<'_> {
 
 // === DFAGenerator ===
 
+#[derive(Debug, Copy, Clone)]
+enum DFAMode {
+    Canonical,
+    LALR,
+}
+
 #[derive(Debug)]
 struct PendingNodes {
     next_node_id: u64,
@@ -339,6 +375,7 @@ struct DFAGenerator<'g> {
     pending_nodes: PendingNodes,
     nodes: IndexMap<NodeID, DFANodeInner>,
     remapped_nodes: IndexMap<NodeID, NodeID>,
+    mode: DFAMode,
 }
 
 impl<'g> DFAGenerator<'g> {
@@ -356,7 +393,7 @@ impl<'g> DFAGenerator<'g> {
                     Some(ItemSetDiff::Canonical) => {
                         // 完全に一致しているので修正すら不要
                     }
-                    Some(ItemSetDiff::LALR) => {
+                    Some(ItemSetDiff::LALR) if matches!(self.mode, DFAMode::LALR) => {
                         // lookaheadsをマージする
                         let mut modified = false;
                         for (new_core, new_lookaheads) in &new_item_set {
