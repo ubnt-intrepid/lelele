@@ -9,7 +9,7 @@ fn smoketest_grammar(f: impl FnOnce(&mut GrammarDef<'static>)) {
     eprintln!("grammar:\n{}", grammar);
     eprintln!();
     let dfa = DFA::generate(&grammar);
-    eprintln!("DFA nodes:\n---\n{}", dfa);
+    eprintln!("DFA nodes (num={}):\n---\n{}", dfa.nodes().count(), dfa);
 }
 
 #[test]

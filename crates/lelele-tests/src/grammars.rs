@@ -138,7 +138,17 @@ pub fn min_caml(g: &mut GrammarDef<'_>) {
     let greater = g.token("GREATER");
     let less_equal = g.token("LESS_EQUAL");
     let greater_equal = g.token("GREATER_EQUAL");
+    let less_minus = g.token("LESS_MINUS");
     let comma = g.token("COMMA");
+    let semicolon = g.token("SEMICOLON");
+    let t_if = g.token("IF");
+    let t_then = g.token("THEN");
+    let t_else = g.token("ELSE");
+    let t_let = g.token("LET");
+    let t_rec = g.token("REC");
+    let t_in = g.token("IN");
+    let array_make = g.token("ARRAY_MAKE");
+    let dot = g.token("DOT");
 
     let simple_exp = g.symbol("SIMPLE_EXP");
     let app_exp = g.symbol("APP_EXP");
@@ -147,9 +157,15 @@ pub fn min_caml(g: &mut GrammarDef<'_>) {
     let add_exp = g.symbol("ADD_EXP");
     let rel_exp = g.symbol("REL_EXP");
     let tuple_exp = g.symbol("TUPLE_EXP");
+    let put_exp = g.symbol("PUT_EXP");
+    let if_exp = g.symbol("IF_EXP");
+    let let_expr = g.symbol("LET_EXP");
     let exp = g.symbol("EXPR");
+    let formal_args = g.symbol("FORMAL_ARGS");
     let actual_args = g.symbol("ACTUAL_ARGS");
     let tuple_exp_rest = g.symbol("TUPLE_EXP_REST");
+    let fundef = g.symbol("FUNDEF");
+    let pat = g.symbol("PAT");
 
     g.rule(
         simple_exp,
@@ -161,21 +177,17 @@ pub fn min_caml(g: &mut GrammarDef<'_>) {
             integer,
             float,
             ident,
+            (simple_exp, dot, l_paren, exp, r_paren),
         )),
     );
+
     g.rule(
         app_exp,
         Choice((
             simple_exp, //
             (simple_exp, actual_args),
+            (array_make, simple_exp, simple_exp),
             (t_not, app_exp),
-        )),
-    );
-    g.rule(
-        actual_args,
-        Choice((
-            (actual_args, simple_exp), //
-            simple_exp,
         )),
     );
 
@@ -228,6 +240,7 @@ pub fn min_caml(g: &mut GrammarDef<'_>) {
             (rel_exp, comma, tuple_exp_rest),
         )),
     );
+
     g.rule(
         tuple_exp_rest,
         Choice((
@@ -236,7 +249,65 @@ pub fn min_caml(g: &mut GrammarDef<'_>) {
         )),
     );
 
-    g.rule(exp, tuple_exp);
+    g.rule(
+        put_exp,
+        Choice((
+            tuple_exp,
+            (simple_exp, dot, l_paren, exp, r_paren, less_minus, exp),
+        )),
+    );
+
+    g.rule(
+        if_exp,
+        Choice((
+            put_exp, //
+            (t_if, exp, t_then, exp, t_else, exp),
+        )),
+    );
+
+    g.rule(
+        let_expr,
+        Choice((
+            (t_let, ident, equal, exp, t_in, exp), //
+            (t_let, t_rec, fundef, t_in, exp),
+            (t_let, l_paren, pat, r_paren, equal, exp, t_in, exp),
+        )),
+    );
+
+    g.rule(fundef, (ident, formal_args, equal, exp));
+
+    g.rule(
+        formal_args,
+        Choice((
+            (ident, formal_args), //
+            ident,
+        )),
+    );
+
+    g.rule(
+        actual_args,
+        Choice((
+            (actual_args, simple_exp), //
+            simple_exp,
+        )),
+    );
+
+    g.rule(
+        pat,
+        Choice((
+            (pat, comma, ident), //
+            (ident, comma, ident),
+        )),
+    );
+
+    g.rule(
+        exp,
+        Choice((
+            if_exp, //
+            (if_exp, semicolon, exp),
+            let_expr,
+        )),
+    );
 
     g.start_symbol(exp);
 }
