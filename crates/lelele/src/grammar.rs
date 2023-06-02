@@ -425,6 +425,10 @@ impl_production_for_tuple!(P1, P2, P3);
 impl_production_for_tuple!(P1, P2, P3, P4);
 impl_production_for_tuple!(P1, P2, P3, P4, P5);
 impl_production_for_tuple!(P1, P2, P3, P4, P5, P6);
+impl_production_for_tuple!(P1, P2, P3, P4, P5, P6, P7);
+impl_production_for_tuple!(P1, P2, P3, P4, P5, P6, P7, P8);
+impl_production_for_tuple!(P1, P2, P3, P4, P5, P6, P7, P8, P9);
+impl_production_for_tuple!(P1, P2, P3, P4, P5, P6, P7, P8, P9, P10);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Choice<T>(pub T);
@@ -447,3 +451,7 @@ impl_production_for_choice!(P1, P2, P3);
 impl_production_for_choice!(P1, P2, P3, P4);
 impl_production_for_choice!(P1, P2, P3, P4, P5);
 impl_production_for_choice!(P1, P2, P3, P4, P5, P6);
+impl_production_for_choice!(P1, P2, P3, P4, P5, P6, P7);
+impl_production_for_choice!(P1, P2, P3, P4, P5, P6, P7, P8);
+impl_production_for_choice!(P1, P2, P3, P4, P5, P6, P7, P8, P9);
+impl_production_for_choice!(P1, P2, P3, P4, P5, P6, P7, P8, P9, P10);
