@@ -3,8 +3,8 @@
 use crate::{
     dfa::{Action, NodeID, DFA},
     grammar::{Grammar, RuleID, SymbolID},
+    IndexMap, IndexSet,
 };
-use indexmap::{IndexMap, IndexSet};
 use std::fmt;
 
 #[derive(Debug)]
@@ -31,15 +31,15 @@ impl<'g> ParserDefinition<'g> {
         // 使用されている NodeID, RuleID, SymbolID を集計し、コード生成用に並び換える
         let node_ids: IndexSet<NodeID> = table.keys().copied().collect();
 
-        let mut symbol_ids: IndexSet<SymbolID> = IndexSet::new();
+        let mut symbol_ids: IndexSet<SymbolID> = IndexSet::default();
         symbol_ids.insert(SymbolID::EOI);
         symbol_ids.insert(SymbolID::ACCEPT);
         symbol_ids.extend(grammar.symbols().map(|(id, _)| id));
 
         // 各 rule は `<LHS_NAME>_<i>` という名称で export される (iはgrammarへの登録順)
         // reordering と同時にその対応表も作成する
-        let mut rule_ids: IndexMap<RuleID, Option<(SymbolID, usize)>> = IndexMap::new();
-        let mut rule_names: IndexMap<SymbolID, IndexSet<RuleID>> = IndexMap::new();
+        let mut rule_ids: IndexMap<RuleID, Option<(SymbolID, usize)>> = IndexMap::default();
+        let mut rule_names: IndexMap<SymbolID, IndexSet<RuleID>> = IndexMap::default();
         for (rule_id, rule) in grammar.rules() {
             match rule_id {
                 RuleID::ACCEPT => {

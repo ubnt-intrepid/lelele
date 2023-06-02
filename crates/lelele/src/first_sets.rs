@@ -1,7 +1,7 @@
 //! Calculation of first set function.
 
 use crate::grammar::{Grammar, RuleID, SymbolID};
-use indexmap::{IndexMap, IndexSet};
+use crate::{IndexMap, IndexSet};
 
 #[derive(Debug)]
 pub struct FirstSets {
@@ -18,7 +18,7 @@ impl FirstSets {
 
     /// `First(prefix x)`
     pub fn get(&self, prefix: &[SymbolID], x: SymbolID) -> IndexSet<SymbolID> {
-        let mut res = IndexSet::new();
+        let mut res = IndexSet::default();
         for token in prefix.iter().chain(Some(&x)) {
             let added = self.first_sets.get(token).expect("unexpected token");
             res.extend(added.iter().copied());
@@ -64,7 +64,7 @@ fn first_set(
     grammar: &Grammar,
     nulls: &IndexSet<SymbolID>,
 ) -> IndexMap<SymbolID, IndexSet<SymbolID>> {
-    let mut map: IndexMap<SymbolID, IndexSet<SymbolID>> = IndexMap::new();
+    let mut map: IndexMap<SymbolID, IndexSet<SymbolID>> = IndexMap::default();
 
     // terminal symbols については First(T) = {T} になる
     for (id, _) in grammar.terminals() {
@@ -73,7 +73,7 @@ fn first_set(
 
     // nonterminal symbols は First(T) = {} と初期化する
     for (id, _) in grammar.nonterminals() {
-        map.insert(id, IndexSet::new());
+        map.insert(id, IndexSet::default());
     }
 
     // 制約条件の抽出

@@ -4,3 +4,8 @@ pub mod codegen;
 pub mod dfa;
 pub mod first_sets;
 pub mod grammar;
+
+// type shortcut
+type BuildFxHasher = std::hash::BuildHasherDefault<rustc_hash::FxHasher>;
+type IndexMap<K, V> = indexmap::IndexMap<K, V, BuildFxHasher>;
+type IndexSet<T> = indexmap::IndexSet<T, BuildFxHasher>;

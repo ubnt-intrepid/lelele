@@ -1,6 +1,6 @@
 //! Grammar types.
 
-use indexmap::IndexMap;
+use crate::IndexMap;
 use std::{borrow::Cow, fmt};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -176,8 +176,8 @@ impl<'g> Grammar<'g> {
         F: FnOnce(&mut GrammarDef<'g>),
     {
         let mut def = GrammarDef {
-            symbols: IndexMap::new(),
-            rules: IndexMap::new(),
+            symbols: IndexMap::default(),
+            rules: IndexMap::default(),
             start: None,
             next_symbol_id: 0,
             next_rule_id: 0,

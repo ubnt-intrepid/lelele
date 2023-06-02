@@ -3,8 +3,9 @@
 use crate::{
     first_sets::FirstSets,
     grammar::{Grammar, RuleID, SymbolID},
+    IndexMap, IndexSet,
 };
-use indexmap::{indexmap, indexset, map::Entry, IndexMap, IndexSet};
+use indexmap::map::Entry;
 use std::{collections::VecDeque, fmt};
 
 #[derive(Debug)]
@@ -22,16 +23,22 @@ impl<'g> DFA<'g> {
                 first_sets: FirstSets::new(grammar),
             },
             pending_nodes: PendingNodes::new(),
-            nodes: IndexMap::new(),
-            remapped_nodes: IndexMap::new(),
+            nodes: IndexMap::default(),
+            remapped_nodes: IndexMap::default(),
         };
 
         // 初期ノード: [S' -> @ S] {$eoi}
-        let start_node = gen.pending_nodes.enqueue(indexmap! {
-            LRCoreItem {
-                rule_id: RuleID::ACCEPT,
-                marker: 0,
-            } => indexset! { SymbolID::EOI },
+        let start_node = gen.pending_nodes.enqueue({
+            let mut map = IndexMap::default();
+            let lookaheads: IndexSet<_> = Some(SymbolID::EOI).into_iter().collect();
+            map.insert(
+                LRCoreItem {
+                    rule_id: RuleID::ACCEPT,
+                    marker: 0,
+                },
+                lookaheads,
+            );
+            map
         });
 
         // 変化がなくなるまでクロージャ展開とノード追加を繰り返す
@@ -170,7 +177,7 @@ pub(crate) enum Action {
 
 impl DFANode<'_> {
     pub(crate) fn parse_actions(&self) -> IndexMap<SymbolID, Action> {
-        let mut actions = IndexMap::new();
+        let mut actions = IndexMap::default();
 
         // shift, goto
         for (label, target) in &self.inner.edges {
@@ -255,7 +262,7 @@ impl NodeExtractor<'_> {
             changed = false;
 
             // 候補の抽出
-            let mut added: IndexMap<LRCoreItem, IndexSet<SymbolID>> = IndexMap::new();
+            let mut added: IndexMap<LRCoreItem, IndexSet<SymbolID>> = IndexMap::default();
             for (core, lookaheads) in &mut *items {
                 let rule = self.grammar.rule(core.rule_id);
 
@@ -292,7 +299,7 @@ impl NodeExtractor<'_> {
             for (core, lookaheads) in added {
                 let slot = items.entry(core).or_insert_with(|| {
                     changed = true;
-                    IndexSet::new()
+                    IndexSet::default()
                 });
                 for l in lookaheads {
                     changed |= slot.insert(l);
@@ -303,7 +310,7 @@ impl NodeExtractor<'_> {
 
     /// 指定したLRアイテム集合から遷移先のLRアイテム集合（未展開）とラベルを抽出する
     fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<SymbolID, LRItemSet> {
-        let mut item_sets: IndexMap<SymbolID, LRItemSet> = IndexMap::new();
+        let mut item_sets: IndexMap<SymbolID, LRItemSet> = IndexMap::default();
         for (core, lookaheads) in items {
             let rule = self.grammar.rule(core.rule_id);
 
@@ -381,7 +388,7 @@ impl<'g> DFAGenerator<'g> {
             }
 
             // 遷移先のitems setを生成し、ノード生成のキューに登録する
-            let mut edges = IndexMap::new();
+            let mut edges = IndexMap::default();
             for (symbol, new_item_set) in self.extractor.extract_transitions(&new_item_set) {
                 let id = self.pending_nodes.enqueue(new_item_set);
                 edges.insert(symbol, id);
