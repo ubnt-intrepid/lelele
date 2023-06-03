@@ -38,35 +38,22 @@ impl Config {
             },
             pending_nodes: PendingNodes::new(),
             nodes: IndexMap::default(),
-            remapped_nodes: IndexMap::default(),
             mode: self.mode,
         };
 
         // 初期ノード: [S' -> @ S] {$eoi}
-        let start_node = gen.pending_nodes.enqueue({
-            let mut map = IndexMap::default();
-            let lookaheads: IndexSet<_> = Some(SymbolID::EOI).into_iter().collect();
-            map.insert(
-                LRCoreItem {
-                    rule_id: RuleID::ACCEPT,
-                    marker: 0,
-                },
-                lookaheads,
-            );
-            map
-        });
+        let mut item_set = IndexMap::default();
+        item_set.insert(
+            LRCoreItem {
+                rule_id: RuleID::ACCEPT,
+                marker: 0,
+            },
+            Some(SymbolID::EOI).into_iter().collect(),
+        );
+        let start_node = gen.pending_nodes.enqueue(item_set, None);
 
         // 変化がなくなるまでクロージャ展開とノード追加を繰り返す
         gen.populate_nodes();
-
-        // a
-        for node in gen.nodes.values_mut() {
-            for target in node.edges.values_mut() {
-                if let Some(remapped) = gen.remapped_nodes.get(target) {
-                    *target = *remapped;
-                }
-            }
-        }
 
         DFA {
             grammar,
@@ -258,7 +245,7 @@ enum DFAMode {
 #[derive(Debug)]
 struct PendingNodes {
     next_node_id: u64,
-    pending_nodes: VecDeque<(NodeID, LRItemSet)>,
+    pending_nodes: VecDeque<(NodeID, LRItemSet, Option<NodeID>)>,
 }
 impl PendingNodes {
     fn new() -> Self {
@@ -269,15 +256,15 @@ impl PendingNodes {
     }
 
     /// Push a LR(1) item set into the queue, and obtain registered NodeID.
-    fn enqueue(&mut self, item_set: LRItemSet) -> NodeID {
+    fn enqueue(&mut self, item_set: LRItemSet, prev_node: Option<NodeID>) -> NodeID {
         let id = NodeID::new(self.next_node_id);
         self.next_node_id += 1;
-        self.pending_nodes.push_back((id, item_set));
+        self.pending_nodes.push_back((id, item_set, prev_node));
         id
     }
 
     /// Pop a LR(1) item set from the queue.
-    fn dequeue(&mut self) -> Option<(NodeID, LRItemSet)> {
+    fn dequeue(&mut self) -> Option<(NodeID, LRItemSet, Option<NodeID>)> {
         self.pending_nodes.pop_front()
     }
 }
@@ -372,20 +359,21 @@ struct DFAGenerator<'g> {
     extractor: NodeExtractor<'g>,
     pending_nodes: PendingNodes,
     nodes: IndexMap<NodeID, DFANodeInner>,
-    remapped_nodes: IndexMap<NodeID, NodeID>,
     mode: DFAMode,
 }
 
 impl<'g> DFAGenerator<'g> {
     fn populate_nodes(&mut self) {
         // 新規にノードが生成されなくなるまで繰り返す
-        'dequeue: while let Some((new_id, mut new_item_set)) = self.pending_nodes.dequeue() {
+        'dequeue: while let Some((new_id, mut new_item_set, prev_node)) =
+            self.pending_nodes.dequeue()
+        {
             // クロージャ展開
             self.extractor.expand_closures(&mut new_item_set);
 
             // 互換性のあるノードを検索する
             // FIXME: hashを使って O(1) にする
-            for (orig_id, orig_node) in &mut self.nodes {
+            for (&orig_id, orig_node) in &mut self.nodes {
                 // 互換性のあるノードが既にある場合、そのノードを修正し新規にノードは生成しない
                 match compare_item_sets(&orig_node.item_set, &new_item_set) {
                     Some(ItemSetDiff::Canonical) => {
@@ -406,7 +394,7 @@ impl<'g> DFAGenerator<'g> {
                             for (symbol, new_item_set) in
                                 self.extractor.extract_transitions(&new_item_set)
                             {
-                                let id = self.pending_nodes.enqueue(new_item_set);
+                                let id = self.pending_nodes.enqueue(new_item_set, Some(orig_id));
                                 orig_node.edges.insert(symbol, id);
                             }
                         }
@@ -416,16 +404,23 @@ impl<'g> DFAGenerator<'g> {
                     _ => continue,
                 }
 
-                // 使用する予定だったNodeIDはenqueueされた時点で遷移前のnodeに登録されているので、
-                // 後で書き換えるためにメモしておく
-                self.remapped_nodes.insert(new_id, *orig_id);
+                // 使用する予定だったNodeIDはenqueueされた時点で遷移前のnodeに登録されているので書き換える
+                if let Some(prev_node_id) = prev_node {
+                    let prev_node = &mut self.nodes[&prev_node_id];
+                    for edge in prev_node.edges.values_mut() {
+                        if *edge == new_id {
+                            *edge = orig_id;
+                        }
+                    }
+                }
+
                 continue 'dequeue;
             }
 
             // 遷移先のitems setを生成し、ノード生成のキューに登録する
             let mut edges = IndexMap::default();
             for (symbol, new_item_set) in self.extractor.extract_transitions(&new_item_set) {
-                let id = self.pending_nodes.enqueue(new_item_set);
+                let id = self.pending_nodes.enqueue(new_item_set, Some(new_id));
                 edges.insert(symbol, id);
             }
 
