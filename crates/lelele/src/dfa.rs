@@ -50,7 +50,9 @@ impl Config {
             },
             Some(SymbolID::EOI).into_iter().collect(),
         );
-        let start_node = gen.pending_nodes.enqueue(item_set, None);
+        gen.pending_nodes
+            .queue
+            .push_back((NodeID::START, item_set, None));
 
         // 変化がなくなるまでクロージャ展開とノード追加を繰り返す
         gen.populate_nodes();
@@ -58,7 +60,6 @@ impl Config {
         DFA {
             grammar,
             nodes: gen.nodes,
-            start_node,
         }
     }
 }
@@ -67,7 +68,6 @@ impl Config {
 pub struct DFA<'g> {
     grammar: &'g Grammar,
     nodes: IndexMap<NodeID, DFANodeInner>,
-    start_node: NodeID,
 }
 
 impl<'g> DFA<'g> {
@@ -92,10 +92,6 @@ impl<'g> DFA<'g> {
             grammar: self.grammar,
             inner: &self.nodes[&id],
         }
-    }
-
-    pub fn start_node(&self) -> (NodeID, DFANode<'_>) {
-        (self.start_node, self.node(self.start_node))
     }
 }
 
@@ -146,7 +142,10 @@ pub struct NodeID {
 }
 
 impl NodeID {
+    pub(crate) const START: Self = Self { raw: u64::MAX };
+
     const fn new(raw: u64) -> Self {
+        assert!(raw <= u64::MAX / 2, "too big node id");
         Self { raw }
     }
 }
@@ -245,13 +244,13 @@ enum DFAMode {
 #[derive(Debug)]
 struct PendingNodes {
     next_node_id: u64,
-    pending_nodes: VecDeque<(NodeID, LRItemSet, Option<NodeID>)>,
+    queue: VecDeque<(NodeID, LRItemSet, Option<NodeID>)>,
 }
 impl PendingNodes {
     fn new() -> Self {
         Self {
             next_node_id: 0,
-            pending_nodes: VecDeque::new(),
+            queue: VecDeque::new(),
         }
     }
 
@@ -259,13 +258,13 @@ impl PendingNodes {
     fn enqueue(&mut self, item_set: LRItemSet, prev_node: Option<NodeID>) -> NodeID {
         let id = NodeID::new(self.next_node_id);
         self.next_node_id += 1;
-        self.pending_nodes.push_back((id, item_set, prev_node));
+        self.queue.push_back((id, item_set, prev_node));
         id
     }
 
     /// Pop a LR(1) item set from the queue.
     fn dequeue(&mut self) -> Option<(NodeID, LRItemSet, Option<NodeID>)> {
-        self.pending_nodes.pop_front()
+        self.queue.pop_front()
     }
 }
 

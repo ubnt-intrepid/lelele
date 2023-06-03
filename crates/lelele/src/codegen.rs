@@ -11,7 +11,6 @@ use std::fmt;
 pub struct ParserDefinition<'g> {
     grammar: &'g Grammar,
     table: IndexMap<NodeID, IndexMap<SymbolID, Action>>,
-    start_node: NodeID,
 
     // re-ordered identifiers and export names.
     node_ids: IndexSet<NodeID>,
@@ -21,7 +20,6 @@ pub struct ParserDefinition<'g> {
 
 impl<'g> ParserDefinition<'g> {
     pub fn new(grammar: &'g Grammar, dfa: &'g DFA<'g>) -> Self {
-        let start_node = dfa.start_node().0;
         let table: IndexMap<NodeID, _> = dfa
             .nodes()
             .map(|(id, node)| (id, node.parse_actions()))
@@ -58,7 +56,6 @@ impl<'g> ParserDefinition<'g> {
 
         Self {
             grammar,
-            start_node,
             table,
             node_ids,
             symbol_ids,
@@ -142,7 +139,7 @@ impl NodeID {\n",
         writeln!(
             f,
             "    const __START: Self = Self {{ __raw: {} }};",
-            self.node_id_of(&self.start_node)
+            self.node_id_of(&NodeID::START)
         )?;
 
         f.write_str("}\n")?;
