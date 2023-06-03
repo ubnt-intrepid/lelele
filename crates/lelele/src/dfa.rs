@@ -7,7 +7,7 @@ use crate::{
 };
 use indexmap::map::Entry;
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     fmt,
 };
 
@@ -52,6 +52,7 @@ impl Config {
             },
             pending_nodes: PendingNodes::new(),
             nodes: IndexMap::default(),
+            same_cores: IndexMap::default(),
             mode: self.merge_mode,
         };
 
@@ -184,7 +185,7 @@ struct DFANodeInner {
 
 // LR(1) item
 // X: Y1 Y2 ... Yn という構文規則があったとき、それにマーカ位置を付与したもの
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 struct LRCoreItem {
     // grammer内におけるruleの識別子
     rule_id: RuleID,
@@ -195,6 +196,7 @@ struct LRCoreItem {
 //  - key: core item
 //  - value: 紐付けられた先読み記号 (Eq,Hashを実装できないので別に持つ)
 type LRItemSet = BTreeMap<LRCoreItem, IndexSet<SymbolID>>;
+type LRCoreItems = BTreeSet<LRCoreItem>;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Action {
@@ -381,6 +383,7 @@ struct DFAGenerator<'g> {
     extractor: NodeExtractor<'g>,
     pending_nodes: PendingNodes,
     nodes: IndexMap<NodeID, DFANodeInner>,
+    same_cores: IndexMap<LRCoreItems, IndexSet<NodeID>>,
     mode: MergeMode,
 }
 
@@ -393,50 +396,55 @@ impl<'g> DFAGenerator<'g> {
             // クロージャ展開
             self.extractor.expand_closures(&mut new_item_set);
 
+            let core_items: LRCoreItems = new_item_set.keys().copied().collect();
+
             // 互換性のあるノードを検索し、存在する場合はそのノードを修正し新規にノードは生成しない
-            // FIXME: hashを使って O(1) にする
-            for (&orig_id, orig_node) in &mut self.nodes {
-                match compare_item_sets(self.mode, &orig_node.item_set, &new_item_set) {
-                    ItemSetDiff::Same => {
-                        // 完全に一致しているので修正すら不要
-                    }
+            if let Some(same_cores) = self.same_cores.get(&core_items) {
+                for &orig_id in same_cores {
+                    let orig_node = &mut self.nodes[&orig_id];
+                    match compare_item_sets(self.mode, &orig_node.item_set, &new_item_set) {
+                        ItemSetDiff::Same => {
+                            // 完全に一致しているので修正すら不要
+                        }
 
-                    ItemSetDiff::Compatible => {
-                        // 先読み記号をマージする
-                        let mut modified = false;
-                        for (new_core, new_lookaheads) in &new_item_set {
-                            let lookaheads = orig_node.item_set.get_mut(new_core).unwrap();
-                            for l in new_lookaheads {
-                                modified |= lookaheads.insert(*l);
+                        ItemSetDiff::Compatible => {
+                            // 先読み記号をマージする
+                            let mut modified = false;
+                            for (new_core, new_lookaheads) in &new_item_set {
+                                let lookaheads = orig_node.item_set.get_mut(new_core).unwrap();
+                                for l in new_lookaheads {
+                                    modified |= lookaheads.insert(*l);
+                                }
+                            }
+
+                            // 先読み記号の変更があった場合のみ後続ノードの生成を再度行なう
+                            if modified {
+                                for (symbol, new_item_set) in
+                                    self.extractor.extract_transitions(&new_item_set)
+                                {
+                                    let id =
+                                        self.pending_nodes.enqueue(new_item_set, Some(orig_id));
+                                    orig_node.edges.insert(symbol, id);
+                                }
                             }
                         }
 
-                        // 先読み記号の変更があった場合のみ後続ノードの生成を再度行なう
-                        if modified {
-                            for (symbol, new_item_set) in
-                                self.extractor.extract_transitions(&new_item_set)
-                            {
-                                let id = self.pending_nodes.enqueue(new_item_set, Some(orig_id));
-                                orig_node.edges.insert(symbol, id);
+                        // LALR が無効化されている場合など
+                        ItemSetDiff::Different => continue,
+                    }
+
+                    // 使用する予定だったNodeIDはenqueueされた時点で遷移前のnodeに登録されているので書き換える
+                    if let Some(prev_node_id) = prev_node {
+                        let prev_node = &mut self.nodes[&prev_node_id];
+                        for edge in prev_node.edges.values_mut() {
+                            if *edge == new_id {
+                                *edge = orig_id;
                             }
                         }
                     }
 
-                    // LALR が無効化されている場合など
-                    ItemSetDiff::Different => continue,
+                    continue 'dequeue;
                 }
-
-                // 使用する予定だったNodeIDはenqueueされた時点で遷移前のnodeに登録されているので書き換える
-                if let Some(prev_node_id) = prev_node {
-                    let prev_node = &mut self.nodes[&prev_node_id];
-                    for edge in prev_node.edges.values_mut() {
-                        if *edge == new_id {
-                            *edge = orig_id;
-                        }
-                    }
-                }
-
-                continue 'dequeue;
             }
 
             // 遷移先のitems setを生成し、ノード生成のキューに登録する
@@ -453,6 +461,11 @@ impl<'g> DFAGenerator<'g> {
                     edges,
                 },
             );
+
+            self.same_cores
+                .entry(core_items)
+                .or_default()
+                .insert(new_id);
         }
     }
 }
@@ -464,32 +477,26 @@ enum ItemSetDiff {
 }
 
 fn compare_item_sets(mode: MergeMode, left: &LRItemSet, right: &LRItemSet) -> ItemSetDiff {
-    if left.len() != right.len() {
-        // サイズが違う時点で対象から除外する
-        // MEMO: left.len() >= right.len() に緩和できそう
-        return ItemSetDiff::Different;
+    // Assume that `left` and `right` have the same LR(0) core.
+
+    // shortcut
+    if matches!(mode, MergeMode::LALR) {
+        return ItemSetDiff::Compatible;
     }
 
-    // LR(0) core item が一致しているかどうかを確認する
-    // このとき、X_i \supseteq X'_i かどうかを同時に確かめる
     let mut is_canonically_same = true;
-    for (left, right) in left.iter().zip(right) {
-        if left.0 != right.0 {
-            // 異なる LR(0) core が見つかった時点で対象から外れる
-            return ItemSetDiff::Different;
-        }
-        if !left.1.is_superset(right.1) {
+    for (left, right) in left.values().zip(right.values()) {
+        if !left.is_superset(right) {
             is_canonically_same = false;
+            break;
         }
     }
-
     if is_canonically_same {
         return ItemSetDiff::Same;
     }
-    // この時点で同じcoreであることは確定している
 
     match mode {
-        MergeMode::LALR => ItemSetDiff::Compatible,
+        MergeMode::LALR => unreachable!(),
         MergeMode::PGM if is_pgm_weakly_compatible(left, right) => ItemSetDiff::Compatible,
         _ => ItemSetDiff::Different,
     }
