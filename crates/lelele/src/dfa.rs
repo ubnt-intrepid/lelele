@@ -120,16 +120,16 @@ impl fmt::Display for DFA<'_> {
             for (core_item, lookaheads) in &node.inner.item_set {
                 let LRCoreItem { rule_id, marker } = core_item;
                 let rule = self.grammar.rule(*rule_id);
-                let start = self.grammar.symbol(rule.start());
+                let start = self.grammar.symbol(rule.left());
                 write!(f, "  - {} :", start.name())?;
-                for (i, prod) in rule.production().iter().enumerate() {
+                for (i, prod) in rule.right().iter().enumerate() {
                     let prod = self.grammar.symbol(*prod);
                     if i == *marker {
                         f.write_str(" @")?;
                     }
                     write!(f, " {}", prod.name())?;
                 }
-                if *marker == rule.production().len() {
+                if *marker == rule.right().len() {
                     f.write_str(" @")?;
                 }
                 write!(f, " [")?;
@@ -220,7 +220,7 @@ impl DFANode<'_> {
         // reduce, accept
         for (core_item, lookaheads) in &self.inner.item_set {
             let rule = &self.grammar.rule(core_item.rule_id);
-            if core_item.marker < rule.production().len() {
+            if core_item.marker < rule.right().len() {
                 continue;
             }
 
@@ -302,7 +302,7 @@ impl NodeExtractor<'_> {
 
                 // [X -> ... @ Y beta]
                 //  Y: one nonterminal symbol
-                let (y_symbol, beta) = match &rule.production()[core.marker..] {
+                let (y_symbol, beta) = match &rule.right()[core.marker..] {
                     [y_symbol, beta @ ..] if !self.grammar.symbol(*y_symbol).is_terminal() => {
                         (*y_symbol, beta)
                     }
@@ -318,7 +318,7 @@ impl NodeExtractor<'_> {
                 {
                     for (rule_id, rule) in self.grammar.rules() {
                         // Y: ... という形式の構文規則のみを対象にする
-                        if rule.start() != y_symbol {
+                        if rule.left() != y_symbol {
                             continue;
                         }
 
@@ -349,11 +349,11 @@ impl NodeExtractor<'_> {
             let rule = self.grammar.rule(core.rule_id);
 
             // markerが終わりまで到達していれば無視する
-            if core.marker >= rule.production().len() {
+            if core.marker >= rule.right().len() {
                 continue;
             }
 
-            let label = rule.production()[core.marker];
+            let label = rule.right()[core.marker];
             let new_item_set = item_sets.entry(label).or_default();
             new_item_set
                 .entry(LRCoreItem {
@@ -471,7 +471,6 @@ fn compare_item_sets(left: &LRItemSet, right: &LRItemSet) -> Option<ItemSetDiff>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::grammar::Choice;
 
     #[test]
     fn smoketest1() {
@@ -487,9 +486,12 @@ mod tests {
 
             def.start_symbol(a);
 
-            def.rule(a, Choice(((e, equal, e), ident)));
-            def.rule(e, Choice(((e, plus, t), t)));
-            def.rule(t, Choice((num, ident)));
+            def.rule(a, [e, equal, e]);
+            def.rule(a, [ident]);
+            def.rule(e, [e, plus, t]);
+            def.rule(e, [t]);
+            def.rule(t, [num]);
+            def.rule(t, [ident]);
         });
         eprintln!("{}", grammar);
 
@@ -499,49 +501,36 @@ mod tests {
 
     #[test]
     fn smoketest2() {
-        let grammar = Grammar::define(|def| {
+        let grammar = Grammar::define(|g| {
             // declare terminal symbols.
-            let lparen = def.token("LPAREN");
-            let rparen = def.token("RPAREN");
-            let plus = def.token("PLUS");
-            let minus = def.token("MINUS");
-            let star = def.token("STAR");
-            let slash = def.token("SLASH");
-            let num = def.token("NUM");
-            let _ = def.token("UNUSED_0");
+            let lparen = g.token("LPAREN");
+            let rparen = g.token("RPAREN");
+            let plus = g.token("PLUS");
+            let minus = g.token("MINUS");
+            let star = g.token("STAR");
+            let slash = g.token("SLASH");
+            let num = g.token("NUM");
+            let _ = g.token("UNUSED_0");
 
             // declare nonterminal symbols.
-            let expr = def.symbol("EXPR");
-            let factor = def.symbol("FACTOR");
-            let term = def.symbol("TERM");
-            let _ = def.symbol("UNUSED_1");
-
-            def.start_symbol(expr);
+            let expr = g.symbol("EXPR");
+            let factor = g.symbol("FACTOR");
+            let term = g.symbol("TERM");
+            let _ = g.symbol("UNUSED_1");
 
             // declare syntax rules.
-            def.rule(
-                expr,
-                Choice((
-                    (expr, plus, factor),  // expr '+' factor
-                    (expr, minus, factor), // expr '-' factor
-                    factor,                // factor
-                )),
-            );
-            def.rule(
-                factor,
-                Choice((
-                    (factor, star, term),  // factor '*' term
-                    (factor, slash, term), // factor '/' term
-                    term,                  // term
-                )),
-            );
-            def.rule(
-                term,
-                Choice((
-                    num,                    // num
-                    (lparen, expr, rparen), // '(' expr ')'
-                )),
-            );
+            g.rule(expr, [expr, plus, factor]); // expr '+' factor
+            g.rule(expr, [expr, minus, factor]); // expr '-' factor
+            g.rule(expr, [factor]); // factor
+
+            g.rule(factor, [factor, star, term]); // factor '*' term
+            g.rule(factor, [factor, slash, term]); // factor '/' term
+            g.rule(factor, [term]); // term
+
+            g.rule(term, [num]); // num
+            g.rule(term, [lparen, expr, rparen]); // '(' expr ')'
+
+            g.start_symbol(expr);
         });
         eprintln!("{}", grammar);
 

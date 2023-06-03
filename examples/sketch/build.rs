@@ -1,7 +1,7 @@
 use lelele::{
     codegen::ParserDefinition,
     dfa::DFA,
-    grammar::{Choice, Grammar, GrammarDef},
+    grammar::{Grammar, GrammarDef},
 };
 use std::{env, fs, io::Write, path::PathBuf};
 
@@ -27,47 +27,35 @@ fn main() {
     write!(out, "{}", parser_def).unwrap();
 }
 
-fn grammar_def(def: &mut GrammarDef<'_>) {
+fn grammar_def(g: &mut GrammarDef<'_>) {
     // declare terminal symbols.
-    let lparen = def.token("LPAREN");
-    let rparen = def.token("RPAREN");
-    let plus = def.token("PLUS");
-    let minus = def.token("MINUS");
-    let star = def.token("STAR");
-    let slash = def.token("SLASH");
-    let num = def.token("NUM");
-    let _ = def.token("UNUSED_0");
+    let lparen = g.token("LPAREN");
+    let rparen = g.token("RPAREN");
+    let plus = g.token("PLUS");
+    let minus = g.token("MINUS");
+    let star = g.token("STAR");
+    let slash = g.token("SLASH");
+    let num = g.token("NUM");
+    let _ = g.token("UNUSED_0");
 
     // declare nonterminal symbols.
-    let expr = def.symbol("EXPR");
-    let factor = def.symbol("FACTOR");
-    let term = def.symbol("TERM");
-    let _ = def.symbol("UNUSED_1");
+    let expr = g.symbol("EXPR");
+    let factor = g.symbol("FACTOR");
+    let term = g.symbol("TERM");
+    let _ = g.symbol("UNUSED_1");
 
-    def.start_symbol(expr);
+    g.start_symbol(expr);
 
     // declare syntax rules.
-    def.rule(
-        expr,
-        Choice((
-            (expr, plus, factor),  // expr '+' factor
-            (expr, minus, factor), // expr '-' factor
-            factor,                // factor
-        )),
-    );
-    def.rule(
-        factor,
-        Choice((
-            (factor, star, term),  // factor '*' term
-            (factor, slash, term), // factor '/' term
-            term,                  // term
-        )),
-    );
-    def.rule(
-        term,
-        Choice((
-            num,                    // num
-            (lparen, expr, rparen), // '(' expr ')'
-        )),
-    );
+
+    g.rule(expr, [expr, plus, factor]); // expr '+' factor
+    g.rule(expr, [expr, minus, factor]); // expr '-' factor
+    g.rule(expr, [factor]); // factor
+
+    g.rule(factor, [factor, star, term]); // factor '*' term
+    g.rule(factor, [factor, slash, term]); // factor '/' term
+    g.rule(factor, [term]); // term
+
+    g.rule(term, [num]); // num
+    g.rule(term, [lparen, expr, rparen]); // '(' expr ')'
 }

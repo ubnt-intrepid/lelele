@@ -77,8 +77,8 @@ pub struct RuleID {
     raw: u64,
 }
 impl RuleID {
-    /// Reserved ID that represents the top-level rule
-    /// `$accept : <start-symbol> $`.
+    /// Reserved ID that represents the top-level production rule:
+    /// `$accept : <start-symbol> $eoi`.
     pub(crate) const ACCEPT: Self = Self { raw: u64::MAX };
 
     #[inline]
@@ -96,6 +96,7 @@ impl fmt::Display for RuleID {
     }
 }
 
+/// The type that represents a production rule in grammar.
 #[derive(Debug)]
 pub struct Rule<'g> {
     grammar: &'g Grammar,
@@ -104,18 +105,18 @@ pub struct Rule<'g> {
 
 #[derive(Debug)]
 struct RuleInner {
-    start: SymbolID,
-    production: Vec<SymbolID>,
+    left: SymbolID,
+    right: Vec<SymbolID>,
 }
 
 impl fmt::Display for Rule<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
             grammar,
-            inner: RuleInner { start, production },
+            inner: RuleInner { left, right },
         } = self;
-        write!(f, "{} : ", grammar.symbol(*start).name())?;
-        for (i, symbol) in production.iter().enumerate() {
+        write!(f, "{} : ", grammar.symbol(*left).name())?;
+        for (i, symbol) in right.iter().enumerate() {
             if i > 0 {
                 write!(f, " ")?;
             }
@@ -126,12 +127,14 @@ impl fmt::Display for Rule<'_> {
 }
 
 impl Rule<'_> {
-    pub fn start(&self) -> SymbolID {
-        self.inner.start
+    /// Return the left-hand side of this production.
+    pub fn left(&self) -> SymbolID {
+        self.inner.left
     }
 
-    pub fn production(&self) -> &[SymbolID] {
-        &self.inner.production[..]
+    /// Return the right-hand side of this production.
+    pub fn right(&self) -> &[SymbolID] {
+        &self.inner.right[..]
     }
 }
 
@@ -140,8 +143,8 @@ impl Rule<'_> {
 pub struct Grammar {
     symbols: IndexMap<SymbolID, Symbol>,
     rules: IndexMap<RuleID, RuleInner>,
-    start: SymbolID,
-    start_rule: RuleInner,
+    start_symbol: SymbolID,
+    accept_rule: RuleInner,
 }
 
 impl fmt::Display for Grammar {
@@ -160,11 +163,15 @@ impl fmt::Display for Grammar {
             }
             write!(f, "{}", sym.name())?;
         }
-        write!(f, "\nrules:\n")?;
-        for (id, rule) in self.rules() {
-            writeln!(f, "  [{:02}] {}", id, rule)?;
+        writeln!(
+            f,
+            "\nstart_symbol: {}",
+            self.symbol(self.start_symbol).name()
+        )?;
+        write!(f, "rules:\n")?;
+        for (id, production) in self.rules() {
+            writeln!(f, "  [{:02}] {}", id, production)?;
         }
-        write!(f, "start: {}", self.symbol(self.start).name())?;
         Ok(())
     }
 }
@@ -214,10 +221,8 @@ impl Grammar {
         }
     }
 
-    pub fn symbol_id(&self, name: &str) -> Option<SymbolID> {
-        self.symbols
-            .iter()
-            .find_map(|(id, sym)| (sym.name == name).then_some(*id))
+    pub fn start_symbol(&self) -> (SymbolID, &Symbol) {
+        (self.start_symbol, self.symbol(self.start_symbol))
     }
 
     pub fn rules(&self) -> impl Iterator<Item = (RuleID, Rule<'_>)> + '_ {
@@ -225,7 +230,7 @@ impl Grammar {
             RuleID::ACCEPT,
             Rule {
                 grammar: self,
-                inner: &self.start_rule,
+                inner: &self.accept_rule,
             },
         ))
         .into_iter()
@@ -242,7 +247,7 @@ impl Grammar {
 
     pub fn rule(&self, id: RuleID) -> Rule<'_> {
         let inner = match id {
-            RuleID::ACCEPT => &self.start_rule,
+            RuleID::ACCEPT => &self.accept_rule,
             id => &self.rules.get(&id).unwrap(),
         };
         Rule {
@@ -311,23 +316,20 @@ impl GrammarDef<'_> {
     }
 
     /// Register a production rule into this grammer.
-    pub fn rule<P>(&mut self, start: SymbolID, production: P) -> Vec<RuleID>
+    pub fn rule<I>(&mut self, left: SymbolID, right: I) -> RuleID
     where
-        P: Production,
+        I: IntoIterator<Item = SymbolID>,
     {
         debug_assert!(
             self.symbols
-                .get(&start)
+                .get(&left)
                 .map_or(false, |lhs| lhs.kind == SymbolKind::Nonterminal),
             "The starting symbol in production rule must be nonterminal"
         );
-        let mut ids = vec![];
-        production.add_rules(&mut ProductionContext {
-            def: self,
-            start,
-            ids: &mut ids,
-        });
-        ids
+        self.add_rule(RuleInner {
+            left,
+            right: right.into_iter().collect(),
+        })
     }
 
     /// Specify the start symbol.
@@ -356,104 +358,11 @@ impl GrammarDef<'_> {
         Grammar {
             symbols: self.symbols,
             rules: self.rules,
-            start,
-            start_rule: RuleInner {
-                start: SymbolID::ACCEPT,
-                production: vec![start],
+            start_symbol: start,
+            accept_rule: RuleInner {
+                left: SymbolID::ACCEPT,
+                right: vec![start],
             },
         }
     }
 }
-
-///
-pub trait ProductionWord {
-    fn to_symbol_id(self, def: &mut GrammarDef) -> SymbolID;
-}
-
-impl ProductionWord for SymbolID {
-    fn to_symbol_id(self, _def: &mut GrammarDef) -> SymbolID {
-        self
-    }
-}
-
-#[derive(Debug)]
-pub struct ProductionContext<'cx, 'def> {
-    def: &'cx mut GrammarDef<'def>,
-    start: SymbolID,
-    ids: &'cx mut Vec<RuleID>,
-}
-impl ProductionContext<'_, '_> {
-    fn add_rule(&mut self, production: Vec<SymbolID>) {
-        let rule = RuleInner {
-            start: self.start,
-            production,
-        };
-        let id = self.def.add_rule(rule);
-        self.ids.push(id);
-    }
-}
-
-pub trait Production {
-    fn add_rules(self, cx: &mut ProductionContext<'_, '_>);
-}
-
-impl<T> Production for T
-where
-    T: ProductionWord,
-{
-    #[inline]
-    fn add_rules(self, cx: &mut ProductionContext<'_, '_>) {
-        (self,).add_rules(cx)
-    }
-}
-
-macro_rules! impl_production_for_tuple {
-    ($($P:ident),*) => {
-        impl<$($P),*> Production for ($($P,)*)
-        where $( $P: ProductionWord, )* {
-            #[allow(non_snake_case)]
-            #[inline]
-            fn add_rules(self, cx: &mut ProductionContext<'_, '_>) {
-                let ($($P,)*) = self;
-                let production = vec![$( $P.to_symbol_id(cx.def) ),*];
-                cx.add_rule(production);
-            }
-        }
-    };
-}
-impl_production_for_tuple!(P1);
-impl_production_for_tuple!(P1, P2);
-impl_production_for_tuple!(P1, P2, P3);
-impl_production_for_tuple!(P1, P2, P3, P4);
-impl_production_for_tuple!(P1, P2, P3, P4, P5);
-impl_production_for_tuple!(P1, P2, P3, P4, P5, P6);
-impl_production_for_tuple!(P1, P2, P3, P4, P5, P6, P7);
-impl_production_for_tuple!(P1, P2, P3, P4, P5, P6, P7, P8);
-impl_production_for_tuple!(P1, P2, P3, P4, P5, P6, P7, P8, P9);
-impl_production_for_tuple!(P1, P2, P3, P4, P5, P6, P7, P8, P9, P10);
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Choice<T>(pub T);
-
-macro_rules! impl_production_for_choice {
-    ($($P:ident),*) => {
-        impl<$($P),*> Production for Choice<($($P),*)>
-        where $( $P: Production, )* {
-            #[allow(non_snake_case)]
-            #[inline]
-            fn add_rules(self, cx: &mut ProductionContext<'_, '_>) {
-                let Choice(($($P),*)) = self;
-                $( $P.add_rules(cx); )*
-            }
-        }
-    };
-}
-impl_production_for_choice!(P1, P2);
-impl_production_for_choice!(P1, P2, P3);
-impl_production_for_choice!(P1, P2, P3, P4);
-impl_production_for_choice!(P1, P2, P3, P4, P5);
-impl_production_for_choice!(P1, P2, P3, P4, P5, P6);
-impl_production_for_choice!(P1, P2, P3, P4, P5, P6, P7);
-impl_production_for_choice!(P1, P2, P3, P4, P5, P6, P7, P8);
-impl_production_for_choice!(P1, P2, P3, P4, P5, P6, P7, P8, P9);
-impl_production_for_choice!(P1, P2, P3, P4, P5, P6, P7, P8, P9, P10);

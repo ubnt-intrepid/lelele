@@ -35,7 +35,7 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
     // ruleからnullableであることが分かっている場合は追加する
     let mut nulls: IndexSet<SymbolID> = grammar
         .rules()
-        .filter_map(|(_id, rule)| rule.production().is_empty().then_some(rule.start()))
+        .filter_map(|(_id, rule)| rule.right().is_empty().then_some(rule.left()))
         .collect();
 
     // 値が更新されなくなるまで繰り返す
@@ -43,14 +43,14 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
     while changed {
         changed = false;
         for (_, rule) in grammar.rules() {
-            if nulls.contains(&rule.start()) {
+            if nulls.contains(&rule.left()) {
                 continue;
             }
             // 右辺のsymbolsがすべてnullableかどうか
-            let is_rhs_nullable = rule.production().iter().all(|t| nulls.contains(t));
+            let is_rhs_nullable = rule.right().iter().all(|t| nulls.contains(t));
             if is_rhs_nullable {
                 changed = true;
-                nulls.insert(rule.start());
+                nulls.insert(rule.left());
                 continue;
             }
         }
@@ -91,10 +91,10 @@ fn first_set(
         .rules()
         .flat_map(|(id, rule)| (id != RuleID::ACCEPT).then_some(rule))
     {
-        for symbol in rule.production() {
-            if rule.start() != *symbol {
+        for symbol in rule.right() {
+            if rule.left() != *symbol {
                 constraints.push(Constraint {
-                    sup: rule.start(),
+                    sup: rule.left(),
                     sub: *symbol,
                 });
             }
