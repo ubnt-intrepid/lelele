@@ -6,27 +6,41 @@ use crate::{
     IndexMap, IndexSet,
 };
 use indexmap::map::Entry;
-use std::{collections::VecDeque, fmt};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    fmt,
+};
 
 #[derive(Debug)]
 pub struct Config {
-    mode: DFAMode,
+    merge_mode: MergeMode,
 }
 
 impl Config {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
-            mode: DFAMode::Canonical,
+            merge_mode: MergeMode::PGM,
         }
     }
 
+    /// Set the merge strategy of DFA nodes to match Knuth's Canonical LR(1) method.
     pub fn use_canonical(&mut self) -> &mut Self {
-        self.mode = DFAMode::Canonical;
+        self.merge_mode = MergeMode::Canonical;
         self
     }
 
+    /// Set the merge strategy of DFA nodes to match Pager's Practical General Method (PGM).
+    ///
+    /// By default, this strategy is selected due to the trade-off between
+    /// reducing the number of DFA nodes and avoiding reduce/reduce conflicts.
+    pub fn use_pgm(&mut self) -> &mut Self {
+        self.merge_mode = MergeMode::PGM;
+        self
+    }
+
+    /// Set the merge strategy of DFA nodes to match DeRemer's LALR(1) method.
     pub fn use_lalr(&mut self) -> &mut Self {
-        self.mode = DFAMode::LALR;
+        self.merge_mode = MergeMode::LALR;
         self
     }
 
@@ -38,11 +52,11 @@ impl Config {
             },
             pending_nodes: PendingNodes::new(),
             nodes: IndexMap::default(),
-            mode: self.mode,
+            mode: self.merge_mode,
         };
 
         // 初期ノード: [S' -> @ S] {$eoi}
-        let mut item_set = IndexMap::default();
+        let mut item_set = BTreeMap::new();
         item_set.insert(
             LRCoreItem {
                 rule_id: RuleID::ACCEPT,
@@ -170,7 +184,7 @@ struct DFANodeInner {
 
 // LR(1) item
 // X: Y1 Y2 ... Yn という構文規則があったとき、それにマーカ位置を付与したもの
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 struct LRCoreItem {
     // grammer内におけるruleの識別子
     rule_id: RuleID,
@@ -180,7 +194,7 @@ struct LRCoreItem {
 
 //  - key: core item
 //  - value: 紐付けられた先読み記号 (Eq,Hashを実装できないので別に持つ)
-type LRItemSet = IndexMap<LRCoreItem, IndexSet<SymbolID>>;
+type LRItemSet = BTreeMap<LRCoreItem, IndexSet<SymbolID>>;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Action {
@@ -236,8 +250,17 @@ impl DFANode<'_> {
 // === DFAGenerator ===
 
 #[derive(Debug, Copy, Clone)]
-enum DFAMode {
+enum MergeMode {
+    /// Items are equivalent in the sense of of Knuth's canonical LR(1) method,
+    /// that is, each item sets have the same LR(0) cores and their lookahead symbols
+    /// are also equal.
     Canonical,
+
+    /// Items are weakly compatible in the sense of Pager's Practical General Method (PGM).
+    PGM,
+
+    /// Items are compatible in the sense of DeRemer's LALR(1) method, that is,
+    /// each item sets have the same LR(0) cores but different lookahead symbols.
     LALR,
 }
 
@@ -358,7 +381,7 @@ struct DFAGenerator<'g> {
     extractor: NodeExtractor<'g>,
     pending_nodes: PendingNodes,
     nodes: IndexMap<NodeID, DFANodeInner>,
-    mode: DFAMode,
+    mode: MergeMode,
 }
 
 impl<'g> DFAGenerator<'g> {
@@ -370,16 +393,16 @@ impl<'g> DFAGenerator<'g> {
             // クロージャ展開
             self.extractor.expand_closures(&mut new_item_set);
 
-            // 互換性のあるノードを検索する
+            // 互換性のあるノードを検索し、存在する場合はそのノードを修正し新規にノードは生成しない
             // FIXME: hashを使って O(1) にする
             for (&orig_id, orig_node) in &mut self.nodes {
-                // 互換性のあるノードが既にある場合、そのノードを修正し新規にノードは生成しない
-                match compare_item_sets(&orig_node.item_set, &new_item_set) {
-                    Some(ItemSetDiff::Canonical) => {
+                match compare_item_sets(self.mode, &orig_node.item_set, &new_item_set) {
+                    ItemSetDiff::Same => {
                         // 完全に一致しているので修正すら不要
                     }
-                    Some(ItemSetDiff::LALR) if matches!(self.mode, DFAMode::LALR) => {
-                        // lookaheadsをマージする
+
+                    ItemSetDiff::Compatible => {
+                        // 先読み記号をマージする
                         let mut modified = false;
                         for (new_core, new_lookaheads) in &new_item_set {
                             let lookaheads = orig_node.item_set.get_mut(new_core).unwrap();
@@ -388,7 +411,7 @@ impl<'g> DFAGenerator<'g> {
                             }
                         }
 
-                        // a
+                        // 先読み記号の変更があった場合のみ後続ノードの生成を再度行なう
                         if modified {
                             for (symbol, new_item_set) in
                                 self.extractor.extract_transitions(&new_item_set)
@@ -400,7 +423,7 @@ impl<'g> DFAGenerator<'g> {
                     }
 
                     // LALR が無効化されている場合など
-                    _ => continue,
+                    ItemSetDiff::Different => continue,
                 }
 
                 // 使用する予定だったNodeIDはenqueueされた時点で遷移前のnodeに登録されているので書き換える
@@ -435,31 +458,72 @@ impl<'g> DFAGenerator<'g> {
 }
 
 enum ItemSetDiff {
-    /// Items are equivalent in the sense of of Knuth's canonical LR(1) method,
-    /// that is, each item sets have the same LR(0) cores and their lookahead symbols
-    /// are also equal.
-    Canonical,
-
-    /// Items are compatible in the sense of DeRemer's LALR(1) method, that is,
-    /// each item sets have the same LR(0) cores but different lookahead symbols.
-    LALR,
+    Same,
+    Compatible,
+    Different,
 }
 
-fn compare_item_sets(left: &LRItemSet, right: &LRItemSet) -> Option<ItemSetDiff> {
+fn compare_item_sets(mode: MergeMode, left: &LRItemSet, right: &LRItemSet) -> ItemSetDiff {
     if left.len() != right.len() {
-        return None;
+        // サイズが違う時点で対象から除外する
+        // MEMO: left.len() >= right.len() に緩和できそう
+        return ItemSetDiff::Different;
     }
 
-    let mut diff = ItemSetDiff::Canonical;
-
-    for (key_l, value_l) in left {
-        let value_r = right.get(key_l)?;
-        if value_l != value_r {
-            diff = ItemSetDiff::LALR;
+    // LR(0) core item が一致しているかどうかを確認する
+    // このとき、X_i \supseteq X'_i かどうかを同時に確かめる
+    let mut is_canonically_same = true;
+    for (left, right) in left.iter().zip(right) {
+        if left.0 != right.0 {
+            // 異なる LR(0) core が見つかった時点で対象から外れる
+            return ItemSetDiff::Different;
+        }
+        if !left.1.is_superset(right.1) {
+            is_canonically_same = false;
         }
     }
 
-    Some(diff)
+    if is_canonically_same {
+        return ItemSetDiff::Same;
+    }
+    // この時点で同じcoreであることは確定している
+
+    match mode {
+        MergeMode::LALR => ItemSetDiff::Compatible,
+        MergeMode::PGM if is_pgm_weakly_compatible(left, right) => ItemSetDiff::Compatible,
+        _ => ItemSetDiff::Different,
+    }
+}
+
+fn is_pgm_weakly_compatible(left: &LRItemSet, right: &LRItemSet) -> bool {
+    is_pgm_weakly_compatible_c1(left, right)
+        || is_pgm_weakly_compatible_c2(left)
+        || is_pgm_weakly_compatible_c2(right)
+}
+
+fn is_pgm_weakly_compatible_c1(left: &LRItemSet, right: &LRItemSet) -> bool {
+    for (i, left) in left.values().enumerate() {
+        for (j, right) in right.values().enumerate() {
+            if i == j {
+                continue;
+            }
+            if !left.is_disjoint(right) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn is_pgm_weakly_compatible_c2(items: &LRItemSet) -> bool {
+    for (i, c1) in items.values().enumerate() {
+        for c2 in items.values().skip(i + 1) {
+            if c1.is_disjoint(c2) {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 #[cfg(test)]

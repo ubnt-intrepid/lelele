@@ -3,7 +3,7 @@
 use crate::IndexMap;
 use std::{borrow::Cow, fmt, marker::PhantomData};
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct SymbolID {
     raw: u64,
@@ -71,7 +71,7 @@ impl Symbol {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct RuleID {
     raw: u64,

@@ -10,7 +10,13 @@ fn smoketest_grammar(f: impl FnOnce(&mut GrammarDef<'_>)) {
     eprintln!();
 
     eprintln!("DFA(canonical):");
-    let dfa = Config::new().generate(&grammar);
+    let dfa = Config::new().use_canonical().generate(&grammar);
+    eprintln!("num_nodes: {}", dfa.nodes().count());
+    eprintln!("---\n{}\n", dfa);
+    eprintln!();
+
+    eprintln!("DFA(PGM):");
+    let dfa = Config::new().use_pgm().generate(&grammar);
     eprintln!("num_nodes: {}", dfa.nodes().count());
     eprintln!("---\n{}\n", dfa);
     eprintln!();

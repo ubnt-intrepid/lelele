@@ -29,6 +29,9 @@ fn bench_dfa_gen(c: &mut Criterion, group_name: &str, f: impl FnOnce(&mut Gramma
     group.bench_function("Canonical", |b| {
         b.iter(|| Config::new().use_canonical().generate(&grammar));
     });
+    group.bench_function("PGM", |b| {
+        b.iter(|| Config::new().use_pgm().generate(&grammar));
+    });
     group.bench_function("LALR", |b| {
         b.iter(|| Config::new().use_lalr().generate(&grammar));
     });
