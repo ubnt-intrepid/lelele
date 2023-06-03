@@ -1,6 +1,7 @@
 use anyhow::Context;
 use lelele::{
     codegen::ParserDefinition,
+    dfa::DFA,
     grammar::{Grammar, GrammarDef},
 };
 use lelele_tests::grammars;
@@ -19,7 +20,8 @@ fn generate_parser(
     grammar_def: impl FnOnce(&mut GrammarDef<'_>),
 ) -> anyhow::Result<()> {
     let grammar = Grammar::define(grammar_def);
-    let parser_def = ParserDefinition::new(&grammar);
+    let dfa = DFA::generate(&grammar);
+    let parser_def = ParserDefinition::new(&grammar, &dfa);
 
     let out_dir = env::var("OUT_DIR").map(PathBuf::from).unwrap().join(name);
     fs::create_dir_all(&out_dir)

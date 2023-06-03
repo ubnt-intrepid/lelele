@@ -4,19 +4,19 @@ use lelele::{
 };
 use lelele_tests::grammars;
 
-fn smoketest_grammar(f: impl FnOnce(&mut GrammarDef<'static>)) {
+fn smoketest_grammar(f: impl FnOnce(&mut GrammarDef<'_>)) {
     let grammar = Grammar::define(f);
     eprintln!("grammar:\n{}", grammar);
     eprintln!();
 
     eprintln!("DFA(canonical):");
-    let dfa = Config::new(&grammar).generate();
+    let dfa = Config::new().generate(&grammar);
     eprintln!("num_nodes: {}", dfa.nodes().count());
     eprintln!("---\n{}\n", dfa);
     eprintln!();
 
     eprintln!("DFA(LALR):");
-    let dfa = Config::new(&grammar).use_lalr().generate();
+    let dfa = Config::new().use_lalr().generate(&grammar);
     eprintln!("num_nodes: {}", dfa.nodes().count());
     eprintln!("---\n{}\n", dfa);
 }

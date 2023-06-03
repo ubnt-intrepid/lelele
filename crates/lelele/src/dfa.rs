@@ -9,15 +9,13 @@ use indexmap::map::Entry;
 use std::{collections::VecDeque, fmt};
 
 #[derive(Debug)]
-pub struct Config<'g> {
-    grammar: &'g Grammar<'g>,
+pub struct Config {
     mode: DFAMode,
 }
 
-impl<'g> Config<'g> {
-    pub fn new(grammar: &'g Grammar<'g>) -> Self {
+impl Config {
+    pub fn new() -> Self {
         Self {
-            grammar,
             mode: DFAMode::Canonical,
         }
     }
@@ -32,11 +30,11 @@ impl<'g> Config<'g> {
         self
     }
 
-    pub fn generate(&self) -> DFA<'g> {
+    pub fn generate<'g>(&self, grammar: &'g Grammar) -> DFA<'g> {
         let mut gen = DFAGenerator {
             extractor: NodeExtractor {
-                grammar: self.grammar,
-                first_sets: FirstSets::new(self.grammar),
+                grammar,
+                first_sets: FirstSets::new(grammar),
             },
             pending_nodes: PendingNodes::new(),
             nodes: IndexMap::default(),
@@ -71,7 +69,7 @@ impl<'g> Config<'g> {
         }
 
         DFA {
-            grammar: self.grammar,
+            grammar,
             nodes: gen.nodes,
             start_node,
         }
@@ -80,14 +78,14 @@ impl<'g> Config<'g> {
 
 #[derive(Debug)]
 pub struct DFA<'g> {
-    grammar: &'g Grammar<'g>,
+    grammar: &'g Grammar,
     nodes: IndexMap<NodeID, DFANodeInner>,
     start_node: NodeID,
 }
 
 impl<'g> DFA<'g> {
-    pub fn generate(grammar: &'g Grammar<'g>) -> Self {
-        Config::new(grammar).generate()
+    pub fn generate(grammar: &'g Grammar) -> Self {
+        Config::new().generate(grammar)
     }
 
     pub fn nodes(&self) -> impl Iterator<Item = (NodeID, DFANode<'_>)> + '_ {
@@ -174,7 +172,7 @@ impl fmt::Display for NodeID {
 
 #[derive(Debug)]
 pub struct DFANode<'g> {
-    grammar: &'g Grammar<'g>,
+    grammar: &'g Grammar,
     inner: &'g DFANodeInner,
 }
 
@@ -286,7 +284,7 @@ impl PendingNodes {
 
 #[derive(Debug)]
 struct NodeExtractor<'g> {
-    grammar: &'g Grammar<'g>,
+    grammar: &'g Grammar,
     first_sets: FirstSets,
 }
 

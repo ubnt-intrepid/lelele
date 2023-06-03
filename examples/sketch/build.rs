@@ -1,5 +1,6 @@
 use lelele::{
     codegen::ParserDefinition,
+    dfa::DFA,
     grammar::{Choice, Grammar, GrammarDef},
 };
 use std::{env, fs, io::Write, path::PathBuf};
@@ -10,9 +11,10 @@ fn main() {
 
     // 文法定義から構文解析表を導出する
     let grammar = Grammar::define(grammar_def);
+    let dfa = DFA::generate(&grammar);
     eprintln!("Grammar:\n{}", grammar);
 
-    let parser_def = ParserDefinition::new(&grammar);
+    let parser_def = ParserDefinition::new(&grammar, &dfa);
 
     // 生成された構文解析表をコードに出力
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("parser.rs");

@@ -1,7 +1,7 @@
 //! Grammar types.
 
 use crate::IndexMap;
-use std::{borrow::Cow, fmt};
+use std::{borrow::Cow, fmt, marker::PhantomData};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -39,8 +39,8 @@ impl fmt::Display for SymbolID {
 }
 
 #[derive(Debug)]
-pub struct Symbol<'g> {
-    name: Cow<'g, str>,
+pub struct Symbol {
+    name: Cow<'static, str>,
     kind: SymbolKind,
 }
 
@@ -50,7 +50,7 @@ enum SymbolKind {
     Nonterminal,
 }
 
-impl<'g> Symbol<'g> {
+impl Symbol {
     const EOI: Self = Self {
         name: Cow::Borrowed("$eoi"),
         kind: SymbolKind::Terminal,
@@ -61,7 +61,7 @@ impl<'g> Symbol<'g> {
     };
 }
 
-impl<'g> Symbol<'g> {
+impl Symbol {
     pub fn name(&self) -> &str {
         &*self.name
     }
@@ -98,7 +98,7 @@ impl fmt::Display for RuleID {
 
 #[derive(Debug)]
 pub struct Rule<'g> {
-    grammar: &'g Grammar<'g>,
+    grammar: &'g Grammar,
     inner: &'g RuleInner,
 }
 
@@ -137,14 +137,14 @@ impl Rule<'_> {
 
 /// The grammar definition used to derive the parser tables.
 #[derive(Debug)]
-pub struct Grammar<'g> {
-    symbols: IndexMap<SymbolID, Symbol<'g>>,
+pub struct Grammar {
+    symbols: IndexMap<SymbolID, Symbol>,
     rules: IndexMap<RuleID, RuleInner>,
     start: SymbolID,
     start_rule: RuleInner,
 }
 
-impl fmt::Display for Grammar<'_> {
+impl fmt::Display for Grammar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "terminals: ")?;
         for (i, (_, sym)) in self.terminals().enumerate() {
@@ -169,11 +169,11 @@ impl fmt::Display for Grammar<'_> {
     }
 }
 
-impl<'g> Grammar<'g> {
+impl Grammar {
     /// Define a grammar using the specified function.
     pub fn define<F>(f: F) -> Self
     where
-        F: FnOnce(&mut GrammarDef<'g>),
+        F: FnOnce(&mut GrammarDef),
     {
         let mut def = GrammarDef {
             symbols: IndexMap::default(),
@@ -181,6 +181,7 @@ impl<'g> Grammar<'g> {
             start: None,
             next_symbol_id: 0,
             next_rule_id: 0,
+            _marker: PhantomData,
         };
 
         f(&mut def);
@@ -188,7 +189,7 @@ impl<'g> Grammar<'g> {
         def.end()
     }
 
-    pub fn symbols(&self) -> impl Iterator<Item = (SymbolID, &Symbol<'g>)> + '_ {
+    pub fn symbols(&self) -> impl Iterator<Item = (SymbolID, &Symbol)> + '_ {
         [
             (SymbolID::EOI, &Symbol::EOI),
             (SymbolID::ACCEPT, &Symbol::ACCEPT),
@@ -197,15 +198,15 @@ impl<'g> Grammar<'g> {
         .chain(self.symbols.iter().map(|(id, sym)| (*id, sym)))
     }
 
-    pub fn terminals(&self) -> impl Iterator<Item = (SymbolID, &Symbol<'g>)> + '_ {
+    pub fn terminals(&self) -> impl Iterator<Item = (SymbolID, &Symbol)> + '_ {
         self.symbols().filter(|(_id, sym)| sym.is_terminal())
     }
 
-    pub fn nonterminals(&self) -> impl Iterator<Item = (SymbolID, &Symbol<'g>)> + '_ {
+    pub fn nonterminals(&self) -> impl Iterator<Item = (SymbolID, &Symbol)> + '_ {
         self.symbols().filter(|(_id, sym)| !sym.is_terminal())
     }
 
-    pub fn symbol(&'g self, id: SymbolID) -> &Symbol<'g> {
+    pub fn symbol(&self, id: SymbolID) -> &Symbol {
         match id {
             SymbolID::EOI => &Symbol::EOI,
             SymbolID::ACCEPT => &Symbol::ACCEPT,
@@ -253,16 +254,17 @@ impl<'g> Grammar<'g> {
 
 /// The contextural values for building a `Grammar`.
 #[derive(Debug)]
-pub struct GrammarDef<'g> {
-    symbols: IndexMap<SymbolID, Symbol<'g>>,
+pub struct GrammarDef<'def> {
+    symbols: IndexMap<SymbolID, Symbol>,
     rules: IndexMap<RuleID, RuleInner>,
     start: Option<SymbolID>,
     next_symbol_id: u64,
     next_rule_id: u64,
+    _marker: PhantomData<&'def mut ()>,
 }
 
-impl<'g> GrammarDef<'g> {
-    fn add_symbol(&mut self, added: Symbol<'g>) -> SymbolID {
+impl GrammarDef<'_> {
+    fn add_symbol(&mut self, added: Symbol) -> SymbolID {
         match self
             .symbols
             .iter_mut()
@@ -293,7 +295,7 @@ impl<'g> GrammarDef<'g> {
     }
 
     /// Specify a terminal symbol used in this grammar.
-    pub fn token(&mut self, name: impl Into<Cow<'g, str>>) -> SymbolID {
+    pub fn token(&mut self, name: impl Into<Cow<'static, str>>) -> SymbolID {
         self.add_symbol(Symbol {
             name: name.into(),
             kind: SymbolKind::Terminal,
@@ -301,7 +303,7 @@ impl<'g> GrammarDef<'g> {
     }
 
     /// Specify a nonterminal symbol used in this grammar.
-    pub fn symbol(&mut self, name: impl Into<Cow<'g, str>>) -> SymbolID {
+    pub fn symbol(&mut self, name: impl Into<Cow<'static, str>>) -> SymbolID {
         self.add_symbol(Symbol {
             name: name.into(),
             kind: SymbolKind::Nonterminal,
@@ -311,7 +313,7 @@ impl<'g> GrammarDef<'g> {
     /// Register a production rule into this grammer.
     pub fn rule<P>(&mut self, start: SymbolID, production: P) -> Vec<RuleID>
     where
-        P: Production<'g>,
+        P: Production,
     {
         debug_assert!(
             self.symbols
@@ -339,7 +341,7 @@ impl<'g> GrammarDef<'g> {
         self.start.replace(symbol);
     }
 
-    fn end(mut self) -> Grammar<'g> {
+    fn end(mut self) -> Grammar {
         // start symbolのID変換
         // 指定されていない場合は最初に登録されたnonterminal symbolを用いる
         let start = match self.start.take() {
@@ -364,23 +366,23 @@ impl<'g> GrammarDef<'g> {
 }
 
 ///
-pub trait ProductionWord<'g> {
-    fn to_symbol_id(self, def: &mut GrammarDef<'g>) -> SymbolID;
+pub trait ProductionWord {
+    fn to_symbol_id(self, def: &mut GrammarDef) -> SymbolID;
 }
 
-impl ProductionWord<'_> for SymbolID {
-    fn to_symbol_id(self, _def: &mut GrammarDef<'_>) -> SymbolID {
+impl ProductionWord for SymbolID {
+    fn to_symbol_id(self, _def: &mut GrammarDef) -> SymbolID {
         self
     }
 }
 
 #[derive(Debug)]
-pub struct ProductionContext<'g, 'cx> {
-    def: &'cx mut GrammarDef<'g>,
+pub struct ProductionContext<'cx, 'def> {
+    def: &'cx mut GrammarDef<'def>,
     start: SymbolID,
     ids: &'cx mut Vec<RuleID>,
 }
-impl<'g> ProductionContext<'g, '_> {
+impl ProductionContext<'_, '_> {
     fn add_rule(&mut self, production: Vec<SymbolID>) {
         let rule = RuleInner {
             start: self.start,
@@ -391,27 +393,27 @@ impl<'g> ProductionContext<'g, '_> {
     }
 }
 
-pub trait Production<'g> {
-    fn add_rules(self, cx: &mut ProductionContext<'g, '_>);
+pub trait Production {
+    fn add_rules(self, cx: &mut ProductionContext<'_, '_>);
 }
 
-impl<'g, T> Production<'g> for T
+impl<T> Production for T
 where
-    T: ProductionWord<'g>,
+    T: ProductionWord,
 {
     #[inline]
-    fn add_rules(self, cx: &mut ProductionContext<'g, '_>) {
+    fn add_rules(self, cx: &mut ProductionContext<'_, '_>) {
         (self,).add_rules(cx)
     }
 }
 
 macro_rules! impl_production_for_tuple {
     ($($P:ident),*) => {
-        impl<'g, $($P),*> Production<'g> for ($($P,)*)
-        where $( $P: ProductionWord<'g>, )* {
+        impl<$($P),*> Production for ($($P,)*)
+        where $( $P: ProductionWord, )* {
             #[allow(non_snake_case)]
             #[inline]
-            fn add_rules(self, cx: &mut ProductionContext<'g, '_>) {
+            fn add_rules(self, cx: &mut ProductionContext<'_, '_>) {
                 let ($($P,)*) = self;
                 let production = vec![$( $P.to_symbol_id(cx.def) ),*];
                 cx.add_rule(production);
@@ -435,11 +437,11 @@ pub struct Choice<T>(pub T);
 
 macro_rules! impl_production_for_choice {
     ($($P:ident),*) => {
-        impl<'g, $($P),*> Production<'g> for Choice<($($P),*)>
-        where $( $P: Production<'g>, )* {
+        impl<$($P),*> Production for Choice<($($P),*)>
+        where $( $P: Production, )* {
             #[allow(non_snake_case)]
             #[inline]
-            fn add_rules(self, cx: &mut ProductionContext<'g, '_>) {
+            fn add_rules(self, cx: &mut ProductionContext<'_, '_>) {
                 let Choice(($($P),*)) = self;
                 $( $P.add_rules(cx); )*
             }

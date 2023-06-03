@@ -9,7 +9,7 @@ use std::fmt;
 
 #[derive(Debug)]
 pub struct ParserDefinition<'g> {
-    grammar: &'g Grammar<'g>,
+    grammar: &'g Grammar,
     table: IndexMap<NodeID, IndexMap<SymbolID, Action>>,
     start_node: NodeID,
 
@@ -20,8 +20,7 @@ pub struct ParserDefinition<'g> {
 }
 
 impl<'g> ParserDefinition<'g> {
-    pub fn new(grammar: &'g Grammar<'g>) -> Self {
-        let dfa = DFA::generate(&grammar);
+    pub fn new(grammar: &'g Grammar, dfa: &'g DFA<'g>) -> Self {
         let start_node = dfa.start_node().0;
         let table: IndexMap<NodeID, _> = dfa
             .nodes()

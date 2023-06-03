@@ -23,14 +23,14 @@ fn bench_min_caml(c: &mut Criterion) {
     bench_dfa_gen(c, "MinCaml", grammars::min_caml);
 }
 
-fn bench_dfa_gen(c: &mut Criterion, group_name: &str, f: impl FnOnce(&mut GrammarDef<'static>)) {
+fn bench_dfa_gen(c: &mut Criterion, group_name: &str, f: impl FnOnce(&mut GrammarDef<'_>)) {
     let mut group = c.benchmark_group(group_name);
     let grammar = Grammar::define(f);
     group.bench_function("Canonical", |b| {
-        b.iter(|| Config::new(&grammar).use_canonical().generate());
+        b.iter(|| Config::new().use_canonical().generate(&grammar));
     });
     group.bench_function("LALR", |b| {
-        b.iter(|| Config::new(&grammar).use_lalr().generate());
+        b.iter(|| Config::new().use_lalr().generate(&grammar));
     });
     group.finish();
 }

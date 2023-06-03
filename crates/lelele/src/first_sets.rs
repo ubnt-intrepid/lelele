@@ -10,7 +10,7 @@ pub struct FirstSets {
 }
 
 impl FirstSets {
-    pub fn new(grammar: &Grammar<'_>) -> Self {
+    pub fn new(grammar: &Grammar) -> Self {
         let nulls = nulls_set(grammar);
         let first_sets = first_set(grammar, &nulls);
         Self { nulls, first_sets }
