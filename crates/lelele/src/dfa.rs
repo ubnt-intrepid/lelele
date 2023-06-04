@@ -479,11 +479,6 @@ enum ItemSetDiff {
 fn compare_item_sets(mode: MergeMode, left: &LRItemSet, right: &LRItemSet) -> ItemSetDiff {
     // Assume that `left` and `right` have the same LR(0) core.
 
-    // shortcut
-    if matches!(mode, MergeMode::LALR) {
-        return ItemSetDiff::Compatible;
-    }
-
     let mut is_canonically_same = true;
     for (left, right) in left.values().zip(right.values()) {
         if !left.is_superset(right) {
@@ -496,7 +491,7 @@ fn compare_item_sets(mode: MergeMode, left: &LRItemSet, right: &LRItemSet) -> It
     }
 
     match mode {
-        MergeMode::LALR => unreachable!(),
+        MergeMode::LALR => ItemSetDiff::Compatible,
         MergeMode::PGM if is_pgm_weakly_compatible(left, right) => ItemSetDiff::Compatible,
         _ => ItemSetDiff::Different,
     }
