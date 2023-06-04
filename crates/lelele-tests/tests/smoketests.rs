@@ -53,6 +53,36 @@ fn smoketest_g4() {
 }
 
 #[test]
+fn smoketest_g5() {
+    smoketest_grammar(grammars::g5);
+}
+
+#[test]
+fn smoketest_g6() {
+    smoketest_grammar(grammars::g6);
+}
+
+#[test]
+fn smoketest_g7() {
+    smoketest_grammar(grammars::g7);
+}
+
+#[test]
+fn smoketest_g8() {
+    smoketest_grammar(grammars::g8);
+}
+
+#[test]
+fn smoketest_g9() {
+    smoketest_grammar(grammars::g9);
+}
+
+#[test]
+fn smoketest_g10() {
+    smoketest_grammar(grammars::g10);
+}
+
+#[test]
 fn smoketest_min_caml() {
     smoketest_grammar(grammars::min_caml);
 }

@@ -118,7 +118,155 @@ pub fn g4(g: &mut GrammarDef<'_>) {
     g.rule(t, [num]);
 }
 
-// TODO: G5 ~ G17
+pub fn g5(g: &mut GrammarDef<'_>) {
+    let a = g.token("A");
+    let plus = g.token("PLUS");
+    let star = g.token("STAR");
+    let lparen = g.token("LPAREN");
+    let rparen = g.token("RPAREN");
+
+    let e = g.symbol("E");
+    let t = g.symbol("T");
+
+    g.rule(e, [e, plus, t]);
+    g.rule(e, [t]);
+
+    g.rule(t, [t, star, a]);
+    g.rule(t, [a]);
+    g.rule(t, [lparen, e, rparen]);
+}
+
+pub fn g6(g: &mut GrammarDef<'_>) {
+    let a = g.token("A");
+    let num = g.token("NUM");
+    let plus = g.token("PLUS");
+    let lparen = g.token("LPAREN");
+    let rparen = g.token("RPAREN");
+
+    let e = g.symbol("E");
+    let t = g.symbol("T");
+    let n = g.symbol("N");
+
+    g.rule(e, [e, plus, t, n]);
+    g.rule(e, [t]);
+
+    g.rule(t, [a]);
+    g.rule(t, [lparen, e, n, rparen]);
+    g.rule(t, [n, a]);
+
+    g.rule(n, []);
+    g.rule(n, [num]);
+}
+
+pub fn g7(g: &mut GrammarDef<'_>) {
+    let t_d = g.token("T_D");
+    let t_i = g.token("T_I");
+    let t_r = g.token("T_R");
+    let t_c = g.token("T_C");
+    let t_x = g.token("T_X");
+    let t_f = g.token("T_F");
+    let t_n = g.token("T_N");
+    let t_o = g.token("T_O");
+    let t_a = g.token("T_A");
+    let t_e = g.token("T_E");
+
+    let s_s = g.symbol("N_S");
+    let s_a = g.symbol("N_A");
+    let s_t = g.symbol("N_T");
+    let s_m = g.symbol("N_M");
+    let s_y = g.symbol("N_Y");
+    let s_p = g.symbol("N_P");
+    let s_b = g.symbol("N_B");
+
+    g.rule(s_s, [t_d, t_i, s_a]);
+
+    g.rule(s_a, [s_a, s_t]);
+    g.rule(s_a, []);
+
+    g.rule(s_t, [s_m]);
+    g.rule(s_t, [s_y]);
+    g.rule(s_t, [s_p]);
+    g.rule(s_t, [s_b]);
+
+    g.rule(s_m, [t_r]);
+    g.rule(s_m, [t_c]);
+
+    g.rule(s_y, [t_x]);
+    g.rule(s_y, [t_f]);
+
+    g.rule(s_p, [t_n]);
+    g.rule(s_p, [t_o]);
+
+    g.rule(s_b, [t_a]);
+    g.rule(s_b, [t_e]);
+}
+
+pub fn g8(g: &mut GrammarDef<'_>) {
+    let t_x = g.token("X");
+    let t_y = g.token("Y");
+    let t_s = g.token("S");
+    let t_plus = g.token("PLUS");
+
+    let s_a = g.symbol("A");
+    let s_b = g.symbol("B");
+    let s_c = g.symbol("C");
+    let s_d = g.symbol("D");
+    let s_e = g.symbol("E");
+
+    g.rule(s_a, [s_a, s_b]);
+    g.rule(s_a, [s_b]);
+
+    g.rule(s_b, [s_c]);
+    g.rule(s_c, [s_d]);
+
+    g.rule(s_c, [t_x, t_y]);
+
+    g.rule(s_d, [t_s, s_e]);
+
+    g.rule(s_e, [s_e, t_plus, t_y]);
+    g.rule(s_e, [t_y]);
+    g.rule(s_e, []);
+}
+
+pub fn g9(g: &mut GrammarDef<'_>) {
+    let t_a = g.token("T_A");
+    let t_plus = g.token("T_PLUS");
+    let t_num = g.token("T_NUM");
+    let t_lparen = g.token("T_LPAREN");
+    let t_rparen = g.token("T_RPAREN");
+
+    let n_e = g.symbol("N_E");
+    let n_t = g.symbol("N_T");
+
+    g.rule(n_e, [n_e, t_plus, n_t]);
+    g.rule(n_e, [n_t]);
+
+    g.rule(n_t, [t_a]);
+    g.rule(n_t, [t_num]);
+    g.rule(n_t, [t_lparen, n_e, t_rparen]);
+}
+
+pub fn g10(g: &mut GrammarDef<'_>) {
+    let t_a = g.token("T_A");
+    let t_x = g.token("T_X");
+    let t_lparen = g.token("T_LPAREN");
+    let t_rparen = g.token("T_RPAREN");
+
+    let n_e = g.symbol("N_E");
+    let n_t = g.symbol("N_T");
+    let n_o = g.symbol("N_O");
+
+    g.rule(n_e, [n_e, n_o, n_t]);
+    g.rule(n_e, [n_t]);
+
+    g.rule(n_t, [t_a]);
+    g.rule(n_t, [t_lparen, n_e, t_rparen]);
+
+    g.rule(n_o, [t_x]);
+    g.rule(n_o, []);
+}
+
+// TODO: G11 ~ G17
 
 pub fn min_caml(g: &mut GrammarDef<'_>) {
     // WIP

@@ -17,6 +17,12 @@ fn bench_simple_2(c: &mut Criterion) {
     bench_dfa_gen(c, "g1", grammars::g1);
     bench_dfa_gen(c, "g2", grammars::g2);
     bench_dfa_gen(c, "g4", grammars::g4);
+    bench_dfa_gen(c, "g5", grammars::g5);
+    bench_dfa_gen(c, "g6", grammars::g6);
+    bench_dfa_gen(c, "g7", grammars::g7);
+    bench_dfa_gen(c, "g8", grammars::g8);
+    bench_dfa_gen(c, "g9", grammars::g9);
+    bench_dfa_gen(c, "g10", grammars::g10);
 }
 
 fn bench_min_caml(c: &mut Criterion) {
