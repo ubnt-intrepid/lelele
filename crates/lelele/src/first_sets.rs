@@ -16,16 +16,26 @@ impl FirstSets {
         Self { nulls, first_sets }
     }
 
-    /// `First(prefix x)`
-    pub fn get(&self, prefix: &[SymbolID], x: SymbolID) -> IndexSet<SymbolID> {
+    /// `First(prefix lookaheads)`
+    pub fn get<'i, I>(&self, prefix: &[SymbolID], lookaheads: I) -> IndexSet<SymbolID>
+    where
+        I: IntoIterator<Item = &'i SymbolID>,
+    {
         let mut res = IndexSet::default();
-        for token in prefix.iter().chain(Some(&x)) {
-            let added = self.first_sets.get(token).expect("unexpected token");
-            res.extend(added.iter().copied());
+
+        let mut is_end = false;
+        for token in prefix {
+            res.extend(self.first_sets[token].iter().copied());
             if !self.nulls.contains(token) {
+                is_end = true;
                 break;
             }
         }
+
+        if !is_end {
+            res.extend(lookaheads.into_iter().flat_map(|x| &self.first_sets[x]));
+        }
+
         res
     }
 }

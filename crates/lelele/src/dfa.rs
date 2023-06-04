@@ -323,21 +323,17 @@ impl NodeExtractor<'_> {
                 // lookaheads = {x1,x2,...,xk} としたとき、
                 //   x \in First(beta x1) \cup ... \cup First(beta xk)
                 // を満たすすべての終端記号を考える
-                for x in lookaheads
-                    .iter()
-                    .flat_map(|l| self.first_sets.get(beta, *l))
-                {
-                    for (rule_id, rule) in self.grammar.rules() {
-                        // Y: ... という形式の構文規則のみを対象にする
-                        if rule.left() != y_symbol {
-                            continue;
-                        }
-
-                        added
-                            .entry(LRCoreItem { rule_id, marker: 0 })
-                            .or_default()
-                            .insert(x);
+                let x = self.first_sets.get(beta, &*lookaheads);
+                for (rule_id, rule) in self.grammar.rules() {
+                    // Y: ... という形式の構文規則のみを対象にする
+                    if rule.left() != y_symbol {
+                        continue;
                     }
+
+                    added
+                        .entry(LRCoreItem { rule_id, marker: 0 })
+                        .or_default()
+                        .extend(&x);
                 }
             }
 
