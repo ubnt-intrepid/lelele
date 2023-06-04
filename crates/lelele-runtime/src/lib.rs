@@ -7,7 +7,7 @@ pub mod parser;
 #[doc(hidden)]
 pub mod _private {
     pub use crate::{
-        definition::{ParserAction, ParserActionError, ParserDefinition},
+        definition::{ParseAction, ParseActionError, ParseTable},
         parser::{Parser, Token},
     };
     pub use ::phf;

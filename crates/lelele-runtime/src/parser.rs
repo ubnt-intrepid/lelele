@@ -1,17 +1,18 @@
 //! Parser.
 
-use crate::definition::{ParserAction, ParserActionError, ParserDefinition};
+use crate::definition::{ParseAction, ParseActionError, ParseTable};
 use std::{fmt, mem};
 
+/// A trait for abstracting token symbols.
 pub trait Token<TSym> {
     fn as_symbol(&self) -> TSym;
 }
 
-/// The parser type based on generated definition.
+/// The parser driven based on the generated parse table.
 #[derive(Debug)]
 pub struct Parser<TDef, TTok>
 where
-    TDef: ParserDefinition,
+    TDef: ParseTable,
     TTok: Token<TDef::Symbol>,
 {
     definition: TDef,
@@ -30,10 +31,10 @@ enum ParserState {
 
 impl<TDef, TTok> Parser<TDef, TTok>
 where
-    TDef: ParserDefinition,
+    TDef: ParseTable,
     TTok: Token<TDef::Symbol>,
 {
-    /// Create an instance of `Parser` using the specified parser definition.
+    /// Create an instance of `Parser` using the specified parse table.
     pub fn new(definition: TDef) -> Self {
         let initial_state = definition.initial_state();
         Self {
@@ -46,7 +47,7 @@ where
     }
 
     /// Consume some tokens and drive the state machine
-    /// until it matches a certain syntax rule.
+    /// until it matches a certain production rule.
     pub fn next_event<I, E>(
         &mut self,
         tokens: &mut I,
@@ -80,12 +81,8 @@ where
                 }
             };
 
-            match self
-                .definition
-                .action(*current, input)
-                .map_err(ParseError::ParserDef)?
-            {
-                ParserAction::Shift(n) => {
+            match self.definition.action(*current, input) {
+                ParseAction::Shift(n) => {
                     if !matches!(self.parser_state, ParserState::PendingGoto) {
                         let t = match self.peeked_token.take() {
                             Some(t) => t,
@@ -103,7 +100,7 @@ where
                     continue;
                 }
 
-                ParserAction::Reduce(reduce, lhs, n) => {
+                ParseAction::Reduce(reduce, lhs, n) => {
                     args.resize_with(n, Default::default);
                     for i in 0..n {
                         self.state_stack.pop();
@@ -120,7 +117,7 @@ where
                     return Ok(ParseEvent::Reduce(reduce));
                 }
 
-                ParserAction::Accept => {
+                ParseAction::Accept => {
                     let arg = self
                         .item_stack
                         .pop()
@@ -130,6 +127,11 @@ where
 
                     self.parser_state = ParserState::Accepted;
                     return Ok(ParseEvent::Accept);
+                }
+
+                ParseAction::Error(err) => {
+                    // FIXME: handle parse table errors
+                    return Err(ParseError::ParserDef(err));
                 }
             }
         }
@@ -164,7 +166,7 @@ impl<TTok, TSym> ParseItem<TTok, TSym> {
 #[derive(Debug)]
 pub enum ParseEvent<TDef>
 where
-    TDef: ParserDefinition,
+    TDef: ParseTable,
 {
     Reduce(TDef::Reduce),
     Accept,
@@ -176,7 +178,7 @@ pub enum ParseError<L: fmt::Display> {
     Lexer(L),
 
     #[error("from parser definition: {}", _0)]
-    ParserDef(ParserActionError),
+    ParserDef(ParseActionError),
 
     #[error("unexpected EOI")]
     UnexpectedEOI,
