@@ -2,7 +2,7 @@ use anyhow::Context;
 use lelele::{
     codegen::ParserDefinition,
     dfa::DFA,
-    grammar::{Grammar, GrammarDef},
+    grammar::{Grammar, GrammarDef, GrammarDefError},
 };
 use lelele_tests::grammars;
 use std::{env, fs, path::PathBuf};
@@ -17,9 +17,9 @@ fn main() -> anyhow::Result<()> {
 
 fn generate_parser(
     name: &str,
-    grammar_def: impl FnOnce(&mut GrammarDef<'_>),
+    grammar_def: impl FnOnce(&mut GrammarDef<'_>) -> Result<(), GrammarDefError>,
 ) -> anyhow::Result<()> {
-    let grammar = Grammar::define(grammar_def);
+    let grammar = Grammar::define(grammar_def).unwrap();
     let dfa = DFA::generate(&grammar);
     let parser_def = ParserDefinition::new(&grammar, &dfa);
 

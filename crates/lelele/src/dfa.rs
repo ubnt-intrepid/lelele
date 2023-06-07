@@ -531,24 +531,27 @@ mod tests {
     #[test]
     fn smoketest1() {
         let grammar = Grammar::define(|def| {
-            let equal = def.token("EQUAL");
-            let plus = def.token("PLUS");
-            let ident = def.token("ID");
-            let num = def.token("NUM");
+            let equal = def.token("EQUAL")?;
+            let plus = def.token("PLUS")?;
+            let ident = def.token("ID")?;
+            let num = def.token("NUM")?;
 
-            let a = def.symbol("A");
-            let e = def.symbol("E");
-            let t = def.symbol("T");
+            let a = def.symbol("A")?;
+            let e = def.symbol("E")?;
+            let t = def.symbol("T")?;
 
-            def.start_symbol(a);
+            def.start_symbol(a)?;
 
-            def.rule(a, [e, equal, e]);
-            def.rule(a, [ident]);
-            def.rule(e, [e, plus, t]);
-            def.rule(e, [t]);
-            def.rule(t, [num]);
-            def.rule(t, [ident]);
-        });
+            def.rule(a, [e, equal, e])?;
+            def.rule(a, [ident])?;
+            def.rule(e, [e, plus, t])?;
+            def.rule(e, [t])?;
+            def.rule(t, [num])?;
+            def.rule(t, [ident])?;
+
+            Ok(())
+        })
+        .unwrap();
         eprintln!("{}", grammar);
 
         let dfa = DFA::generate(&grammar);
@@ -559,35 +562,38 @@ mod tests {
     fn smoketest2() {
         let grammar = Grammar::define(|g| {
             // declare terminal symbols.
-            let lparen = g.token("LPAREN");
-            let rparen = g.token("RPAREN");
-            let plus = g.token("PLUS");
-            let minus = g.token("MINUS");
-            let star = g.token("STAR");
-            let slash = g.token("SLASH");
-            let num = g.token("NUM");
-            let _ = g.token("UNUSED_0");
+            let lparen = g.token("LPAREN")?;
+            let rparen = g.token("RPAREN")?;
+            let plus = g.token("PLUS")?;
+            let minus = g.token("MINUS")?;
+            let star = g.token("STAR")?;
+            let slash = g.token("SLASH")?;
+            let num = g.token("NUM")?;
+            let _ = g.token("UNUSED_0")?;
 
             // declare nonterminal symbols.
-            let expr = g.symbol("EXPR");
-            let factor = g.symbol("FACTOR");
-            let term = g.symbol("TERM");
-            let _ = g.symbol("UNUSED_1");
+            let expr = g.symbol("EXPR")?;
+            let factor = g.symbol("FACTOR")?;
+            let term = g.symbol("TERM")?;
+            let _ = g.symbol("UNUSED_1")?;
 
             // declare syntax rules.
-            g.rule(expr, [expr, plus, factor]); // expr '+' factor
-            g.rule(expr, [expr, minus, factor]); // expr '-' factor
-            g.rule(expr, [factor]); // factor
+            g.rule(expr, [expr, plus, factor])?; // expr '+' factor
+            g.rule(expr, [expr, minus, factor])?; // expr '-' factor
+            g.rule(expr, [factor])?; // factor
 
-            g.rule(factor, [factor, star, term]); // factor '*' term
-            g.rule(factor, [factor, slash, term]); // factor '/' term
-            g.rule(factor, [term]); // term
+            g.rule(factor, [factor, star, term])?; // factor '*' term
+            g.rule(factor, [factor, slash, term])?; // factor '/' term
+            g.rule(factor, [term])?; // term
 
-            g.rule(term, [num]); // num
-            g.rule(term, [lparen, expr, rparen]); // '(' expr ')'
+            g.rule(term, [num])?; // num
+            g.rule(term, [lparen, expr, rparen])?; // '(' expr ')'
 
-            g.start_symbol(expr);
-        });
+            g.start_symbol(expr)?;
+
+            Ok(())
+        })
+        .unwrap();
         eprintln!("{}", grammar);
 
         let dfa = DFA::generate(&grammar);

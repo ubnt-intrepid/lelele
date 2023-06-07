@@ -1,11 +1,11 @@
 use lelele::{
     dfa::Config,
-    grammar::{Grammar, GrammarDef},
+    grammar::{Grammar, GrammarDef, GrammarDefError},
 };
 use lelele_tests::grammars;
 
-fn smoketest_grammar(f: impl FnOnce(&mut GrammarDef<'_>)) {
-    let grammar = Grammar::define(f);
+fn smoketest_grammar(f: impl FnOnce(&mut GrammarDef<'_>) -> Result<(), GrammarDefError>) {
+    let grammar = Grammar::define(f).unwrap();
     eprintln!("grammar:\n{}", grammar);
     eprintln!();
 

@@ -178,9 +178,9 @@ impl fmt::Display for Grammar {
 
 impl Grammar {
     /// Define a grammar using the specified function.
-    pub fn define<F>(f: F) -> Self
+    pub fn define<F>(f: F) -> Result<Self, GrammarDefError>
     where
-        F: FnOnce(&mut GrammarDef),
+        F: FnOnce(&mut GrammarDef) -> Result<(), GrammarDefError>,
     {
         let mut def = GrammarDef {
             symbols: IndexMap::default(),
@@ -191,7 +191,7 @@ impl Grammar {
             _marker: PhantomData,
         };
 
-        f(&mut def);
+        f(&mut def)?;
 
         def.end()
     }
@@ -269,25 +269,25 @@ pub struct GrammarDef<'def> {
 }
 
 impl GrammarDef<'_> {
-    fn add_symbol(&mut self, added: Symbol) -> SymbolID {
+    fn add_symbol(&mut self, added: Symbol) -> Result<SymbolID, GrammarDefError> {
         match self
             .symbols
             .iter_mut()
             .find(|(_, sym)| sym.name == added.name)
         {
             Some((id, sym)) => {
-                debug_assert!(
-                    sym.kind == added.kind,
-                    "conflict symbol kind (name={})",
-                    sym.name
-                );
-                *id
+                if sym.kind != added.kind {
+                    return Err(GrammarDefError {
+                        msg: format!("conflict symbol kind (name={})", sym.name),
+                    });
+                }
+                Ok(*id)
             }
             None => {
                 let id = SymbolID::new(self.next_symbol_id);
                 self.next_symbol_id += 1;
                 self.symbols.insert(id, added);
-                id
+                Ok(id)
             }
         }
     }
@@ -300,7 +300,10 @@ impl GrammarDef<'_> {
     }
 
     /// Specify a terminal symbol used in this grammar.
-    pub fn token(&mut self, name: impl Into<Cow<'static, str>>) -> SymbolID {
+    pub fn token(
+        &mut self,
+        name: impl Into<Cow<'static, str>>,
+    ) -> Result<SymbolID, GrammarDefError> {
         self.add_symbol(Symbol {
             name: name.into(),
             kind: SymbolKind::Terminal,
@@ -308,7 +311,10 @@ impl GrammarDef<'_> {
     }
 
     /// Specify a nonterminal symbol used in this grammar.
-    pub fn symbol(&mut self, name: impl Into<Cow<'static, str>>) -> SymbolID {
+    pub fn symbol(
+        &mut self,
+        name: impl Into<Cow<'static, str>>,
+    ) -> Result<SymbolID, GrammarDefError> {
         self.add_symbol(Symbol {
             name: name.into(),
             kind: SymbolKind::Nonterminal,
@@ -316,34 +322,41 @@ impl GrammarDef<'_> {
     }
 
     /// Register a production rule into this grammer.
-    pub fn rule<I>(&mut self, left: SymbolID, right: I) -> RuleID
+    pub fn rule<I>(&mut self, left: SymbolID, right: I) -> Result<RuleID, GrammarDefError>
     where
         I: IntoIterator<Item = SymbolID>,
     {
-        debug_assert!(
-            self.symbols
-                .get(&left)
-                .map_or(false, |lhs| lhs.kind == SymbolKind::Nonterminal),
-            "The starting symbol in production rule must be nonterminal"
-        );
-        self.add_rule(RuleInner {
+        if self
+            .symbols
+            .get(&left)
+            .map_or(true, |lhs| lhs.kind != SymbolKind::Nonterminal)
+        {
+            return Err(GrammarDefError {
+                msg: "The starting symbol in production rule must be nonterminal".into(),
+            });
+        }
+        Ok(self.add_rule(RuleInner {
             left,
             right: right.into_iter().collect(),
-        })
+        }))
     }
 
     /// Specify the start symbol.
-    pub fn start_symbol(&mut self, symbol: SymbolID) {
-        debug_assert!(
-            self.symbols
-                .get(&symbol)
-                .map_or(false, |s| s.kind == SymbolKind::Nonterminal),
-            "the start symbol must be nonterminal"
-        );
+    pub fn start_symbol(&mut self, symbol: SymbolID) -> Result<(), GrammarDefError> {
+        if self
+            .symbols
+            .get(&symbol)
+            .map_or(true, |s| s.kind != SymbolKind::Nonterminal)
+        {
+            return Err(GrammarDefError {
+                msg: "the start symbol must be nonterminal".into(),
+            });
+        }
         self.start.replace(symbol);
+        Ok(())
     }
 
-    fn end(mut self) -> Grammar {
+    fn end(mut self) -> Result<Grammar, GrammarDefError> {
         // start symbolのID変換
         // 指定されていない場合は最初に登録されたnonterminal symbolを用いる
         let start = match self.start.take() {
@@ -355,7 +368,7 @@ impl GrammarDef<'_> {
                 .unwrap(),
         };
 
-        Grammar {
+        Ok(Grammar {
             symbols: self.symbols,
             rules: self.rules,
             start_symbol: start,
@@ -363,6 +376,12 @@ impl GrammarDef<'_> {
                 left: SymbolID::ACCEPT,
                 right: vec![start],
             },
-        }
+        })
     }
+}
+
+#[derive(Debug)]
+pub struct GrammarDefError {
+    #[allow(dead_code)]
+    msg: String,
 }

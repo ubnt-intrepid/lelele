@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use lelele::{
     dfa::Config,
-    grammar::{Grammar, GrammarDef},
+    grammar::{Grammar, GrammarDef, GrammarDefError},
 };
 use lelele_tests::grammars;
 
@@ -29,9 +29,13 @@ fn bench_min_caml(c: &mut Criterion) {
     bench_dfa_gen(c, "MinCaml", grammars::min_caml);
 }
 
-fn bench_dfa_gen(c: &mut Criterion, group_name: &str, f: impl FnOnce(&mut GrammarDef<'_>)) {
+fn bench_dfa_gen(
+    c: &mut Criterion,
+    group_name: &str,
+    f: impl FnOnce(&mut GrammarDef<'_>) -> Result<(), GrammarDefError>,
+) {
     let mut group = c.benchmark_group(group_name);
-    let grammar = Grammar::define(f);
+    let grammar = Grammar::define(f).unwrap();
     group.bench_function("Canonical", |b| {
         b.iter(|| Config::new().use_canonical().generate(&grammar));
     });
