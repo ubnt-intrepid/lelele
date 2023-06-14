@@ -21,7 +21,7 @@ fn main() -> anyhow::Result<()> {
     let mut ast_stack = vec![];
     loop {
         match parser.next_event(&mut tokens, &mut args)? {
-            ParseEvent::Reduce(RuleID::EXPR_0) => {
+            ParseEvent::Reduce(RuleID::EXPR_ADD) => {
                 // expr : expr '+' factor
                 match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
                     (
@@ -32,7 +32,7 @@ fn main() -> anyhow::Result<()> {
                     _ => anyhow::bail!("unexpected stack/parse item"),
                 }
             }
-            ParseEvent::Reduce(RuleID::EXPR_1) => {
+            ParseEvent::Reduce(RuleID::EXPR_SUB) => {
                 // expr : expr '-' factor
                 match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
                     (
@@ -43,7 +43,7 @@ fn main() -> anyhow::Result<()> {
                     _ => anyhow::bail!("unexpected stack/parse item"),
                 }
             }
-            ParseEvent::Reduce(RuleID::EXPR_2) => {
+            ParseEvent::Reduce(RuleID::EXPR_FACTOR) => {
                 // expr : factor
                 match ast_stack.pop() {
                     Some(StackItem::Factor(factor)) => {
@@ -53,7 +53,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            ParseEvent::Reduce(RuleID::FACTOR_0) => {
+            ParseEvent::Reduce(RuleID::FACTOR_MUL) => {
                 // factor : factor '*' term
                 match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
                     (
@@ -64,7 +64,7 @@ fn main() -> anyhow::Result<()> {
                     _ => anyhow::bail!("unexpected stack/parse item"),
                 }
             }
-            ParseEvent::Reduce(RuleID::FACTOR_1) => {
+            ParseEvent::Reduce(RuleID::FACTOR_DIV) => {
                 // factor : factor '/' term
                 match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
                     (
@@ -75,7 +75,7 @@ fn main() -> anyhow::Result<()> {
                     _ => anyhow::bail!("unexpected stack/parse item"),
                 }
             }
-            ParseEvent::Reduce(RuleID::FACTOR_2) => {
+            ParseEvent::Reduce(RuleID::FACTOR_TERM) => {
                 // factor : term
                 match ast_stack.pop() {
                     Some(StackItem::Term(term)) => {
@@ -85,7 +85,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            ParseEvent::Reduce(RuleID::TERM_0) => {
+            ParseEvent::Reduce(RuleID::TERM_NUM) => {
                 // term : num
                 match args[0].take() {
                     Some(ParseItem::T(num)) => {
@@ -94,7 +94,7 @@ fn main() -> anyhow::Result<()> {
                     _ => anyhow::bail!("unexpected parse item"),
                 }
             }
-            ParseEvent::Reduce(RuleID::TERM_1) => {
+            ParseEvent::Reduce(RuleID::TERM_PAREN) => {
                 // term : '(' expr ')'
                 match (args[0].take(), ast_stack.pop(), args[2].take()) {
                     (

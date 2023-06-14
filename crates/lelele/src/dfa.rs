@@ -681,12 +681,12 @@ mod tests {
 
             def.start_symbol(a)?;
 
-            def.rule(a, [e, equal, e])?;
-            def.rule(a, [ident])?;
-            def.rule(e, [e, plus, t])?;
-            def.rule(e, [t])?;
-            def.rule(t, [num])?;
-            def.rule(t, [ident])?;
+            def.rule("A1", a, [e, equal, e])?;
+            def.rule("A2", a, [ident])?;
+            def.rule("E1", e, [e, plus, t])?;
+            def.rule("E2", e, [t])?;
+            def.rule("T1", t, [num])?;
+            def.rule("T2", t, [ident])?;
 
             Ok(())
         })
@@ -717,16 +717,16 @@ mod tests {
             let _ = g.symbol("UNUSED_1")?;
 
             // declare syntax rules.
-            g.rule(expr, [expr, plus, factor])?; // expr '+' factor
-            g.rule(expr, [expr, minus, factor])?; // expr '-' factor
-            g.rule(expr, [factor])?; // factor
+            g.rule("EXPR1", expr, [expr, plus, factor])?; // expr '+' factor
+            g.rule("EXPR2", expr, [expr, minus, factor])?; // expr '-' factor
+            g.rule("EXPR3", expr, [factor])?; // factor
 
-            g.rule(factor, [factor, star, term])?; // factor '*' term
-            g.rule(factor, [factor, slash, term])?; // factor '/' term
-            g.rule(factor, [term])?; // term
+            g.rule("FACTOR1", factor, [factor, star, term])?; // factor '*' term
+            g.rule("FACTOR2", factor, [factor, slash, term])?; // factor '/' term
+            g.rule("FACTOR3", factor, [term])?; // term
 
-            g.rule(term, [num])?; // num
-            g.rule(term, [lparen, expr, rparen])?; // '(' expr ')'
+            g.rule("TERM1", term, [num])?; // num
+            g.rule("TERM2", term, [lparen, expr, rparen])?; // '(' expr ')'
 
             g.start_symbol(expr)?;
 

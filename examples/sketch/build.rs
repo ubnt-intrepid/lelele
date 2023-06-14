@@ -48,16 +48,16 @@ fn grammar_def(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {
 
     // declare syntax rules.
 
-    g.rule(expr, [expr, plus, factor])?; // expr '+' factor
-    g.rule(expr, [expr, minus, factor])?; // expr '-' factor
-    g.rule(expr, [factor])?; // factor
+    g.rule("EXPR_ADD", expr, [expr, plus, factor])?; // expr '+' factor
+    g.rule("EXPR_SUB", expr, [expr, minus, factor])?; // expr '-' factor
+    g.rule("EXPR_FACTOR", expr, [factor])?; // factor
 
-    g.rule(factor, [factor, star, term])?; // factor '*' term
-    g.rule(factor, [factor, slash, term])?; // factor '/' term
-    g.rule(factor, [term])?; // term
+    g.rule("FACTOR_MUL", factor, [factor, star, term])?; // factor '*' term
+    g.rule("FACTOR_DIV", factor, [factor, slash, term])?; // factor '/' term
+    g.rule("FACTOR_TERM", factor, [term])?; // term
 
-    g.rule(term, [num])?; // num
-    g.rule(term, [lparen, expr, rparen])?; // '(' expr ')'
+    g.rule("TERM_NUM", term, [num])?; // num
+    g.rule("TERM_PAREN", term, [lparen, expr, rparen])?; // '(' expr ')'
 
     Ok(())
 }

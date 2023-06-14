@@ -34,32 +34,32 @@ fn case1() {
     let event = parser.next_event(&mut tokens, &mut args).unwrap();
     assert_matches!(
         (event, &args[..]),
-        (Reduce(p::RuleID::T_0), [T(Token(p::SymbolID::NUM))])
+        (Reduce(p::RuleID::T0), [T(Token(p::SymbolID::NUM))])
     );
 
     let event = parser.next_event(&mut tokens, &mut args).unwrap();
     assert_matches!(
         (event, &args[..]),
-        (Reduce(p::RuleID::E_1), [N(p::SymbolID::T)])
+        (Reduce(p::RuleID::E1), [N(p::SymbolID::T)])
     );
 
     let event = parser.next_event(&mut tokens, &mut args).unwrap();
     assert_matches!(
         (event, &args[..]),
-        (Reduce(p::RuleID::T_0), [T(Token(p::SymbolID::NUM))])
+        (Reduce(p::RuleID::T0), [T(Token(p::SymbolID::NUM))])
     );
 
     let event = parser.next_event(&mut tokens, &mut args).unwrap();
     assert_matches!(
         (event, &args[..]),
-        (Reduce(p::RuleID::E_1), [N(p::SymbolID::T)])
+        (Reduce(p::RuleID::E1), [N(p::SymbolID::T)])
     );
 
     let event = parser.next_event(&mut tokens, &mut args).unwrap();
     assert_matches!(
         (event, &args[..]),
         (
-            Reduce(p::RuleID::A_0),
+            Reduce(p::RuleID::A0),
             [
                 N(p::SymbolID::E),
                 T(Token(p::SymbolID::EQUAL)),

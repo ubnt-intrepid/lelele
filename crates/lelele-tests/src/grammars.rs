@@ -16,14 +16,14 @@ pub fn g_simple1(g: &mut GrammarDef<'_>) -> Result {
 
     g.start_symbol(a)?;
 
-    g.rule(a, [e, equal, e])?;
-    g.rule(a, [ident])?;
+    g.rule("A0", a, [e, equal, e])?;
+    g.rule("A1", a, [ident])?;
 
-    g.rule(e, [e, plus, t])?;
-    g.rule(e, [t])?;
+    g.rule("E0", e, [e, plus, t])?;
+    g.rule("E1", e, [t])?;
 
-    g.rule(t, [num])?;
-    g.rule(t, [ident])?;
+    g.rule("T0", t, [num])?;
+    g.rule("T1", t, [ident])?;
 
     Ok(())
 }
@@ -40,19 +40,19 @@ pub fn g_simple2(g: &mut GrammarDef<'_>) -> Result {
 
     // declare nonterminal symbols.
     let expr = g.symbol("EXPR")?;
-    let factor = g.symbol("FACTOR")?;
     let term = g.symbol("TERM")?;
+    let factor = g.symbol("FACTOR")?;
 
-    g.rule(expr, [expr, plus, factor])?; // expr '+' factor
-    g.rule(expr, [expr, minus, factor])?; // expr '-' factor
-    g.rule(expr, [factor])?; // factor
+    g.rule("EXPR1", expr, [expr, plus, term])?; // expr '+' factor
+    g.rule("EXPR2", expr, [expr, minus, term])?; // expr '-' factor
+    g.rule("EXPR3", expr, [term])?; // factor
 
-    g.rule(expr, [factor, star, term])?; // factor '*' term
-    g.rule(expr, [factor, slash, term])?; // factor '/' term
-    g.rule(expr, [term])?; // term
+    g.rule("TERM1", term, [term, star, factor])?; // factor '*' term
+    g.rule("TERM2", term, [term, slash, factor])?; // factor '/' term
+    g.rule("TERM3", term, [factor])?; // term
 
-    g.rule(term, [num])?; // num
-    g.rule(term, [lparen, expr, rparen])?; // '(' expr ')'
+    g.rule("FACTOR1", factor, [num])?; // num
+    g.rule("FACTOR2", factor, [lparen, expr, rparen])?; // '(' expr ')'
 
     g.start_symbol(expr)?;
 
@@ -67,11 +67,11 @@ pub fn g1(g: &mut GrammarDef<'_>) -> Result {
     let e = g.symbol("E")?;
     let t = g.symbol("T")?;
 
-    g.rule(e, [e, plus, t])?;
-    g.rule(e, [t])?;
+    g.rule("E1", e, [e, plus, t])?;
+    g.rule("E2", e, [t])?;
 
-    g.rule(t, [t, star, a])?;
-    g.rule(t, [a])?;
+    g.rule("T1", t, [t, star, a])?;
+    g.rule("T2", t, [a])?;
 
     g.start_symbol(e)?;
 
@@ -90,20 +90,20 @@ pub fn g2(g: &mut GrammarDef<'_>) -> Result {
     let name = g.symbol("NAME")?;
     let name_list = g.symbol("NAME_LIST")?;
 
-    g.rule(def, [param_spec, return_spec, comma])?;
+    g.rule("DEF", def, [param_spec, return_spec, comma])?;
 
-    g.rule(param_spec, [type_])?;
-    g.rule(param_spec, [name_list, colon, type_])?;
+    g.rule("PARAM_SPEC_TYPE", param_spec, [type_])?;
+    g.rule("PARAM_SPEC_LIST", param_spec, [name_list, colon, type_])?;
 
-    g.rule(return_spec, [type_])?;
-    g.rule(return_spec, [name, colon, type_])?;
+    g.rule("RETURN_SPEC_TYPE", return_spec, [type_])?;
+    g.rule("RETURN_SPEC_LIST", return_spec, [name, colon, type_])?;
 
-    g.rule(type_, [ident])?;
+    g.rule("TYPE_IDENT", type_, [ident])?;
 
-    g.rule(name, [ident])?;
+    g.rule("NAME_IDENT", name, [ident])?;
 
-    g.rule(name_list, [name])?;
-    g.rule(name_list, [name, comma, name_list])?;
+    g.rule("NAME_LIST_NAME", name_list, [name])?;
+    g.rule("NAME_LIST_LIST", name_list, [name, comma, name_list])?;
 
     Ok(())
 }
@@ -119,11 +119,11 @@ pub fn g4(g: &mut GrammarDef<'_>) -> Result {
     let e = g.symbol("E")?;
     let t = g.symbol("T")?;
 
-    g.rule(e, [e, plus, t])?;
-    g.rule(e, [t])?;
+    g.rule("E1", e, [e, plus, t])?;
+    g.rule("E2", e, [t])?;
 
-    g.rule(t, [lparen, e, rparen])?;
-    g.rule(t, [num])?;
+    g.rule("T1", t, [lparen, e, rparen])?;
+    g.rule("T2", t, [num])?;
 
     Ok(())
 }
@@ -138,12 +138,12 @@ pub fn g5(g: &mut GrammarDef<'_>) -> Result {
     let e = g.symbol("E")?;
     let t = g.symbol("T")?;
 
-    g.rule(e, [e, plus, t])?;
-    g.rule(e, [t])?;
+    g.rule("E1", e, [e, plus, t])?;
+    g.rule("T2", e, [t])?;
 
-    g.rule(t, [t, star, a])?;
-    g.rule(t, [a])?;
-    g.rule(t, [lparen, e, rparen])?;
+    g.rule("T1", t, [t, star, a])?;
+    g.rule("T2", t, [a])?;
+    g.rule("T3", t, [lparen, e, rparen])?;
 
     Ok(())
 }
@@ -159,15 +159,15 @@ pub fn g6(g: &mut GrammarDef<'_>) -> Result {
     let t = g.symbol("T")?;
     let n = g.symbol("N")?;
 
-    g.rule(e, [e, plus, t, n])?;
-    g.rule(e, [t])?;
+    g.rule("E1", e, [e, plus, t, n])?;
+    g.rule("E2", e, [t])?;
 
-    g.rule(t, [a])?;
-    g.rule(t, [lparen, e, n, rparen])?;
-    g.rule(t, [n, a])?;
+    g.rule("T1", t, [a])?;
+    g.rule("T2", t, [lparen, e, n, rparen])?;
+    g.rule("T3", t, [n, a])?;
 
-    g.rule(n, [])?;
-    g.rule(n, [num])?;
+    g.rule("N1", n, [])?;
+    g.rule("N2", n, [num])?;
 
     Ok(())
 }
@@ -192,27 +192,27 @@ pub fn g7(g: &mut GrammarDef<'_>) -> Result {
     let s_p = g.symbol("N_P")?;
     let s_b = g.symbol("N_B")?;
 
-    g.rule(s_s, [t_d, t_i, s_a])?;
+    g.rule("S", s_s, [t_d, t_i, s_a])?;
 
-    g.rule(s_a, [s_a, s_t])?;
-    g.rule(s_a, [])?;
+    g.rule("A1", s_a, [s_a, s_t])?;
+    g.rule("A2", s_a, [])?;
 
-    g.rule(s_t, [s_m])?;
-    g.rule(s_t, [s_y])?;
-    g.rule(s_t, [s_p])?;
-    g.rule(s_t, [s_b])?;
+    g.rule("T1", s_t, [s_m])?;
+    g.rule("T2", s_t, [s_y])?;
+    g.rule("T3", s_t, [s_p])?;
+    g.rule("T4", s_t, [s_b])?;
 
-    g.rule(s_m, [t_r])?;
-    g.rule(s_m, [t_c])?;
+    g.rule("M1", s_m, [t_r])?;
+    g.rule("M2", s_m, [t_c])?;
 
-    g.rule(s_y, [t_x])?;
-    g.rule(s_y, [t_f])?;
+    g.rule("Y1", s_y, [t_x])?;
+    g.rule("Y2", s_y, [t_f])?;
 
-    g.rule(s_p, [t_n])?;
-    g.rule(s_p, [t_o])?;
+    g.rule("P1", s_p, [t_n])?;
+    g.rule("P2", s_p, [t_o])?;
 
-    g.rule(s_b, [t_a])?;
-    g.rule(s_b, [t_e])?;
+    g.rule("B1", s_b, [t_a])?;
+    g.rule("B2", s_b, [t_e])?;
 
     Ok(())
 }
@@ -229,19 +229,19 @@ pub fn g8(g: &mut GrammarDef<'_>) -> Result {
     let s_d = g.symbol("D")?;
     let s_e = g.symbol("E")?;
 
-    g.rule(s_a, [s_a, s_b])?;
-    g.rule(s_a, [s_b])?;
+    g.rule("A1", s_a, [s_a, s_b])?;
+    g.rule("A2", s_a, [s_b])?;
 
-    g.rule(s_b, [s_c])?;
-    g.rule(s_c, [s_d])?;
+    g.rule("B", s_b, [s_c])?;
 
-    g.rule(s_c, [t_x, t_y])?;
+    g.rule("C1", s_c, [s_d])?;
+    g.rule("C2", s_c, [t_x, t_y])?;
 
-    g.rule(s_d, [t_s, s_e])?;
+    g.rule("D", s_d, [t_s, s_e])?;
 
-    g.rule(s_e, [s_e, t_plus, t_y])?;
-    g.rule(s_e, [t_y])?;
-    g.rule(s_e, [])?;
+    g.rule("E1", s_e, [s_e, t_plus, t_y])?;
+    g.rule("E2", s_e, [t_y])?;
+    g.rule("E3", s_e, [])?;
 
     Ok(())
 }
@@ -256,12 +256,12 @@ pub fn g9(g: &mut GrammarDef<'_>) -> Result {
     let n_e = g.symbol("N_E")?;
     let n_t = g.symbol("N_T")?;
 
-    g.rule(n_e, [n_e, t_plus, n_t])?;
-    g.rule(n_e, [n_t])?;
+    g.rule("E1", n_e, [n_e, t_plus, n_t])?;
+    g.rule("E2", n_e, [n_t])?;
 
-    g.rule(n_t, [t_a])?;
-    g.rule(n_t, [t_num])?;
-    g.rule(n_t, [t_lparen, n_e, t_rparen])?;
+    g.rule("T1", n_t, [t_a])?;
+    g.rule("T2", n_t, [t_num])?;
+    g.rule("T3", n_t, [t_lparen, n_e, t_rparen])?;
 
     Ok(())
 }
@@ -276,14 +276,14 @@ pub fn g10(g: &mut GrammarDef<'_>) -> Result {
     let n_t = g.symbol("N_T")?;
     let n_o = g.symbol("N_O")?;
 
-    g.rule(n_e, [n_e, n_o, n_t])?;
-    g.rule(n_e, [n_t])?;
+    g.rule("E1", n_e, [n_e, n_o, n_t])?;
+    g.rule("E2", n_e, [n_t])?;
 
-    g.rule(n_t, [t_a])?;
-    g.rule(n_t, [t_lparen, n_e, t_rparen])?;
+    g.rule("T1", n_t, [t_a])?;
+    g.rule("T2", n_t, [t_lparen, n_e, t_rparen])?;
 
-    g.rule(n_o, [t_x])?;
-    g.rule(n_o, [])?;
+    g.rule("O1", n_o, [t_x])?;
+    g.rule("O2", n_o, [])?;
 
     Ok(())
 }
@@ -342,78 +342,104 @@ pub fn min_caml(g: &mut GrammarDef<'_>) -> Result {
     let fundef = g.symbol("FUNDEF")?;
     let pat = g.symbol("PAT")?;
 
-    g.rule(simple_exp, [l_paren, exp, r_paren])?;
-    g.rule(simple_exp, [l_paren, r_paren])?;
-    g.rule(simple_exp, [t_true])?;
-    g.rule(simple_exp, [t_false])?;
-    g.rule(simple_exp, [integer])?;
-    g.rule(simple_exp, [float])?;
-    g.rule(simple_exp, [ident])?;
-    g.rule(simple_exp, [simple_exp, dot, l_paren, exp, r_paren])?;
-
-    g.rule(app_exp, [simple_exp])?;
-    g.rule(app_exp, [simple_exp, actual_args])?;
-    g.rule(app_exp, [array_make, simple_exp, simple_exp])?;
-    g.rule(app_exp, [t_not, app_exp])?;
-
-    g.rule(neg_exp, [app_exp])?;
-    g.rule(neg_exp, [minus, neg_exp])?;
-    g.rule(neg_exp, [minus_dot, neg_exp])?;
-
-    g.rule(mult_exp, [neg_exp])?;
-    g.rule(mult_exp, [mult_exp, star_dot, neg_exp])?;
-    g.rule(mult_exp, [mult_exp, slash_dot, neg_exp])?;
-
-    g.rule(add_exp, [mult_exp])?;
-    g.rule(add_exp, [add_exp, plus, mult_exp])?;
-    g.rule(add_exp, [add_exp, minus, mult_exp])?;
-    g.rule(add_exp, [add_exp, plus_dot, mult_exp])?;
-    g.rule(add_exp, [add_exp, minus_dot, mult_exp])?;
-
-    g.rule(rel_exp, [add_exp])?;
-    g.rule(rel_exp, [rel_exp, equal, add_exp])?;
-    g.rule(rel_exp, [rel_exp, less_greater, add_exp])?;
-    g.rule(rel_exp, [rel_exp, less, add_exp])?;
-    g.rule(rel_exp, [rel_exp, greater, add_exp])?;
-    g.rule(rel_exp, [rel_exp, less_equal, add_exp])?;
-    g.rule(rel_exp, [rel_exp, greater_equal, add_exp])?;
-
-    g.rule(tuple_exp, [rel_exp])?;
-    g.rule(tuple_exp, [rel_exp, comma, tuple_exp_rest])?;
-
-    g.rule(tuple_exp_rest, [rel_exp])?;
-    g.rule(tuple_exp_rest, [rel_exp, comma, tuple_exp_rest])?;
-
-    g.rule(put_exp, [tuple_exp])?;
+    g.rule("SIMPLE_EXP_PAREN", simple_exp, [l_paren, exp, r_paren])?;
+    g.rule("SIMPLE_EXP_UNIT", simple_exp, [l_paren, r_paren])?;
+    g.rule("SIMPLE_EXP_TRUE", simple_exp, [t_true])?;
+    g.rule("SIMPLE_EXP_FALSE", simple_exp, [t_false])?;
+    g.rule("SIMPLE_EXP_INT", simple_exp, [integer])?;
+    g.rule("SIMPLE_EXP_FLOAT", simple_exp, [float])?;
+    g.rule("SIMPLE_EXP_IDENT", simple_exp, [ident])?;
     g.rule(
+        "SIMPLE_EXP_ARRAY_GET",
+        simple_exp,
+        [simple_exp, dot, l_paren, exp, r_paren],
+    )?;
+
+    g.rule("APP_EXP_REDIRECT", app_exp, [simple_exp])?;
+    g.rule("APP_EXP_APPLY", app_exp, [simple_exp, actual_args])?;
+    g.rule(
+        "APP_EXP_ARRAY_MAKE",
+        app_exp,
+        [array_make, simple_exp, simple_exp],
+    )?;
+    g.rule("APP_EXP_NOT", app_exp, [t_not, app_exp])?;
+
+    g.rule("NEG_EXP_REDIRECT", neg_exp, [app_exp])?;
+    g.rule("NEG_EXP_NEG", neg_exp, [minus, neg_exp])?;
+    g.rule("NEG_EXP_NEG_DOT", neg_exp, [minus_dot, neg_exp])?;
+
+    g.rule("MULT_EXP_REDIRECT", mult_exp, [neg_exp])?;
+    g.rule("MULT_EXP_MUL", mult_exp, [mult_exp, star_dot, neg_exp])?;
+    g.rule("MULT_EXP_DIV", mult_exp, [mult_exp, slash_dot, neg_exp])?;
+
+    g.rule("ADD_EXP_REDIRECT", add_exp, [mult_exp])?;
+    g.rule("ADD_EXP_ADD", add_exp, [add_exp, plus, mult_exp])?;
+    g.rule("ADD_EXP_SUB", add_exp, [add_exp, minus, mult_exp])?;
+    g.rule("ADD_EXP_ADD_DOT", add_exp, [add_exp, plus_dot, mult_exp])?;
+    g.rule("ADD_EXP_SUB_DOT", add_exp, [add_exp, minus_dot, mult_exp])?;
+
+    g.rule("REL_EXP_REDIRECT", rel_exp, [add_exp])?;
+    g.rule("REL_EXP_EQ", rel_exp, [rel_exp, equal, add_exp])?;
+    g.rule("REL_EXP_LG", rel_exp, [rel_exp, less_greater, add_exp])?;
+    g.rule("REL_EXP_LT", rel_exp, [rel_exp, less, add_exp])?;
+    g.rule("REL_EXP_GT", rel_exp, [rel_exp, greater, add_exp])?;
+    g.rule("REL_EXP_LE", rel_exp, [rel_exp, less_equal, add_exp])?;
+    g.rule("REL_EXP_GE", rel_exp, [rel_exp, greater_equal, add_exp])?;
+
+    g.rule("TUPLE_EXP_REDIRECT", tuple_exp, [rel_exp])?;
+    g.rule(
+        "TUPLE_EXP_TUPLE",
+        tuple_exp,
+        [rel_exp, comma, tuple_exp_rest],
+    )?;
+
+    g.rule("TUPLE_EXP_REST_ELEM", tuple_exp_rest, [rel_exp])?;
+    g.rule(
+        "TUPLE_EXP_REST_ELEMS",
+        tuple_exp_rest,
+        [rel_exp, comma, tuple_exp_rest],
+    )?;
+
+    g.rule("PUT_EXP_REDIRECT", put_exp, [tuple_exp])?;
+    g.rule(
+        "PUT_EXP_ARRAY_PUT",
         put_exp,
         [simple_exp, dot, l_paren, exp, r_paren, less_minus, exp],
     )?;
 
-    g.rule(if_exp, [put_exp])?;
-    g.rule(if_exp, [t_if, exp, t_then, exp, t_else, exp])?;
+    g.rule("IF_EXP_REDIRECT", if_exp, [put_exp])?;
+    g.rule("IF_EXP_IF", if_exp, [t_if, exp, t_then, exp, t_else, exp])?;
 
-    g.rule(let_exp, [t_let, ident, equal, exp, t_in, exp])?;
-    g.rule(let_exp, [t_let, t_rec, fundef, t_in, exp])?;
     g.rule(
+        "LET_EXP_LET",
+        let_exp,
+        [t_let, ident, equal, exp, t_in, exp],
+    )?;
+    g.rule(
+        "LET_EXP_LET_REC",
+        let_exp,
+        [t_let, t_rec, fundef, t_in, exp],
+    )?;
+    g.rule(
+        "LET_EXP_LET_TUPLE",
         let_exp,
         [t_let, l_paren, pat, r_paren, equal, exp, t_in, exp],
     )?;
 
-    g.rule(fundef, [ident, formal_args, equal, exp])?;
+    g.rule("FUNDEF", fundef, [ident, formal_args, equal, exp])?;
 
-    g.rule(formal_args, [ident, formal_args])?;
-    g.rule(formal_args, [ident])?;
+    g.rule("FORMAL_ARGS_LIST", formal_args, [ident, formal_args])?;
+    g.rule("FORMAL_ARGS_ELEM", formal_args, [ident])?;
 
-    g.rule(actual_args, [actual_args, simple_exp])?;
-    g.rule(actual_args, [simple_exp])?;
+    g.rule("ACTUAL_ARGS_LIST", actual_args, [actual_args, simple_exp])?;
+    g.rule("ACTUAL_ARGS_ELEM", actual_args, [simple_exp])?;
 
-    g.rule(pat, [pat, comma, ident])?;
-    g.rule(pat, [ident, comma, ident])?;
+    g.rule("PAT_LIST", pat, [pat, comma, ident])?;
+    g.rule("PAT_TAIL", pat, [ident, comma, ident])?;
 
-    g.rule(exp, [if_exp])?;
-    g.rule(exp, [if_exp, semicolon, exp])?;
-    g.rule(exp, [let_exp])?;
+    g.rule("EXP_IF", exp, [if_exp])?;
+    g.rule("EXP_SEMICOLON", exp, [if_exp, semicolon, exp])?;
+    g.rule("EXP_LET", exp, [let_exp])?;
 
     g.start_symbol(exp)?;
 

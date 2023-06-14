@@ -161,7 +161,7 @@ impl RuleID {\n",
             writeln!(
                 f,
                 "    pub const {export}: Self = Self {{ __raw: {id} }};",
-                export = rule.export_name(),
+                export = rule.name(),
                 id = rule_id.raw()
             )?;
         }

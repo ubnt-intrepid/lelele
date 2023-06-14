@@ -118,9 +118,9 @@ pub struct Rule<'g> {
 
 #[derive(Debug)]
 struct RuleInner {
+    name: Cow<'static, str>,
     left: SymbolID,
     right: Vec<SymbolID>,
-    export_name: String,
 }
 
 impl fmt::Display for Rule<'_> {
@@ -151,8 +151,8 @@ impl Rule<'_> {
         &self.inner.right[..]
     }
 
-    pub(crate) fn export_name(&self) -> &str {
-        &*self.inner.export_name
+    pub(crate) fn name(&self) -> &str {
+        &*self.inner.name
     }
 }
 
@@ -316,7 +316,9 @@ impl GrammarDef<'_> {
         name: impl Into<Cow<'static, str>>,
     ) -> Result<SymbolID, GrammarDefError> {
         self.add_symbol(Symbol {
-            name: name.into(),
+            name: verify_ident(name.into()).ok_or_else(|| GrammarDefError {
+                msg: "incorrect token name".into(),
+            })?,
             kind: SymbolKind::Terminal,
         })
     }
@@ -327,13 +329,20 @@ impl GrammarDef<'_> {
         name: impl Into<Cow<'static, str>>,
     ) -> Result<SymbolID, GrammarDefError> {
         self.add_symbol(Symbol {
-            name: name.into(),
+            name: verify_ident(name.into()).ok_or_else(|| GrammarDefError {
+                msg: "incorrect symbol name".into(),
+            })?,
             kind: SymbolKind::Nonterminal,
         })
     }
 
-    /// Register a production rule into this grammer.
-    pub fn rule<I>(&mut self, left: SymbolID, right: I) -> Result<RuleID, GrammarDefError>
+    /// Specify a production rule into this grammer.
+    pub fn rule<I>(
+        &mut self,
+        name: impl Into<Cow<'static, str>>,
+        left: SymbolID,
+        right: I,
+    ) -> Result<RuleID, GrammarDefError>
     where
         I: IntoIterator<Item = SymbolID>,
     {
@@ -347,12 +356,6 @@ impl GrammarDef<'_> {
             });
         }
 
-        let export_name = format!(
-            "{symbol}_{num}",
-            symbol = self.symbols[&left].name,
-            num = self.rules.values().filter(|r| r.left == left).count()
-        );
-
         let id = RuleID::new(self.next_rule_id);
         self.next_rule_id += 1;
         self.rules.insert(
@@ -360,7 +363,9 @@ impl GrammarDef<'_> {
             RuleInner {
                 left,
                 right: right.into_iter().collect(),
-                export_name,
+                name: verify_ident(name.into()).ok_or_else(|| GrammarDefError {
+                    msg: "incorrect rule name".into(),
+                })?,
             },
         );
 
@@ -401,7 +406,7 @@ impl GrammarDef<'_> {
             accept_rule: RuleInner {
                 left: SymbolID::ACCEPT,
                 right: vec![start],
-                export_name: "*****".into(), // never used
+                name: "*****".into(), // never used
             },
         })
     }
@@ -411,4 +416,72 @@ impl GrammarDef<'_> {
 pub struct GrammarDefError {
     #[allow(dead_code)]
     msg: String,
+}
+
+fn verify_ident<T: AsRef<str>>(t: T) -> Option<T> {
+    let mut s = t.as_ref();
+
+    if s.is_empty() {
+        // The identifier must not be empty.
+        return None;
+    }
+
+    if s.bytes().all(|b| b >= b'0' && b <= b'9') {
+        // The number must not be identifer.
+        return None;
+    }
+
+    if s.starts_with("r#") {
+        s = &s[2..];
+        if matches!(s, "crate" | "self" | "super" | "Self") {
+            // unexpected raw identifier
+            return None;
+        }
+    } else if is_strict_keyword(s) || is_reserved(s) {
+        // Reserved keyword specified.
+        return None;
+    }
+
+    let mut chars = s.chars();
+    let first = chars.next().unwrap();
+    if !is_ident_start(first) {
+        // The identifier must be started with XID-Start.
+        return None;
+    }
+    if chars.any(|ch| !is_ident_continue(ch)) {
+        // The idenfier must be continued with XID-Continue.
+        return None;
+    }
+
+    Some(t)
+}
+
+fn is_ident_start(ch: char) -> bool {
+    ch == '_' || unicode_ident::is_xid_start(ch)
+}
+
+fn is_ident_continue(ch: char) -> bool {
+    unicode_ident::is_xid_continue(ch)
+}
+
+fn is_strict_keyword(s: &str) -> bool {
+    matches!(
+        s,
+        "as" | "break" | "const" | "continue" | "crate" | "else" | "enum" | "extern"
+        | "false" | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match" | "mod"
+        | "move" | "mut" | "pub" | "ref" | "return" | "self" | "Self" | "static" | "struct"
+        | "super" | "trait" | "true" | "type" | "unsafe" | "use" | "where" | "while"
+        // since Rust 2018
+        | "async" | "await" | "dyn"
+    )
+}
+
+fn is_reserved(s: &str) -> bool {
+    matches!(
+        s,
+        "abstract" | "become" | "box" | "do" | "final" | "macro" | "override" | "priv"
+        | "typeof" | "unsized" | "virtual" | "yield"
+        // since Rust 2018
+        | "try"
+    )
 }
