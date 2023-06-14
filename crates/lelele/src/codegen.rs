@@ -13,21 +13,18 @@ pub struct ParserDefinition<'g> {
     table: IndexMap<NodeID, IndexMap<SymbolID, Action>>,
 
     // re-ordered identifiers and export names.
-    node_ids: IndexSet<NodeID>,
     symbol_ids: IndexSet<SymbolID>,
     rule_ids: IndexMap<RuleID, Option<(SymbolID, usize)>>,
 }
 
 impl<'g> ParserDefinition<'g> {
-    pub fn new(grammar: &'g Grammar, dfa: &'g DFA<'g>) -> Self {
+    pub fn new(grammar: &'g Grammar, dfa: &'g DFA) -> Self {
         let table: IndexMap<NodeID, _> = dfa
             .nodes()
-            .map(|(id, node)| (id, node.parse_actions()))
+            .map(|(id, node)| (id, node.parse_actions(grammar)))
             .collect();
 
-        // 使用されている NodeID, RuleID, SymbolID を集計し、コード生成用に並び換える
-        let node_ids: IndexSet<NodeID> = table.keys().copied().collect();
-
+        // 使用されている RuleID, SymbolID を集計し、コード生成用に並び換える
         let mut symbol_ids: IndexSet<SymbolID> = IndexSet::default();
         symbol_ids.insert(SymbolID::EOI);
         symbol_ids.insert(SymbolID::ACCEPT);
@@ -57,14 +54,9 @@ impl<'g> ParserDefinition<'g> {
         Self {
             grammar,
             table,
-            node_ids,
             symbol_ids,
             rule_ids,
         }
-    }
-
-    fn node_id_of(&self, n: &NodeID) -> usize {
-        self.node_ids.get_index_of(n).unwrap()
     }
 
     fn symbol_id_of(&self, s: &SymbolID) -> usize {
@@ -149,7 +141,7 @@ impl NodeID {\n",
         writeln!(
             f,
             "    const __START: Self = Self {{ __raw: {} }};",
-            self.node_id_of(&NodeID::START)
+            NodeID::START
         )?;
 
         f.write_str("}\n")?;
@@ -255,10 +247,7 @@ const PARSE_TABLE: &[
             for (symbol, action) in actions {
                 let action_g = match action {
                     Action::Shift(n) => {
-                        format!(
-                            "lelele::ParseAction::Shift(NodeID {{ __raw: {} }})",
-                            self.node_id_of(n)
-                        )
+                        format!("lelele::ParseAction::Shift(NodeID {{ __raw: {} }})", n)
                     }
                     Action::Reduce(r) => {
                         let rule = self.grammar.rule(*r);

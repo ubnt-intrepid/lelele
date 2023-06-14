@@ -1,7 +1,6 @@
-//! LR(1) DFA generation.
+//! Definition and generation of LR(1) automata.
 
 use crate::{
-    first_sets::FirstSets,
     grammar::{Grammar, RuleID, SymbolID},
     IndexMap, IndexSet,
 };
@@ -44,78 +43,47 @@ impl Config {
         self
     }
 
-    pub fn generate<'g>(&self, grammar: &'g Grammar) -> DFA<'g> {
-        let mut gen = DFAGenerator {
-            extractor: NodeExtractor {
-                grammar,
-                first_sets: FirstSets::new(grammar),
-            },
-            pending_nodes: PendingNodes::new(),
-            nodes: IndexMap::default(),
-            same_cores: IndexMap::default(),
-            mode: self.merge_mode,
-        };
-
-        // 初期ノード: [S' -> @ S] {$eoi}
-        let mut item_set = BTreeMap::new();
-        item_set.insert(
-            LRCoreItem {
-                rule_id: RuleID::ACCEPT,
-                marker: 0,
-            },
-            Some(SymbolID::EOI).into_iter().collect(),
-        );
-        gen.pending_nodes
-            .queue
-            .push_back((NodeID::START, item_set, None));
-
-        // 変化がなくなるまでクロージャ展開とノード追加を繰り返す
+    pub fn generate(&self, grammar: &Grammar) -> DFA {
+        let mut gen = DFAGenerator::new(grammar, self.merge_mode);
         gen.populate_nodes();
-
-        DFA {
-            grammar,
-            nodes: gen.nodes,
-        }
+        gen.finalize()
     }
 }
 
 #[derive(Debug)]
-pub struct DFA<'g> {
-    grammar: &'g Grammar,
-    nodes: IndexMap<NodeID, DFANodeInner>,
+pub struct DFA {
+    nodes: IndexMap<NodeID, DFANode>,
 }
 
-impl<'g> DFA<'g> {
-    pub fn generate(grammar: &'g Grammar) -> Self {
+impl DFA {
+    pub fn generate(grammar: &Grammar) -> Self {
         Config::new().generate(grammar)
     }
 
-    pub fn nodes(&self) -> impl Iterator<Item = (NodeID, DFANode<'_>)> + '_ {
-        self.nodes.iter().map(|(id, node)| {
-            (
-                *id,
-                DFANode {
-                    grammar: self.grammar,
-                    inner: node,
-                },
-            )
-        })
+    pub fn nodes(&self) -> impl Iterator<Item = (NodeID, &DFANode)> + '_ {
+        self.nodes.iter().map(|(id, node)| (*id, node))
     }
 
-    pub fn node(&self, id: NodeID) -> DFANode<'_> {
-        DFANode {
-            grammar: self.grammar,
-            inner: &self.nodes[&id],
-        }
+    pub fn node(&self, id: NodeID) -> &DFANode {
+        &self.nodes[&id]
+    }
+
+    pub fn display<'g>(&'g self, grammar: &'g Grammar) -> impl fmt::Display + 'g {
+        DFADisplay { grammar, dfa: self }
     }
 }
 
-impl fmt::Display for DFA<'_> {
+struct DFADisplay<'g> {
+    grammar: &'g Grammar,
+    dfa: &'g DFA,
+}
+
+impl fmt::Display for DFADisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (id, node) in self.nodes() {
+        for (id, node) in self.dfa.nodes() {
             writeln!(f, "- id: {:02}", id)?;
             writeln!(f, "  item_sets:")?;
-            for (core_item, lookaheads) in &node.inner.item_set {
+            for (core_item, lookaheads) in &node.item_set {
                 let LRCoreItem { rule_id, marker } = core_item;
                 let rule = self.grammar.rule(*rule_id);
                 let start = self.grammar.symbol(rule.left());
@@ -141,7 +109,7 @@ impl fmt::Display for DFA<'_> {
                 writeln!(f, "]")?;
             }
             writeln!(f, "  edges:")?;
-            for (label, target) in &node.inner.edges {
+            for (label, target) in &node.edges {
                 let label = self.grammar.symbol(*label);
                 writeln!(f, "  - {} -> {:02}", label.name(), target)?;
             }
@@ -157,7 +125,7 @@ pub struct NodeID {
 }
 
 impl NodeID {
-    pub(crate) const START: Self = Self { raw: u64::MAX };
+    pub(crate) const START: Self = Self::new(0);
 
     const fn new(raw: u64) -> Self {
         assert!(raw <= u64::MAX / 2, "too big node id");
@@ -172,13 +140,7 @@ impl fmt::Display for NodeID {
 }
 
 #[derive(Debug)]
-pub struct DFANode<'g> {
-    grammar: &'g Grammar,
-    inner: &'g DFANodeInner,
-}
-
-#[derive(Debug)]
-struct DFANodeInner {
+pub struct DFANode {
     item_set: LRItemSet,
     edges: IndexMap<SymbolID, NodeID>,
 }
@@ -205,12 +167,12 @@ pub(crate) enum Action {
     Accept,
 }
 
-impl DFANode<'_> {
-    pub(crate) fn parse_actions(&self) -> IndexMap<SymbolID, Action> {
+impl DFANode {
+    pub(crate) fn parse_actions(&self, grammar: &Grammar) -> IndexMap<SymbolID, Action> {
         let mut actions = IndexMap::default();
 
         // shift, goto
-        for (label, target) in &self.inner.edges {
+        for (label, target) in &self.edges {
             match actions.entry(*label) {
                 Entry::Occupied(..) => panic!("conflict"),
                 Entry::Vacant(entry) => {
@@ -220,8 +182,8 @@ impl DFANode<'_> {
         }
 
         // reduce, accept
-        for (core_item, lookaheads) in &self.inner.item_set {
-            let rule = &self.grammar.rule(core_item.rule_id);
+        for (core_item, lookaheads) in &self.item_set {
+            let rule = &grammar.rule(core_item.rule_id);
             if core_item.marker < rule.right().len() {
                 continue;
             }
@@ -272,13 +234,6 @@ struct PendingNodes {
     queue: VecDeque<(NodeID, LRItemSet, Option<NodeID>)>,
 }
 impl PendingNodes {
-    fn new() -> Self {
-        Self {
-            next_node_id: 0,
-            queue: VecDeque::new(),
-        }
-    }
-
     /// Push a LR(1) item set into the queue, and obtain registered NodeID.
     fn enqueue(&mut self, item_set: LRItemSet, prev_node: Option<NodeID>) -> NodeID {
         let id = NodeID::new(self.next_node_id);
@@ -378,12 +333,41 @@ impl NodeExtractor<'_> {
 struct DFAGenerator<'g> {
     extractor: NodeExtractor<'g>,
     pending_nodes: PendingNodes,
-    nodes: IndexMap<NodeID, DFANodeInner>,
+    nodes: IndexMap<NodeID, (LRItemSet, IndexMap<SymbolID, NodeID>)>,
     same_cores: IndexMap<LRCoreItems, IndexSet<NodeID>>,
     mode: MergeMode,
 }
 
 impl<'g> DFAGenerator<'g> {
+    fn new(grammar: &'g Grammar, mode: MergeMode) -> Self {
+        let mut pending_nodes = PendingNodes {
+            next_node_id: 1,
+            queue: VecDeque::new(),
+        };
+        let mut item_set = BTreeMap::new();
+        item_set.insert(
+            LRCoreItem {
+                rule_id: RuleID::ACCEPT,
+                marker: 0,
+            },
+            Some(SymbolID::EOI).into_iter().collect(),
+        );
+        pending_nodes
+            .queue
+            .push_back((NodeID::START, item_set, None));
+
+        Self {
+            extractor: NodeExtractor {
+                grammar,
+                first_sets: FirstSets::new(grammar),
+            },
+            pending_nodes,
+            nodes: IndexMap::default(),
+            same_cores: IndexMap::default(),
+            mode,
+        }
+    }
+
     fn populate_nodes(&mut self) {
         // 新規にノードが生成されなくなるまで繰り返す
         'dequeue: while let Some((new_id, mut new_item_set, prev_node)) =
@@ -398,7 +382,7 @@ impl<'g> DFAGenerator<'g> {
             if let Some(same_cores) = self.same_cores.get(&core_items) {
                 for &orig_id in same_cores {
                     let orig_node = &mut self.nodes[&orig_id];
-                    match compare_item_sets(self.mode, &orig_node.item_set, &new_item_set) {
+                    match compare_item_sets(self.mode, &orig_node.0, &new_item_set) {
                         ItemSetDiff::Same => {
                             // 完全に一致しているので修正すら不要
                         }
@@ -407,7 +391,7 @@ impl<'g> DFAGenerator<'g> {
                             // 先読み記号をマージする
                             let mut modified = false;
                             for (new_core, new_lookaheads) in &new_item_set {
-                                let lookaheads = orig_node.item_set.get_mut(new_core).unwrap();
+                                let lookaheads = orig_node.0.get_mut(new_core).unwrap();
                                 for l in new_lookaheads {
                                     modified |= lookaheads.insert(*l);
                                 }
@@ -420,7 +404,7 @@ impl<'g> DFAGenerator<'g> {
                                 {
                                     let id =
                                         self.pending_nodes.enqueue(new_item_set, Some(orig_id));
-                                    orig_node.edges.insert(symbol, id);
+                                    orig_node.1.insert(symbol, id);
                                 }
                             }
                         }
@@ -432,7 +416,7 @@ impl<'g> DFAGenerator<'g> {
                     // 使用する予定だったNodeIDはenqueueされた時点で遷移前のnodeに登録されているので書き換える
                     if let Some(prev_node_id) = prev_node {
                         let prev_node = &mut self.nodes[&prev_node_id];
-                        for edge in prev_node.edges.values_mut() {
+                        for edge in prev_node.1.values_mut() {
                             if *edge == new_id {
                                 *edge = orig_id;
                             }
@@ -450,19 +434,38 @@ impl<'g> DFAGenerator<'g> {
                 edges.insert(symbol, id);
             }
 
-            self.nodes.insert(
-                new_id,
-                DFANodeInner {
-                    item_set: new_item_set,
-                    edges,
-                },
-            );
+            self.nodes.insert(new_id, (new_item_set, edges));
 
             self.same_cores
                 .entry(core_items)
                 .or_default()
                 .insert(new_id);
         }
+    }
+
+    fn finalize(self) -> DFA {
+        // 状態ノードの併合によってIDが飛び飛びになってる可能性があるので圧縮する
+        let mut new_node_ids = IndexMap::default();
+        let mut next_new_id = 0;
+        for &orig_id in self.nodes.keys() {
+            let new_id = NodeID::new(next_new_id);
+            next_new_id += 1;
+            new_node_ids.insert(orig_id, new_id);
+        }
+        let nodes = self
+            .nodes
+            .into_iter()
+            .map(|(orig_id, (item_set, edges))| {
+                let id = new_node_ids[&orig_id];
+                let edges = edges
+                    .into_iter()
+                    .map(|(s, id)| (s, new_node_ids[&id]))
+                    .collect();
+                (id, DFANode { item_set, edges })
+            })
+            .collect();
+
+        DFA { nodes }
     }
 }
 
@@ -524,6 +527,142 @@ fn is_pgm_weakly_compatible_c2(items: &LRItemSet) -> bool {
     true
 }
 
+#[derive(Debug)]
+struct FirstSets {
+    nulls: IndexSet<SymbolID>,
+    first_sets: IndexMap<SymbolID, IndexSet<SymbolID>>,
+}
+
+impl FirstSets {
+    fn new(grammar: &Grammar) -> Self {
+        let nulls = nulls_set(grammar);
+        let first_sets = first_set(grammar, &nulls);
+        Self { nulls, first_sets }
+    }
+
+    /// `First(prefix lookaheads)`
+    pub fn get<'i, I>(&self, prefix: &[SymbolID], lookaheads: I) -> IndexSet<SymbolID>
+    where
+        I: IntoIterator<Item = &'i SymbolID>,
+    {
+        let mut res = IndexSet::default();
+
+        let mut is_end = false;
+        for token in prefix {
+            res.extend(self.first_sets[token].iter().copied());
+            if !self.nulls.contains(token) {
+                is_end = true;
+                break;
+            }
+        }
+
+        if !is_end {
+            res.extend(lookaheads.into_iter().flat_map(|x| &self.first_sets[x]));
+        }
+
+        res
+    }
+}
+
+/// Calculate the set of nullable symbols in this grammar.
+fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
+    // ruleからnullableであることが分かっている場合は追加する
+    let mut nulls: IndexSet<SymbolID> = grammar
+        .rules()
+        .filter_map(|(_id, rule)| rule.right().is_empty().then_some(rule.left()))
+        .collect();
+
+    // 値が更新されなくなるまで繰り返す
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (_, rule) in grammar.rules() {
+            if nulls.contains(&rule.left()) {
+                continue;
+            }
+            // 右辺のsymbolsがすべてnullableかどうか
+            let is_rhs_nullable = rule.right().iter().all(|t| nulls.contains(t));
+            if is_rhs_nullable {
+                changed = true;
+                nulls.insert(rule.left());
+                continue;
+            }
+        }
+    }
+
+    nulls
+}
+
+/// Constructs the instance for calculating first sets in this grammar.
+fn first_set(
+    grammar: &Grammar,
+    nulls: &IndexSet<SymbolID>,
+) -> IndexMap<SymbolID, IndexSet<SymbolID>> {
+    let mut map: IndexMap<SymbolID, IndexSet<SymbolID>> = IndexMap::default();
+
+    // terminal symbols については First(T) = {T} になる
+    for (id, _) in grammar.terminals() {
+        map.insert(id, Some(id).into_iter().collect());
+    }
+
+    // nonterminal symbols は First(T) = {} と初期化する
+    for (id, _) in grammar.nonterminals() {
+        map.insert(id, IndexSet::default());
+    }
+
+    // 制約条件の抽出
+    // X -> Y1 Y2 ... Yn という構文規則に対し、
+    //  1. Y1,Y2,...と検索していき、最初に来る非nullableな記号を Yk とする
+    //    - Y1 Y2 ... Y(k-1) が nullable で Yk が non-nullable となる
+    //  2. Yi (i=1,2,..,k) それぞれに対し First(X) \supseteq First(Yi) という制約を追加する
+    #[derive(Debug)]
+    struct Constraint {
+        sup: SymbolID,
+        sub: SymbolID,
+    }
+    let mut constraints = vec![];
+    for rule in grammar
+        .rules()
+        .flat_map(|(id, rule)| (id != RuleID::ACCEPT).then_some(rule))
+    {
+        for symbol in rule.right() {
+            if rule.left() != *symbol {
+                constraints.push(Constraint {
+                    sup: rule.left(),
+                    sub: *symbol,
+                });
+            }
+            if !nulls.contains(symbol) {
+                break;
+            }
+        }
+    }
+
+    // 制約条件の解消
+    // First(A) \subseteq First(B) が満たされるよう First(A) の要素を First(B) に追加するだけ。
+    // これをすべての制約条件に対して繰り返す
+    let mut changed = true;
+    while changed {
+        changed = false;
+
+        for Constraint { sup, sub } in &constraints {
+            let mut superset = map.remove(sup).unwrap();
+            let subset = map.get(sub).unwrap();
+
+            for tok in subset {
+                if !superset.contains(tok) {
+                    superset.insert(*tok);
+                    changed = true;
+                }
+            }
+
+            map.insert(*sup, superset);
+        }
+    }
+
+    map
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -555,7 +694,7 @@ mod tests {
         eprintln!("{}", grammar);
 
         let dfa = DFA::generate(&grammar);
-        eprintln!("DFA Nodes:\n---\n{}", dfa);
+        eprintln!("DFA Nodes:\n---\n{}", dfa.display(&grammar));
     }
 
     #[test]
@@ -597,6 +736,6 @@ mod tests {
         eprintln!("{}", grammar);
 
         let dfa = DFA::generate(&grammar);
-        eprintln!("DFA Nodes:\n---\n{}", dfa);
+        eprintln!("DFA Nodes:\n---\n{}", dfa.display(&grammar));
     }
 }
