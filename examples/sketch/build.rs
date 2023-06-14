@@ -1,5 +1,5 @@
 use lelele::{
-    codegen::ParserDefinition,
+    codegen::Codegen,
     dfa::DFA,
     grammar::{Grammar, GrammarDef, GrammarDefError},
 };
@@ -14,7 +14,7 @@ fn main() {
     let dfa = DFA::generate(&grammar);
     eprintln!("Grammar:\n{}", grammar);
 
-    let parser_def = ParserDefinition::new(&grammar, &dfa);
+    let parser_def = Codegen::new(&grammar, &dfa);
 
     // 生成された構文解析表をコードに出力
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("parser.rs");

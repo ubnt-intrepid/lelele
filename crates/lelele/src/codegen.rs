@@ -3,69 +3,18 @@
 use crate::{
     dfa::{Action, NodeID, DFA},
     grammar::{Grammar, RuleID, SymbolID},
-    IndexMap, IndexSet,
 };
 use std::fmt;
 
 #[derive(Debug)]
-pub struct ParserDefinition<'g> {
+pub struct Codegen<'g> {
     grammar: &'g Grammar,
-    table: IndexMap<NodeID, IndexMap<SymbolID, Action>>,
-
-    // re-ordered identifiers and export names.
-    symbol_ids: IndexSet<SymbolID>,
-    rule_ids: IndexMap<RuleID, Option<(SymbolID, usize)>>,
+    dfa: &'g DFA,
 }
 
-impl<'g> ParserDefinition<'g> {
+impl<'g> Codegen<'g> {
     pub fn new(grammar: &'g Grammar, dfa: &'g DFA) -> Self {
-        let table: IndexMap<NodeID, _> = dfa
-            .nodes()
-            .map(|(id, node)| (id, node.parse_actions(grammar)))
-            .collect();
-
-        // 使用されている RuleID, SymbolID を集計し、コード生成用に並び換える
-        let mut symbol_ids: IndexSet<SymbolID> = IndexSet::default();
-        symbol_ids.insert(SymbolID::EOI);
-        symbol_ids.insert(SymbolID::ACCEPT);
-        symbol_ids.extend(grammar.symbols().map(|(id, _)| id));
-
-        // 各 rule は `<LHS_NAME>_<i>` という名称で export される (iはgrammarへの登録順)
-        // reordering と同時にその対応表も作成する
-        let mut rule_ids: IndexMap<RuleID, Option<(SymbolID, usize)>> = IndexMap::default();
-        let mut rule_names: IndexMap<SymbolID, IndexSet<RuleID>> = IndexMap::default();
-        for (rule_id, rule) in grammar.rules() {
-            match rule_id {
-                RuleID::ACCEPT => {
-                    // identifier としては存在するが export しない
-                    rule_ids.insert(RuleID::ACCEPT, None);
-                }
-                rule_id => {
-                    let lhs_rules = rule_names.entry(rule.left()).or_default();
-                    lhs_rules.insert(rule_id);
-                    rule_ids.insert(
-                        rule_id,
-                        Some((rule.left(), lhs_rules.get_index_of(&rule_id).unwrap())),
-                    );
-                }
-            }
-        }
-
-        Self {
-            grammar,
-            table,
-            symbol_ids,
-            rule_ids,
-        }
-    }
-
-    fn symbol_id_of(&self, s: &SymbolID) -> usize {
-        self.symbol_ids.get_index_of(s).unwrap()
-    }
-
-    fn rule_id_and_name(&self, id: &RuleID) -> (usize, Option<(SymbolID, usize)>) {
-        let (i, _, v) = self.rule_ids.get_full(id).unwrap();
-        (i, *v)
+        Self { grammar, dfa }
     }
 
     fn fmt_preamble(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -162,7 +111,7 @@ impl SymbolID {\n",
         writeln!(
             f,
             "const __EOI: Self = Self {{ __raw: {} }};",
-            self.symbol_id_of(&SymbolID::EOI),
+            SymbolID::EOI.raw(),
         )?;
 
         for (id, symbol) in self
@@ -176,7 +125,7 @@ impl SymbolID {\n",
 /// `{name}`
 pub const {name}: Self = Self {{ __raw: {id} }};",
                 name = symbol.name(),
-                id = self.symbol_id_of(&id)
+                id = id.raw(),
             )?;
         }
 
@@ -196,29 +145,25 @@ impl RuleID {\n",
         )?;
 
         for (rule_id, rule) in self.grammar.rules().filter(|(id, _)| *id != RuleID::ACCEPT) {
-            let (id, name) = self.rule_id_and_name(&rule_id);
-            if let Some((sym, i)) = name {
-                let comment_lhs = self.grammar.symbol(rule.left()).name();
-                let comment_rhs =
-                    rule.right()
-                        .iter()
-                        .enumerate()
-                        .fold(String::new(), |mut acc, (i, s)| {
-                            if i > 0 {
-                                acc += " ";
-                            }
-                            acc += self.grammar.symbol(*s).name();
-                            acc
-                        });
-                writeln!(f, "    /// `{} : {}`", comment_lhs, comment_rhs,)?;
-                writeln!(
-                    f,
-                    "    pub const {symbol_name}_{i}: Self = Self {{ __raw: {id} }};",
-                    symbol_name = self.grammar.symbol(sym).name(),
-                    i = i,
-                    id = id
-                )?;
-            }
+            let comment_lhs = self.grammar.symbol(rule.left()).name();
+            let comment_rhs =
+                rule.right()
+                    .iter()
+                    .enumerate()
+                    .fold(String::new(), |mut acc, (i, s)| {
+                        if i > 0 {
+                            acc += " ";
+                        }
+                        acc += self.grammar.symbol(*s).name();
+                        acc
+                    });
+            writeln!(f, "    /// `{} : {}`", comment_lhs, comment_rhs)?;
+            writeln!(
+                f,
+                "    pub const {export}: Self = Self {{ __raw: {id} }};",
+                export = rule.export_name(),
+                id = rule_id.raw()
+            )?;
         }
 
         f.write_str("}\n")?;
@@ -241,7 +186,9 @@ const PARSE_TABLE: &[
 ] = &[\n",
         )?;
 
-        for actions in self.table.values() {
+        for (_, node) in self.dfa.nodes() {
+            let actions = node.parse_actions(&self.grammar);
+
             let mut actions_g = phf_codegen::Map::<u64>::new();
             actions_g.phf_path("lelele::phf");
             for (symbol, action) in actions {
@@ -250,17 +197,17 @@ const PARSE_TABLE: &[
                         format!("lelele::ParseAction::Shift(NodeID {{ __raw: {} }})", n)
                     }
                     Action::Reduce(r) => {
-                        let rule = self.grammar.rule(*r);
+                        let rule = self.grammar.rule(r);
                         format!(
                         "lelele::ParseAction::Reduce(RuleID {{ __raw: {} }}, SymbolID {{ __raw: {} }}, {})",
-                        self.rule_id_and_name(r).0,
-                        self.symbol_id_of(&rule.left()),
+                        r.raw(),
+                        rule.left().raw(),
                         rule.right().len()
                     )
                     }
                     Action::Accept => format!("lelele::ParseAction::Accept"),
                 };
-                actions_g.entry(self.symbol_id_of(&symbol) as u64, &action_g);
+                actions_g.entry(symbol.raw(), &action_g);
             }
             writeln!(f, "{},", actions_g.build())?;
         }
@@ -271,7 +218,7 @@ const PARSE_TABLE: &[
     }
 }
 
-impl<'g> fmt::Display for ParserDefinition<'g> {
+impl<'g> fmt::Display for Codegen<'g> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.fmt_preamble(f)?;
         self.fmt_node_id_def(f)?;

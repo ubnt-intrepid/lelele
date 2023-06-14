@@ -3,6 +3,9 @@
 use crate::IndexMap;
 use std::{borrow::Cow, fmt, marker::PhantomData};
 
+const SYMBOL_ID_OFFSET: u64 = 0x4;
+const RULE_ID_OFFSET: u64 = 0x4;
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct SymbolID {
@@ -11,14 +14,19 @@ pub struct SymbolID {
 
 impl SymbolID {
     /// Reserved symbol used as a terminal symbol that means the end of input.
-    pub(crate) const EOI: Self = Self { raw: u64::MAX };
+    pub(crate) const EOI: Self = Self::new(0);
     /// Reserved symbol used as a nonterminal symbol to match when the parsing is complete.
-    pub(crate) const ACCEPT: Self = Self { raw: u64::MAX - 1 };
+    pub(crate) const ACCEPT: Self = Self::new(1);
 
     #[inline]
     const fn new(raw: u64) -> Self {
         assert!(raw < u64::MAX / 2, "too large SymbolID");
         Self { raw }
+    }
+
+    #[inline]
+    pub(crate) const fn raw(self) -> u64 {
+        self.raw
     }
 }
 
@@ -79,12 +87,17 @@ pub struct RuleID {
 impl RuleID {
     /// Reserved ID that represents the top-level production rule:
     /// `$accept : <start-symbol> $eoi`.
-    pub(crate) const ACCEPT: Self = Self { raw: u64::MAX };
+    pub(crate) const ACCEPT: Self = Self::new(0);
 
     #[inline]
     const fn new(raw: u64) -> Self {
         assert!(raw < u64::MAX / 2, "too large RuleID");
         Self { raw }
+    }
+
+    #[inline]
+    pub(crate) const fn raw(self) -> u64 {
+        self.raw
     }
 }
 impl fmt::Display for RuleID {
@@ -107,13 +120,14 @@ pub struct Rule<'g> {
 struct RuleInner {
     left: SymbolID,
     right: Vec<SymbolID>,
+    export_name: String,
 }
 
 impl fmt::Display for Rule<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
             grammar,
-            inner: RuleInner { left, right },
+            inner: RuleInner { left, right, .. },
         } = self;
         write!(f, "{} : ", grammar.symbol(*left).name())?;
         for (i, symbol) in right.iter().enumerate() {
@@ -135,6 +149,10 @@ impl Rule<'_> {
     /// Return the right-hand side of this production.
     pub fn right(&self) -> &[SymbolID] {
         &self.inner.right[..]
+    }
+
+    pub(crate) fn export_name(&self) -> &str {
+        &*self.inner.export_name
     }
 }
 
@@ -186,8 +204,8 @@ impl Grammar {
             symbols: IndexMap::default(),
             rules: IndexMap::default(),
             start: None,
-            next_symbol_id: 0,
-            next_rule_id: 0,
+            next_symbol_id: SYMBOL_ID_OFFSET,
+            next_rule_id: RULE_ID_OFFSET,
             _marker: PhantomData,
         };
 
@@ -292,13 +310,6 @@ impl GrammarDef<'_> {
         }
     }
 
-    fn add_rule(&mut self, rule: RuleInner) -> RuleID {
-        let id = RuleID::new(self.next_rule_id);
-        self.next_rule_id += 1;
-        self.rules.insert(id, rule);
-        id
-    }
-
     /// Specify a terminal symbol used in this grammar.
     pub fn token(
         &mut self,
@@ -335,10 +346,25 @@ impl GrammarDef<'_> {
                 msg: "The starting symbol in production rule must be nonterminal".into(),
             });
         }
-        Ok(self.add_rule(RuleInner {
-            left,
-            right: right.into_iter().collect(),
-        }))
+
+        let export_name = format!(
+            "{symbol}_{num}",
+            symbol = self.symbols[&left].name,
+            num = self.rules.values().filter(|r| r.left == left).count()
+        );
+
+        let id = RuleID::new(self.next_rule_id);
+        self.next_rule_id += 1;
+        self.rules.insert(
+            id,
+            RuleInner {
+                left,
+                right: right.into_iter().collect(),
+                export_name,
+            },
+        );
+
+        Ok(id)
     }
 
     /// Specify the start symbol.
@@ -375,6 +401,7 @@ impl GrammarDef<'_> {
             accept_rule: RuleInner {
                 left: SymbolID::ACCEPT,
                 right: vec![start],
+                export_name: "*****".into(), // never used
             },
         })
     }
