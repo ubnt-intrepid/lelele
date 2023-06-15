@@ -40,24 +40,24 @@ fn grammar_def(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {
 
     // declare nonterminal symbols.
     let expr = g.symbol("EXPR")?;
-    let factor = g.symbol("FACTOR")?;
     let term = g.symbol("TERM")?;
+    let factor = g.symbol("FACTOR")?;
     g.symbol("UNUSED_1")?;
 
     g.start_symbol(expr)?;
 
     // declare syntax rules.
 
-    g.rule("EXPR_ADD", expr, [expr, plus, factor])?; // expr '+' factor
-    g.rule("EXPR_SUB", expr, [expr, minus, factor])?; // expr '-' factor
-    g.rule("EXPR_FACTOR", expr, [factor])?; // factor
+    g.rule("EXPR_ADD", expr, [expr, plus, term])?;
+    g.rule("EXPR_SUB", expr, [expr, minus, term])?;
+    g.rule("EXPR_TERM", expr, [term])?;
 
-    g.rule("FACTOR_MUL", factor, [factor, star, term])?; // factor '*' term
-    g.rule("FACTOR_DIV", factor, [factor, slash, term])?; // factor '/' term
-    g.rule("FACTOR_TERM", factor, [term])?; // term
+    g.rule("TERM_MUL", term, [term, star, factor])?;
+    g.rule("TERM_DIV", term, [term, slash, factor])?;
+    g.rule("TERM_FACTOR", term, [factor])?;
 
-    g.rule("TERM_NUM", term, [num])?; // num
-    g.rule("TERM_PAREN", term, [lparen, expr, rparen])?; // '(' expr ')'
+    g.rule("FACTOR_NUM", factor, [num])?;
+    g.rule("FACTOR_PAREN", factor, [lparen, expr, rparen])?;
 
     Ok(())
 }

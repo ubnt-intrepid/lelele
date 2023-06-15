@@ -7,25 +7,10 @@ pub enum Expr<'source> {
     Add {
         lhs: Box<Expr<'source>>,
         op: Token<'source>,
-        rhs: Box<Factor<'source>>,
+        rhs: Box<Term<'source>>,
     },
     Sub {
         lhs: Box<Expr<'source>>,
-        op: Token<'source>,
-        rhs: Box<Factor<'source>>,
-    },
-    Factor(Box<Factor<'source>>),
-}
-
-#[derive(Debug)]
-pub enum Factor<'source> {
-    Mul {
-        lhs: Box<Factor<'source>>,
-        op: Token<'source>,
-        rhs: Box<Term<'source>>,
-    },
-    Div {
-        lhs: Box<Factor<'source>>,
         op: Token<'source>,
         rhs: Box<Term<'source>>,
     },
@@ -34,6 +19,21 @@ pub enum Factor<'source> {
 
 #[derive(Debug)]
 pub enum Term<'source> {
+    Mul {
+        lhs: Box<Term<'source>>,
+        op: Token<'source>,
+        rhs: Box<Factor<'source>>,
+    },
+    Div {
+        lhs: Box<Term<'source>>,
+        op: Token<'source>,
+        rhs: Box<Factor<'source>>,
+    },
+    Factor(Box<Factor<'source>>),
+}
+
+#[derive(Debug)]
+pub enum Factor<'source> {
     Num(Token<'source>),
     Paren {
         l_paren: Token<'source>,

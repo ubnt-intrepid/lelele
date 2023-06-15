@@ -9,8 +9,8 @@ use std::env;
 
 enum StackItem<'t> {
     Expr(Box<Expr<'t>>),
-    Factor(Box<Factor<'t>>),
     Term(Box<Term<'t>>),
+    Factor(Box<Factor<'t>>),
 }
 
 fn main() -> anyhow::Result<()> {
@@ -25,7 +25,7 @@ fn main() -> anyhow::Result<()> {
                 // expr : expr '+' factor
                 match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
                     (
-                        Some(StackItem::Factor(rhs)),
+                        Some(StackItem::Term(rhs)),
                         Some(ParseItem::T(op)),
                         Some(StackItem::Expr(lhs)),
                     ) => ast_stack.push(StackItem::Expr(Box::new(Expr::Add { lhs, op, rhs }))),
@@ -36,73 +36,73 @@ fn main() -> anyhow::Result<()> {
                 // expr : expr '-' factor
                 match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
                     (
-                        Some(StackItem::Factor(rhs)),
+                        Some(StackItem::Term(rhs)),
                         Some(ParseItem::T(op)),
                         Some(StackItem::Expr(lhs)),
                     ) => ast_stack.push(StackItem::Expr(Box::new(Expr::Sub { lhs, op, rhs }))),
                     _ => anyhow::bail!("unexpected stack/parse item"),
                 }
             }
-            ParseEvent::Reduce(RuleID::EXPR_FACTOR) => {
-                // expr : factor
-                match ast_stack.pop() {
-                    Some(StackItem::Factor(factor)) => {
-                        ast_stack.push(StackItem::Expr(Box::new(Expr::Factor(factor))));
-                    }
-                    _ => anyhow::bail!("unexpected stack item"),
-                }
-            }
-
-            ParseEvent::Reduce(RuleID::FACTOR_MUL) => {
-                // factor : factor '*' term
-                match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
-                    (
-                        Some(StackItem::Term(rhs)),
-                        Some(ParseItem::T(op)),
-                        Some(StackItem::Factor(lhs)),
-                    ) => ast_stack.push(StackItem::Factor(Box::new(Factor::Mul { lhs, op, rhs }))),
-                    _ => anyhow::bail!("unexpected stack/parse item"),
-                }
-            }
-            ParseEvent::Reduce(RuleID::FACTOR_DIV) => {
-                // factor : factor '/' term
-                match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
-                    (
-                        Some(StackItem::Term(rhs)),
-                        Some(ParseItem::T(op)),
-                        Some(StackItem::Factor(lhs)),
-                    ) => ast_stack.push(StackItem::Factor(Box::new(Factor::Div { lhs, op, rhs }))),
-                    _ => anyhow::bail!("unexpected stack/parse item"),
-                }
-            }
-            ParseEvent::Reduce(RuleID::FACTOR_TERM) => {
-                // factor : term
+            ParseEvent::Reduce(RuleID::EXPR_TERM) => {
+                // expr : term
                 match ast_stack.pop() {
                     Some(StackItem::Term(term)) => {
-                        ast_stack.push(StackItem::Factor(Box::new(Factor::Term(term))));
+                        ast_stack.push(StackItem::Expr(Box::new(Expr::Term(term))));
                     }
                     _ => anyhow::bail!("unexpected stack item"),
                 }
             }
 
-            ParseEvent::Reduce(RuleID::TERM_NUM) => {
-                // term : num
+            ParseEvent::Reduce(RuleID::TERM_MUL) => {
+                // term : term '*' factor
+                match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
+                    (
+                        Some(StackItem::Factor(rhs)),
+                        Some(ParseItem::T(op)),
+                        Some(StackItem::Term(lhs)),
+                    ) => ast_stack.push(StackItem::Term(Box::new(Term::Mul { lhs, op, rhs }))),
+                    _ => anyhow::bail!("unexpected stack/parse item"),
+                }
+            }
+            ParseEvent::Reduce(RuleID::TERM_DIV) => {
+                // term : term '/' factor
+                match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
+                    (
+                        Some(StackItem::Factor(rhs)),
+                        Some(ParseItem::T(op)),
+                        Some(StackItem::Term(lhs)),
+                    ) => ast_stack.push(StackItem::Term(Box::new(Term::Div { lhs, op, rhs }))),
+                    _ => anyhow::bail!("unexpected stack/parse item"),
+                }
+            }
+            ParseEvent::Reduce(RuleID::TERM_FACTOR) => {
+                // term : factor
+                match ast_stack.pop() {
+                    Some(StackItem::Factor(term)) => {
+                        ast_stack.push(StackItem::Term(Box::new(Term::Factor(term))));
+                    }
+                    _ => anyhow::bail!("unexpected stack item"),
+                }
+            }
+
+            ParseEvent::Reduce(RuleID::FACTOR_NUM) => {
+                // factor : num
                 match args[0].take() {
                     Some(ParseItem::T(num)) => {
-                        ast_stack.push(StackItem::Term(Box::new(Term::Num(num))));
+                        ast_stack.push(StackItem::Factor(Box::new(Factor::Num(num))));
                     }
                     _ => anyhow::bail!("unexpected parse item"),
                 }
             }
-            ParseEvent::Reduce(RuleID::TERM_PAREN) => {
-                // term : '(' expr ')'
+            ParseEvent::Reduce(RuleID::FACTOR_PAREN) => {
+                // factor : '(' expr ')'
                 match (args[0].take(), ast_stack.pop(), args[2].take()) {
                     (
                         Some(ParseItem::T(l_paren)),
                         Some(StackItem::Expr(expr)),
                         Some(ParseItem::T(r_paren)),
                     ) => {
-                        ast_stack.push(StackItem::Term(Box::new(Term::Paren {
+                        ast_stack.push(StackItem::Factor(Box::new(Factor::Paren {
                             l_paren,
                             expr,
                             r_paren,
@@ -113,7 +113,7 @@ fn main() -> anyhow::Result<()> {
             }
 
             ParseEvent::Accept => {
-                // $start: expr
+                // $accept: expr
                 let result = match ast_stack.pop() {
                     Some(StackItem::Expr(expr)) => expr,
                     _ => anyhow::bail!("unexpected stack item"),
