@@ -44,9 +44,12 @@ fn grammar_def(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {
     let factor = g.symbol("FACTOR")?;
     g.symbol("UNUSED_1")?;
 
+    // The `bogus` tokens will never exported.
+    let bogus = g.bogus_token()?;
+
     g.start_symbol(expr)?;
 
-    // declare syntax rules.
+    // declare production rules.
 
     g.rule("EXPR_ADD", expr, [expr, plus, term])?;
     g.rule("EXPR_SUB", expr, [expr, minus, term])?;
@@ -58,6 +61,9 @@ fn grammar_def(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {
 
     g.rule("FACTOR_NUM", factor, [num])?;
     g.rule("FACTOR_PAREN", factor, [lparen, expr, rparen])?;
+
+    // If the production has some bogus token, it is not exported.
+    g.rule("BOGUS", factor, [bogus, expr, bogus])?;
 
     Ok(())
 }

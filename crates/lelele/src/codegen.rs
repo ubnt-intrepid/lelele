@@ -2,7 +2,7 @@
 
 use crate::{
     dfa::{Action, NodeID, DFA},
-    grammar::{Grammar, RuleID, SymbolID},
+    grammar::{Grammar, SymbolID},
 };
 use std::fmt;
 
@@ -114,17 +114,17 @@ impl SymbolID {\n",
             SymbolID::EOI.raw(),
         )?;
 
-        for (id, symbol) in self
-            .grammar
-            .symbols()
-            .filter(|(id, _)| *id != SymbolID::EOI && *id != SymbolID::ACCEPT)
-        {
+        for (id, symbol) in self.grammar.symbols() {
+            let export_name = match symbol.export_name() {
+                Some(name) => name,
+                None => continue,
+            };
             writeln!(
                 f,
                 "\
-/// `{name}`
-pub const {name}: Self = Self {{ __raw: {id} }};",
-                name = symbol.name(),
+/// `{export_name}`
+pub const {export_name}: Self = Self {{ __raw: {id} }};",
+                export_name = export_name,
                 id = id.raw(),
             )?;
         }
@@ -144,24 +144,29 @@ pub struct RuleID { __raw: u64 }
 impl RuleID {\n",
         )?;
 
-        for (rule_id, rule) in self.grammar.rules().filter(|(id, _)| *id != RuleID::ACCEPT) {
-            let comment_lhs = self.grammar.symbol(rule.left()).name();
-            let comment_rhs =
-                rule.right()
-                    .iter()
-                    .enumerate()
-                    .fold(String::new(), |mut acc, (i, s)| {
-                        if i > 0 {
-                            acc += " ";
-                        }
-                        acc += self.grammar.symbol(*s).name();
-                        acc
-                    });
+        'rules: for (rule_id, rule) in self.grammar.rules() {
+            let comment_lhs = match self.grammar.symbol(rule.left()).export_name() {
+                Some(name) => name,
+                None => continue 'rules,
+            };
+
+            let mut comment_rhs = String::new();
+            for (i, s) in rule.right().iter().enumerate() {
+                let name = match self.grammar.symbol(*s).export_name() {
+                    Some(name) => name,
+                    None => continue 'rules,
+                };
+                if i > 0 {
+                    comment_rhs += " ";
+                }
+                comment_rhs += name;
+            }
+
             writeln!(f, "    /// `{} : {}`", comment_lhs, comment_rhs)?;
             writeln!(
                 f,
-                "    pub const {export}: Self = Self {{ __raw: {id} }};",
-                export = rule.name(),
+                "    pub const {export_name}: Self = Self {{ __raw: {id} }};",
+                export_name = rule.name(),
                 id = rule_id.raw()
             )?;
         }

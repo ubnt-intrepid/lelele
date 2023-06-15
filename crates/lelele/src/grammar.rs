@@ -48,7 +48,7 @@ impl fmt::Display for SymbolID {
 
 #[derive(Debug)]
 pub struct Symbol {
-    name: Cow<'static, str>,
+    export_name: Option<Cow<'static, str>>,
     kind: SymbolKind,
 }
 
@@ -60,18 +60,18 @@ enum SymbolKind {
 
 impl Symbol {
     const EOI: Self = Self {
-        name: Cow::Borrowed("$eoi"),
+        export_name: None,
         kind: SymbolKind::Terminal,
     };
     const ACCEPT: Self = Self {
-        name: Cow::Borrowed("$accept"),
+        export_name: None,
         kind: SymbolKind::Nonterminal,
     };
 }
 
 impl Symbol {
-    pub fn name(&self) -> &str {
-        &*self.name
+    pub fn export_name(&self) -> Option<&str> {
+        self.export_name.as_deref()
     }
 
     pub fn is_terminal(&self) -> bool {
@@ -129,12 +129,20 @@ impl fmt::Display for Rule<'_> {
             grammar,
             inner: RuleInner { left, right, .. },
         } = self;
-        write!(f, "{} : ", grammar.symbol(*left).name())?;
+        write!(
+            f,
+            "{} : ",
+            grammar.symbol(*left).export_name().unwrap_or("<bogus>")
+        )?;
         for (i, symbol) in right.iter().enumerate() {
             if i > 0 {
                 write!(f, " ")?;
             }
-            write!(f, "{}", grammar.symbol(*symbol).name())?;
+            write!(
+                f,
+                "{}",
+                grammar.symbol(*symbol).export_name().unwrap_or("<bogus>")
+            )?;
         }
         Ok(())
     }
@@ -172,19 +180,21 @@ impl fmt::Display for Grammar {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            write!(f, "{}", sym.name())?;
+            write!(f, "{}", sym.export_name().unwrap_or("<bogus>"))?;
         }
         write!(f, "\nnonterminals: ")?;
         for (i, (_, sym)) in self.nonterminals().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            write!(f, "{}", sym.name())?;
+            write!(f, "{}", sym.export_name().unwrap_or("<bogus>"))?;
         }
         writeln!(
             f,
             "\nstart_symbol: {}",
-            self.symbol(self.start_symbol).name()
+            self.symbol(self.start_symbol)
+                .export_name()
+                .unwrap_or("<bogus>")
         )?;
         write!(f, "rules:\n")?;
         for (id, production) in self.rules() {
@@ -291,12 +301,15 @@ impl GrammarDef<'_> {
         match self
             .symbols
             .iter_mut()
-            .find(|(_, sym)| sym.name == added.name)
+            .find(|(_, sym)| sym.export_name == added.export_name)
         {
             Some((id, sym)) => {
                 if sym.kind != added.kind {
                     return Err(GrammarDefError {
-                        msg: format!("conflict symbol kind (name={})", sym.name),
+                        msg: format!(
+                            "conflict symbol kind (name={})",
+                            sym.export_name().unwrap_or("<bogus>")
+                        ),
                     });
                 }
                 Ok(*id)
@@ -313,12 +326,21 @@ impl GrammarDef<'_> {
     /// Specify a terminal symbol used in this grammar.
     pub fn token(
         &mut self,
-        name: impl Into<Cow<'static, str>>,
+        export_name: impl Into<Cow<'static, str>>,
     ) -> Result<SymbolID, GrammarDefError> {
+        let export_name = verify_ident(export_name.into()).ok_or_else(|| GrammarDefError {
+            msg: "incorrect token name".into(),
+        })?;
         self.add_symbol(Symbol {
-            name: verify_ident(name.into()).ok_or_else(|| GrammarDefError {
-                msg: "incorrect token name".into(),
-            })?,
+            export_name: Some(export_name),
+            kind: SymbolKind::Terminal,
+        })
+    }
+
+    /// Add a "bogus" token symbol into this grammar.
+    pub fn bogus_token(&mut self) -> Result<SymbolID, GrammarDefError> {
+        self.add_symbol(Symbol {
+            export_name: None,
             kind: SymbolKind::Terminal,
         })
     }
@@ -326,12 +348,13 @@ impl GrammarDef<'_> {
     /// Specify a nonterminal symbol used in this grammar.
     pub fn symbol(
         &mut self,
-        name: impl Into<Cow<'static, str>>,
+        export_name: impl Into<Cow<'static, str>>,
     ) -> Result<SymbolID, GrammarDefError> {
+        let export_name = verify_ident(export_name.into()).ok_or_else(|| GrammarDefError {
+            msg: "incorrect symbol name".into(),
+        })?;
         self.add_symbol(Symbol {
-            name: verify_ident(name.into()).ok_or_else(|| GrammarDefError {
-                msg: "incorrect symbol name".into(),
-            })?,
+            export_name: Some(export_name),
             kind: SymbolKind::Nonterminal,
         })
     }

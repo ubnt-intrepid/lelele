@@ -87,13 +87,13 @@ impl fmt::Display for DFADisplay<'_> {
                 let LRCoreItem { rule_id, marker } = core_item;
                 let rule = self.grammar.rule(*rule_id);
                 let start = self.grammar.symbol(rule.left());
-                write!(f, "  - {} :", start.name())?;
+                write!(f, "  - {} :", start.export_name().unwrap_or("<bogus>"))?;
                 for (i, prod) in rule.right().iter().enumerate() {
                     let prod = self.grammar.symbol(*prod);
                     if i == *marker {
                         f.write_str(" @")?;
                     }
-                    write!(f, " {}", prod.name())?;
+                    write!(f, " {}", prod.export_name().unwrap_or("<bogus>"))?;
                 }
                 if *marker == rule.right().len() {
                     f.write_str(" @")?;
@@ -104,14 +104,19 @@ impl fmt::Display for DFADisplay<'_> {
                     if i > 0 {
                         f.write_str("/")?;
                     }
-                    f.write_str(lookahead.name())?;
+                    f.write_str(lookahead.export_name().unwrap_or("<bogus>"))?;
                 }
                 writeln!(f, "]")?;
             }
             writeln!(f, "  edges:")?;
             for (label, target) in &node.edges {
                 let label = self.grammar.symbol(*label);
-                writeln!(f, "  - {} -> {:02}", label.name(), target)?;
+                writeln!(
+                    f,
+                    "  - {} -> {:02}",
+                    label.export_name().unwrap_or("<bogus>"),
+                    target
+                )?;
             }
         }
         Ok(())
