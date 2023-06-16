@@ -4,7 +4,6 @@ use crate::{
     grammar::{Grammar, RuleID, SymbolID},
     IndexMap, IndexSet,
 };
-use indexmap::map::Entry;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     fmt,
@@ -108,15 +107,22 @@ impl fmt::Display for DFADisplay<'_> {
                 }
                 writeln!(f, "]")?;
             }
-            writeln!(f, "  edges:")?;
-            for (label, target) in &node.edges {
-                let label = self.grammar.symbol(*label);
-                writeln!(
-                    f,
-                    "  - {} -> {:02}",
-                    label.export_name().unwrap_or("<bogus>"),
-                    target
-                )?;
+            writeln!(f, "  actions:")?;
+            for (token, action) in &node.actions {
+                let token = self.grammar.symbol(*token);
+                let token = token.export_name().unwrap_or("<bogus>");
+                writeln!(f, "  - On {}:", token)?;
+                if let Some(n) = action.shift {
+                    writeln!(f, "    - shift({:02})", n)?;
+                }
+                for r in &action.reduces {
+                    if *r == RuleID::ACCEPT {
+                        writeln!(f, "    - accept")?;
+                    } else {
+                        let rule = self.grammar.rule(*r);
+                        writeln!(f, "    - reduce({})", rule.name())?;
+                    }
+                }
             }
         }
         Ok(())
@@ -147,7 +153,7 @@ impl fmt::Display for NodeID {
 #[derive(Debug)]
 pub struct DFANode {
     item_set: LRItemSet,
-    edges: IndexMap<SymbolID, NodeID>,
+    actions: IndexMap<SymbolID, Action>,
 }
 
 // LR(1) item
@@ -165,55 +171,22 @@ struct LRCoreItem {
 type LRItemSet = BTreeMap<LRCoreItem, IndexSet<SymbolID>>;
 type LRCoreItems = BTreeSet<LRCoreItem>;
 
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum Action {
-    Shift(NodeID),
-    Reduce(RuleID),
-    Accept,
+impl DFANode {
+    pub fn actions(&self) -> impl Iterator<Item = (SymbolID, &Action)> + '_ {
+        self.actions
+            .iter()
+            .map(|(&symbol, action)| (symbol, action))
+    }
+
+    pub fn action(&self, token: SymbolID) -> Option<&Action> {
+        self.actions.get(&token)
+    }
 }
 
-impl DFANode {
-    pub(crate) fn parse_actions(&self, grammar: &Grammar) -> IndexMap<SymbolID, Action> {
-        let mut actions = IndexMap::default();
-
-        // shift, goto
-        for (label, target) in &self.edges {
-            match actions.entry(*label) {
-                Entry::Occupied(..) => panic!("conflict"),
-                Entry::Vacant(entry) => {
-                    entry.insert(Action::Shift(*target));
-                }
-            }
-        }
-
-        // reduce, accept
-        for (core_item, lookaheads) in &self.item_set {
-            let rule = &grammar.rule(core_item.rule_id);
-            if core_item.marker < rule.right().len() {
-                continue;
-            }
-
-            if core_item.rule_id == RuleID::ACCEPT {
-                match actions.entry(SymbolID::EOI) {
-                    Entry::Occupied(..) => panic!("conflict"),
-                    Entry::Vacant(e) => {
-                        e.insert(Action::Accept);
-                    }
-                }
-            } else {
-                for lookahead in lookaheads {
-                    match actions.entry(*lookahead) {
-                        Entry::Occupied(..) => panic!("conflict"),
-                        Entry::Vacant(e) => {
-                            e.insert(Action::Reduce(core_item.rule_id));
-                        }
-                    }
-                }
-            }
-        }
-
-        actions
-    }
+#[derive(Debug, Default)]
+pub struct Action {
+    pub(crate) shift: Option<NodeID>,
+    pub(crate) reduces: Vec<RuleID>,
 }
 
 // === DFAGenerator ===
@@ -457,18 +430,33 @@ impl<'g> DFAGenerator<'g> {
             next_new_id += 1;
             new_node_ids.insert(orig_id, new_id);
         }
-        let nodes = self
-            .nodes
-            .into_iter()
-            .map(|(orig_id, (item_set, edges))| {
-                let id = new_node_ids[&orig_id];
-                let edges = edges
-                    .into_iter()
-                    .map(|(s, id)| (s, new_node_ids[&id]))
-                    .collect();
-                (id, DFANode { item_set, edges })
-            })
-            .collect();
+
+        let mut nodes = IndexMap::default();
+        for (orig_id, (item_set, edges)) in self.nodes {
+            let id = new_node_ids[&orig_id];
+
+            let mut actions: IndexMap<SymbolID, Action> = IndexMap::default();
+            for (label, target) in edges {
+                // shift, goto
+                let target = new_node_ids[&target];
+                let action = actions.entry(label).or_default();
+                action.shift.replace(target);
+            }
+            for (core_item, lookaheads) in &item_set {
+                // reduce, accept
+                let grammar = self.extractor.grammar;
+                let rule = grammar.rule(core_item.rule_id);
+                if core_item.marker < rule.right().len() {
+                    continue;
+                }
+                for lookahead in lookaheads {
+                    let action = actions.entry(*lookahead).or_default();
+                    action.reduces.push(core_item.rule_id);
+                }
+            }
+
+            nodes.insert(id, DFANode { item_set, actions });
+        }
 
         DFA { nodes }
     }

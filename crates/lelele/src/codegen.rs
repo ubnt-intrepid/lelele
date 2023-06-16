@@ -1,8 +1,8 @@
 //! code generation.
 
 use crate::{
-    dfa::{Action, NodeID, DFA},
-    grammar::{Grammar, SymbolID},
+    dfa::{NodeID, DFA},
+    grammar::{Grammar, RuleID, SymbolID},
 };
 use std::fmt;
 
@@ -192,25 +192,28 @@ const PARSE_TABLE: &[
         )?;
 
         for (_, node) in self.dfa.nodes() {
-            let actions = node.parse_actions(&self.grammar);
-
             let mut actions_g = phf_codegen::Map::<u64>::new();
             actions_g.phf_path("lelele::phf");
-            for (symbol, action) in actions {
-                let action_g = match action {
-                    Action::Shift(n) => {
+
+            for (symbol, action) in node.actions() {
+                // FIXME: Clarify the location and algorithm for resolving shift/reduce and reduce/reduce conflicts.
+                let action_g = match action.shift {
+                    Some(n) => {
                         format!("lelele::ParseAction::Shift(NodeID {{ __raw: {} }})", n)
                     }
-                    Action::Reduce(r) => {
-                        let rule = self.grammar.rule(r);
-                        format!(
-                        "lelele::ParseAction::Reduce(RuleID {{ __raw: {} }}, SymbolID {{ __raw: {} }}, {})",
-                        r.raw(),
-                        rule.left().raw(),
-                        rule.right().len()
-                    )
+                    None if action.reduces.contains(&RuleID::ACCEPT) => {
+                        format!("lelele::ParseAction::Accept")
                     }
-                    Action::Accept => format!("lelele::ParseAction::Accept"),
+                    None => {
+                        let rule_id = action.reduces[0];
+                        let rule = self.grammar.rule(rule_id);
+                        format!(
+                            "lelele::ParseAction::Reduce(RuleID {{ __raw: {} }}, SymbolID {{ __raw: {} }}, {})",
+                            rule_id.raw(),
+                            rule.left().raw(),
+                            rule.right().len()
+                        )
+                    }
                 };
                 actions_g.entry(symbol.raw(), &action_g);
             }
