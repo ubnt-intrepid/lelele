@@ -1,6 +1,13 @@
 //! Parser definition.
 
-/// The trait for abstracting the generated LR(1) parse table.
+/// The trait that represents an LR(1) parser definition generated from a particular CFG.
+///
+/// The main responsibility of types implementing this trait is to tell the parser engine
+/// what the next action should be, given a particular state and lookahead symbol(s).
+///
+/// Note that multiple actions may be suggested for a single state and lookahead, due to
+/// the ambiguity of grammar definition. This trait is designed so that such grammars
+/// can still be parsed (using algorithms such as GLR parsing).
 pub trait ParserDef {
     /// The number to identify the state of LR(1) automaton.
     type State: Copy;
@@ -14,10 +21,8 @@ pub trait ParserDef {
     /// Return the initial state number.
     fn initial_state(&self) -> Self::State;
 
-    /// Return the action corresponding to the specified state number and
-    /// lookahead symbol.
-    ///
-    /// If there is no lookahead symbol, a `None` is passsed as the end of input.
+    /// Suggests the next action that the parser engine should take for
+    /// the current state and lookahead symbol.
     fn action<TCtx>(&self, cx: TCtx) -> Result<TCtx::Ok, TCtx::Err>
     where
         TCtx: ParseContext<State = Self::State, Symbol = Self::Symbol, Reduce = Self::Reduce>;
@@ -31,12 +36,24 @@ pub trait ParseContext {
     type Ok;
     type Err;
 
+    /// Return the current state in this context.
     fn current_state(&self) -> Self::State;
+
+    /// Return the most recent lookahead symbol in this context.
     fn lookahead(&self) -> Option<Self::Symbol>;
+
+    /// Tells the parser engine that the next action is "shift to state `next`".
     fn shift(&mut self, next: Self::State) -> Result<(), Self::Err>;
+
+    /// Tells the parser engine that the next action is "reduce to the production rule `r`".
     fn reduce(&mut self, r: Self::Reduce, s: Self::Symbol, n: usize) -> Result<(), Self::Err>;
+
+    /// Tells the parser engine that the next action is "reduce to the toplevel symbol".
     fn accept(&mut self) -> Result<(), Self::Err>;
+
     fn error(&mut self, reason: &str) -> Result<(), Self::Err>;
+
+    /// Complete the instructions for this context.
     fn end(self) -> Result<Self::Ok, Self::Err>;
 }
 
