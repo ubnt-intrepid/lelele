@@ -1,7 +1,7 @@
 //! Parser definition.
 
 /// The trait for abstracting the generated LR(1) parse table.
-pub trait ParseTable {
+pub trait ParserDef {
     /// The number to identify the state of LR(1) automaton.
     type State: Copy;
 
@@ -18,16 +18,31 @@ pub trait ParseTable {
     /// lookahead symbol.
     ///
     /// If there is no lookahead symbol, a `None` is passsed as the end of input.
-    fn action(
-        &self,
-        current: Self::State,
-        lookahead: Option<Self::Symbol>,
-    ) -> ParseAction<Self::State, Self::Symbol, Self::Reduce>;
+    fn action<TCtx>(&self, cx: TCtx) -> Result<TCtx::Ok, TCtx::Err>
+    where
+        TCtx: ParseContext<State = Self::State, Symbol = Self::Symbol, Reduce = Self::Reduce>;
 }
 
-impl<T: ?Sized> ParseTable for &T
+pub trait ParseContext {
+    type State: Copy;
+    type Symbol: Copy;
+    type Reduce;
+
+    type Ok;
+    type Err;
+
+    fn current_state(&self) -> Self::State;
+    fn lookahead(&self) -> Option<Self::Symbol>;
+    fn shift(&mut self, next: Self::State) -> Result<(), Self::Err>;
+    fn reduce(&mut self, r: Self::Reduce, s: Self::Symbol, n: usize) -> Result<(), Self::Err>;
+    fn accept(&mut self) -> Result<(), Self::Err>;
+    fn error(&mut self, reason: &str) -> Result<(), Self::Err>;
+    fn end(self) -> Result<Self::Ok, Self::Err>;
+}
+
+impl<T: ?Sized> ParserDef for &T
 where
-    T: ParseTable,
+    T: ParserDef,
 {
     type State = T::State;
     type Symbol = T::Symbol;
@@ -37,18 +52,18 @@ where
         (**self).initial_state()
     }
 
-    fn action(
-        &self,
-        current: Self::State,
-        lookahead: Option<Self::Symbol>,
-    ) -> ParseAction<Self::State, Self::Symbol, Self::Reduce> {
-        (**self).action(current, lookahead)
+    #[inline]
+    fn action<TCtx>(&self, cx: TCtx) -> Result<TCtx::Ok, TCtx::Err>
+    where
+        TCtx: ParseContext<State = Self::State, Symbol = Self::Symbol, Reduce = Self::Reduce>,
+    {
+        (**self).action(cx)
     }
 }
 
-impl<T: ?Sized> ParseTable for std::rc::Rc<T>
+impl<T: ?Sized> ParserDef for std::rc::Rc<T>
 where
-    T: ParseTable,
+    T: ParserDef,
 {
     type State = T::State;
     type Symbol = T::Symbol;
@@ -58,18 +73,18 @@ where
         (**self).initial_state()
     }
 
-    fn action(
-        &self,
-        current: Self::State,
-        lookahead: Option<Self::Symbol>,
-    ) -> ParseAction<Self::State, Self::Symbol, Self::Reduce> {
-        (**self).action(current, lookahead)
+    #[inline]
+    fn action<TCtx>(&self, cx: TCtx) -> Result<TCtx::Ok, TCtx::Err>
+    where
+        TCtx: ParseContext<State = Self::State, Symbol = Self::Symbol, Reduce = Self::Reduce>,
+    {
+        (**self).action(cx)
     }
 }
 
-impl<T: ?Sized> ParseTable for std::sync::Arc<T>
+impl<T: ?Sized> ParserDef for std::sync::Arc<T>
 where
-    T: ParseTable,
+    T: ParserDef,
 {
     type State = T::State;
     type Symbol = T::Symbol;
@@ -79,29 +94,11 @@ where
         (**self).initial_state()
     }
 
-    fn action(
-        &self,
-        current: Self::State,
-        input: Option<Self::Symbol>,
-    ) -> ParseAction<Self::State, Self::Symbol, Self::Reduce> {
-        (**self).action(current, input)
+    #[inline]
+    fn action<TCtx>(&self, cx: TCtx) -> Result<TCtx::Ok, TCtx::Err>
+    where
+        TCtx: ParseContext<State = Self::State, Symbol = Self::Symbol, Reduce = Self::Reduce>,
+    {
+        (**self).action(cx)
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-#[non_exhaustive]
-pub enum ParseAction<TState, TSymbol, TReduce> {
-    Shift(TState),
-    Reduce(TReduce, TSymbol, usize),
-    Accept,
-    Error(ParseActionError),
-}
-
-#[derive(Debug, Copy, Clone, thiserror::Error)]
-pub enum ParseActionError {
-    #[error("incorrect state")]
-    IncorrectState,
-
-    #[error("incorrect symbol")]
-    IncorrectSymbol,
 }

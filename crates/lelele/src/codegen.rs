@@ -24,7 +24,7 @@ impl<'g> Codegen<'g> {
 use ::lelele_runtime::_private as lelele;
 
 /// The alias to parser type using generated parser definition.
-pub type Parser<TTok> = lelele::Parser<ParseTable, TTok>;
+pub type Parser<TTok> = lelele::Parser<ParserDef, TTok>;
 
 /// Create an instance of parser using generated definition.
 pub fn parser<TTok>() -> Parser<TTok>
@@ -32,17 +32,17 @@ where
     TTok: lelele::Token<SymbolID>,
 {
     lelele::Parser::new(
-        ParseTable::default()
+        ParserDef::default()
     )
 }
 
 /// The generated LR(1) parse table.
 #[derive(Default)]
-pub struct ParseTable {
+pub struct ParserDef {
     _p: (),
 }
 
-impl lelele::ParseTable for ParseTable {
+impl lelele::ParserDef for ParserDef {
     type State = NodeID;
     type Symbol = SymbolID;
     type Reduce = RuleID;
@@ -53,24 +53,33 @@ impl lelele::ParseTable for ParseTable {
     }
 
     #[inline]
-    fn action(
-        &self,
-        current: Self::State,
-        lookahead: Option<Self::Symbol>,
-    ) -> lelele::ParseAction<Self::State, Self::Symbol, Self::Reduce> {
-        match PARSE_TABLE.get(current.__raw) {
+    fn action<TCtx>(&self, mut cx: TCtx) -> Result<TCtx::Ok, TCtx::Err>
+    where
+        TCtx: lelele::ParseContext<
+            State = Self::State,
+            Symbol = Self::Symbol,
+            Reduce = Self::Reduce,
+        >,
+    {
+        match PARSE_TABLE.get(cx.current_state().__raw) {
             Some(actions) => {
-                let lookahead = lookahead.unwrap_or(SymbolID::__EOI).__raw;
-                actions.get(&lookahead)
-                    .copied()
-                    .unwrap_or_else(|| {
-                        lelele::ParseAction::Error(
-                            lelele::ParseActionError::IncorrectSymbol
-                        )
-                    })
+                let lookahead = cx.lookahead().unwrap_or(SymbolID::__EOI).__raw;
+                match actions.get(&lookahead) {
+                    Some(&iter) => {
+                        for action in iter {
+                            match action {
+                                ParseAction::Shift(n) => cx.shift(*n)?,
+                                ParseAction::Reduce(r, s, i) => cx.reduce(*r, *s, *i)?,
+                                ParseAction::Accept => cx.accept()?,
+                            }
+                        }
+                    },
+                    None => cx.error(\"incorrect symbol\")?,
+                }
             },
-            None => lelele::ParseAction::Error(lelele::ParseActionError::IncorrectState),
+            None => cx.error(\"incorrect state\")?,
         }
+        cx.end()
     }
 }
 ";
@@ -179,16 +188,12 @@ impl RuleID {\n",
     fn fmt_parse_table(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(
             "\
-const PARSE_TABLE: &[
-    lelele::phf::Map<
-        u64,
-        lelele::ParseAction<
-            NodeID,
-            SymbolID,
-            RuleID,
-        >,
-    >
-] = &[\n",
+enum ParseAction {
+    Shift(NodeID),
+    Reduce(RuleID, SymbolID, usize),
+    Accept,
+}
+const PARSE_TABLE: &[ lelele::phf::Map<u64, &[ParseAction]> ] = &[\n",
         )?;
 
         for (_, node) in self.dfa.nodes() {
@@ -196,27 +201,28 @@ const PARSE_TABLE: &[
             actions_g.phf_path("lelele::phf");
 
             for (symbol, action) in node.actions() {
-                // FIXME: Clarify the location and algorithm for resolving shift/reduce and reduce/reduce conflicts.
-                let action_g = match action.shift {
-                    Some(n) => {
-                        format!("lelele::ParseAction::Shift(NodeID {{ __raw: {} }})", n)
-                    }
-                    None if action.reduces.contains(&RuleID::ACCEPT) => {
-                        format!("lelele::ParseAction::Accept")
-                    }
-                    None => {
+                let mut action_g = "&[".to_string();
+                if let Some(n) = action.shift {
+                    action_g += &format!("ParseAction::Shift(NodeID {{ __raw: {} }}), ", n);
+                }
+                for r in &action.reduces {
+                    if *r == RuleID::ACCEPT {
+                        action_g += "ParseAction::Accept, ";
+                    } else {
                         let rule_id = action.reduces[0];
                         let rule = self.grammar.rule(rule_id);
-                        format!(
-                            "lelele::ParseAction::Reduce(RuleID {{ __raw: {} }}, SymbolID {{ __raw: {} }}, {})",
+                        action_g += &format!(
+                            "ParseAction::Reduce(RuleID {{ __raw: {} }}, SymbolID {{ __raw: {} }}, {}), ",
                             rule_id.raw(),
                             rule.left().raw(),
                             rule.right().len()
-                        )
+                        );
                     }
-                };
+                }
+                action_g += "]";
                 actions_g.entry(symbol.raw(), &action_g);
             }
+
             writeln!(f, "{},", actions_g.build())?;
         }
 

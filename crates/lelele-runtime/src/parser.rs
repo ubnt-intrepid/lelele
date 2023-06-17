@@ -1,6 +1,6 @@
 //! Parser.
 
-use crate::definition::{ParseAction, ParseActionError, ParseTable};
+use crate::definition::ParserDef;
 use std::{fmt, mem};
 
 /// A trait for abstracting token symbols.
@@ -12,7 +12,7 @@ pub trait Token<TSym> {
 #[derive(Debug)]
 pub struct Parser<TDef, TTok>
 where
-    TDef: ParseTable,
+    TDef: ParserDef,
     TTok: Token<TDef::Symbol>,
 {
     definition: TDef,
@@ -31,7 +31,7 @@ enum ParserState {
 
 impl<TDef, TTok> Parser<TDef, TTok>
 where
-    TDef: ParseTable,
+    TDef: ParserDef,
     TTok: Token<TDef::Symbol>,
 {
     /// Create an instance of `Parser` using the specified parse table.
@@ -81,7 +81,16 @@ where
                 }
             };
 
-            match self.definition.action(*current, input) {
+            let action = self
+                .definition
+                .action(ParseContext {
+                    current: *current,
+                    lookahead: input,
+                    action: None,
+                })
+                .map_err(ParseError::ParserDef)?;
+
+            match action {
                 ParseAction::Shift(n) => {
                     if !matches!(self.parser_state, ParserState::PendingGoto) {
                         let t = match self.peeked_token.take() {
@@ -138,6 +147,62 @@ where
     }
 }
 
+enum ParseAction<TState, TSymbol, TReduce> {
+    Shift(TState),
+    Reduce(TReduce, TSymbol, usize),
+    Accept,
+    Error(String),
+}
+
+struct ParseContext<TState, TSymbol, TReduce> {
+    current: TState,
+    lookahead: Option<TSymbol>,
+    action: Option<ParseAction<TState, TSymbol, TReduce>>,
+}
+
+impl<TState: Copy, TSymbol: Copy, TReduce> crate::definition::ParseContext
+    for ParseContext<TState, TSymbol, TReduce>
+{
+    type State = TState;
+    type Symbol = TSymbol;
+    type Reduce = TReduce;
+
+    type Ok = ParseAction<TState, TSymbol, TReduce>;
+    type Err = String;
+
+    fn current_state(&self) -> Self::State {
+        self.current
+    }
+    fn lookahead(&self) -> Option<Self::Symbol> {
+        self.lookahead
+    }
+
+    fn shift(&mut self, next: Self::State) -> Result<(), Self::Err> {
+        self.action.replace(ParseAction::Shift(next));
+        Ok(())
+    }
+
+    fn reduce(&mut self, r: Self::Reduce, s: Self::Symbol, n: usize) -> Result<(), Self::Err> {
+        self.action.replace(ParseAction::Reduce(r, s, n));
+        Ok(())
+    }
+
+    fn accept(&mut self) -> Result<(), Self::Err> {
+        self.action.replace(ParseAction::Accept);
+        Ok(())
+    }
+
+    fn error(&mut self, reason: &str) -> Result<(), Self::Err> {
+        self.action.replace(ParseAction::Error(reason.to_string()));
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Err> {
+        self.action
+            .ok_or_else(|| format!("action is not specified"))
+    }
+}
+
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ParseItem<TTok, TSym> {
@@ -166,7 +231,7 @@ impl<TTok, TSym> ParseItem<TTok, TSym> {
 #[derive(Debug)]
 pub enum ParseEvent<TDef>
 where
-    TDef: ParseTable,
+    TDef: ParserDef,
 {
     Reduce(TDef::Reduce),
     Accept,
@@ -178,7 +243,7 @@ pub enum ParseError<L: fmt::Display> {
     Lexer(L),
 
     #[error("from parser definition: {}", _0)]
-    ParserDef(ParseActionError),
+    ParserDef(String),
 
     #[error("unexpected EOI")]
     UnexpectedEOI,
