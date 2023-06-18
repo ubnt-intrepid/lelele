@@ -120,7 +120,11 @@ impl fmt::Display for DFADisplay<'_> {
                         writeln!(f, "    - accept")?;
                     } else {
                         let rule = self.grammar.rule(*r);
-                        writeln!(f, "    - reduce({})", rule.name())?;
+                        writeln!(
+                            f,
+                            "    - reduce({})",
+                            rule.export_name().unwrap_or("<unnamed>")
+                        )?;
                     }
                 }
             }

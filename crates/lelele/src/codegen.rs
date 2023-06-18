@@ -154,6 +154,11 @@ impl RuleID {\n",
         )?;
 
         'rules: for (rule_id, rule) in self.grammar.rules() {
+            let export_name = match rule.export_name() {
+                Some(name) => name,
+                None => continue 'rules,
+            };
+
             let comment_lhs = match self.grammar.symbol(rule.left()).export_name() {
                 Some(name) => name,
                 None => continue 'rules,
@@ -175,7 +180,7 @@ impl RuleID {\n",
             writeln!(
                 f,
                 "    pub const {export_name}: Self = Self {{ __raw: {id} }};",
-                export_name = rule.name(),
+                export_name = export_name,
                 id = rule_id.raw()
             )?;
         }

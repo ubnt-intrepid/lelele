@@ -111,23 +111,45 @@ impl fmt::Display for RuleID {
 
 /// The type that represents a production rule in grammar.
 #[derive(Debug)]
-pub struct Rule<'g> {
-    grammar: &'g Grammar,
-    inner: &'g RuleInner,
-}
-
-#[derive(Debug)]
-struct RuleInner {
-    name: Cow<'static, str>,
+pub struct Rule {
     left: SymbolID,
     right: Vec<SymbolID>,
+    export_name: Option<Cow<'static, str>>,
 }
 
-impl fmt::Display for Rule<'_> {
+impl Rule {
+    /// Return the left-hand side of this production.
+    pub fn left(&self) -> SymbolID {
+        self.left
+    }
+
+    /// Return the right-hand side of this production.
+    pub fn right(&self) -> &[SymbolID] {
+        &self.right[..]
+    }
+
+    pub fn export_name(&self) -> Option<&str> {
+        self.export_name.as_deref()
+    }
+
+    pub fn display<'g>(&'g self, grammar: &'g Grammar) -> impl fmt::Display + '_ {
+        RuleDisplay {
+            grammar,
+            rule: self,
+        }
+    }
+}
+
+struct RuleDisplay<'g> {
+    grammar: &'g Grammar,
+    rule: &'g Rule,
+}
+
+impl fmt::Display for RuleDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
             grammar,
-            inner: RuleInner { left, right, .. },
+            rule: Rule { left, right, .. },
         } = self;
         write!(
             f,
@@ -148,29 +170,13 @@ impl fmt::Display for Rule<'_> {
     }
 }
 
-impl Rule<'_> {
-    /// Return the left-hand side of this production.
-    pub fn left(&self) -> SymbolID {
-        self.inner.left
-    }
-
-    /// Return the right-hand side of this production.
-    pub fn right(&self) -> &[SymbolID] {
-        &self.inner.right[..]
-    }
-
-    pub(crate) fn name(&self) -> &str {
-        &*self.inner.name
-    }
-}
-
 /// The grammar definition used to derive the parser tables.
 #[derive(Debug)]
 pub struct Grammar {
     symbols: IndexMap<SymbolID, Symbol>,
-    rules: IndexMap<RuleID, RuleInner>,
+    rules: IndexMap<RuleID, Rule>,
     start_symbol: SymbolID,
-    accept_rule: RuleInner,
+    accept_rule: Rule,
 }
 
 impl fmt::Display for Grammar {
@@ -197,8 +203,8 @@ impl fmt::Display for Grammar {
                 .unwrap_or("<bogus>")
         )?;
         write!(f, "rules:\n")?;
-        for (id, production) in self.rules() {
-            writeln!(f, "  [{:02}] {}", id, production)?;
+        for (id, rule) in self.rules() {
+            writeln!(f, "  [{:02}] {}", id, rule.display(self))?;
         }
         Ok(())
     }
@@ -253,34 +259,16 @@ impl Grammar {
         (self.start_symbol, self.symbol(self.start_symbol))
     }
 
-    pub fn rules(&self) -> impl Iterator<Item = (RuleID, Rule<'_>)> + '_ {
-        Some((
-            RuleID::ACCEPT,
-            Rule {
-                grammar: self,
-                inner: &self.accept_rule,
-            },
-        ))
-        .into_iter()
-        .chain(self.rules.iter().map(|(id, rule)| {
-            (
-                *id,
-                Rule {
-                    grammar: self,
-                    inner: rule,
-                },
-            )
-        }))
+    pub fn rules(&self) -> impl Iterator<Item = (RuleID, &Rule)> + '_ {
+        Some((RuleID::ACCEPT, &self.accept_rule))
+            .into_iter()
+            .chain(self.rules.iter().map(|(id, rule)| (*id, rule)))
     }
 
-    pub fn rule(&self, id: RuleID) -> Rule<'_> {
-        let inner = match id {
+    pub fn rule(&self, id: RuleID) -> &Rule {
+        match id {
             RuleID::ACCEPT => &self.accept_rule,
-            id => &self.rules.get(&id).unwrap(),
-        };
-        Rule {
-            grammar: self,
-            inner,
+            id => &self.rules[&id],
         }
     }
 }
@@ -289,7 +277,7 @@ impl Grammar {
 #[derive(Debug)]
 pub struct GrammarDef<'def> {
     symbols: IndexMap<SymbolID, Symbol>,
-    rules: IndexMap<RuleID, RuleInner>,
+    rules: IndexMap<RuleID, Rule>,
     start: Option<SymbolID>,
     next_symbol_id: u64,
     next_rule_id: u64,
@@ -379,16 +367,18 @@ impl GrammarDef<'_> {
             });
         }
 
+        let export_name = verify_ident(name.into()).ok_or_else(|| GrammarDefError {
+            msg: "incorrect rule name".into(),
+        })?;
+
         let id = RuleID::new(self.next_rule_id);
         self.next_rule_id += 1;
         self.rules.insert(
             id,
-            RuleInner {
+            Rule {
                 left,
                 right: right.into_iter().collect(),
-                name: verify_ident(name.into()).ok_or_else(|| GrammarDefError {
-                    msg: "incorrect rule name".into(),
-                })?,
+                export_name: Some(export_name),
             },
         );
 
@@ -426,10 +416,10 @@ impl GrammarDef<'_> {
             symbols: self.symbols,
             rules: self.rules,
             start_symbol: start,
-            accept_rule: RuleInner {
+            accept_rule: Rule {
                 left: SymbolID::ACCEPT,
                 right: vec![start],
-                name: "*****".into(), // never used
+                export_name: None,
             },
         })
     }
