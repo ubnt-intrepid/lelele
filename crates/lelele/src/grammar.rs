@@ -50,6 +50,7 @@ impl fmt::Display for SymbolID {
 pub struct Symbol {
     export_name: Option<Cow<'static, str>>,
     kind: SymbolKind,
+    precedence: Option<Precedence>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -58,14 +59,40 @@ enum SymbolKind {
     Nonterminal,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum Assoc {
+    Left,
+    Right,
+    Nonassoc,
+}
+impl fmt::Display for Assoc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Left => write!(f, "left"),
+            Self::Right => write!(f, "right"),
+            Self::Nonassoc => write!(f, "nonassoc"),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct Precedence {
+    pub priority: usize,
+    pub assoc: Assoc,
+}
+
 impl Symbol {
     const EOI: Self = Self {
         export_name: None,
         kind: SymbolKind::Terminal,
+        precedence: None,
     };
     const ACCEPT: Self = Self {
         export_name: None,
         kind: SymbolKind::Nonterminal,
+        precedence: None,
     };
 }
 
@@ -76,6 +103,10 @@ impl Symbol {
 
     pub fn is_terminal(&self) -> bool {
         matches!(self.kind, SymbolKind::Terminal)
+    }
+
+    pub fn precedence(&self) -> Option<&Precedence> {
+        self.precedence.as_ref()
     }
 }
 
@@ -115,6 +146,7 @@ pub struct Rule {
     left: SymbolID,
     right: Vec<SymbolID>,
     export_name: Option<Cow<'static, str>>,
+    prec_token: Option<SymbolID>,
 }
 
 impl Rule {
@@ -130,6 +162,21 @@ impl Rule {
 
     pub fn export_name(&self) -> Option<&str> {
         self.export_name.as_deref()
+    }
+
+    pub fn precedence<'g>(&'g self, grammar: &'g Grammar) -> Option<&'g Precedence> {
+        match self.prec_token {
+            Some(ref tok) => grammar.symbols[tok].precedence(),
+            None => {
+                for id in self.right.iter().rev() {
+                    let symbol = grammar.symbol(*id);
+                    if symbol.is_terminal() {
+                        return symbol.precedence();
+                    }
+                }
+                None
+            }
+        }
     }
 }
 
@@ -147,7 +194,11 @@ impl fmt::Display for Grammar {
         writeln!(f, "## terminals:")?;
         for (_, sym) in self.terminals() {
             let name = sym.export_name().unwrap_or("<bogus>");
-            writeln!(f, "- {}", name)?;
+            write!(f, "- {}", name)?;
+            if let Some(prec) = sym.precedence() {
+                write!(f, " (priority={}, assoc={})", prec.priority, prec.assoc)?;
+            }
+            writeln!(f)?;
         }
 
         writeln!(f, "\n## nonterminals:")?;
@@ -199,6 +250,7 @@ impl Grammar {
             start: None,
             next_symbol_id: SYMBOL_ID_OFFSET,
             next_rule_id: RULE_ID_OFFSET,
+            next_priority: 0,
             _marker: PhantomData,
         };
 
@@ -258,6 +310,7 @@ pub struct GrammarDef<'def> {
     start: Option<SymbolID>,
     next_symbol_id: u64,
     next_rule_id: u64,
+    next_priority: usize,
     _marker: PhantomData<&'def mut ()>,
 }
 
@@ -299,6 +352,7 @@ impl GrammarDef<'_> {
         self.add_symbol(Symbol {
             export_name: Some(export_name),
             kind: SymbolKind::Terminal,
+            precedence: None,
         })
     }
 
@@ -307,6 +361,7 @@ impl GrammarDef<'_> {
         self.add_symbol(Symbol {
             export_name: None,
             kind: SymbolKind::Terminal,
+            precedence: None,
         })
     }
 
@@ -321,6 +376,7 @@ impl GrammarDef<'_> {
         self.add_symbol(Symbol {
             export_name: Some(export_name),
             kind: SymbolKind::Nonterminal,
+            precedence: None,
         })
     }
 
@@ -330,6 +386,19 @@ impl GrammarDef<'_> {
         name: impl Into<Cow<'static, str>>,
         left: SymbolID,
         right: I,
+    ) -> Result<RuleID, GrammarDefError>
+    where
+        I: IntoIterator<Item = SymbolID>,
+    {
+        self.rule_with_prec(name, left, right, None)
+    }
+
+    pub fn rule_with_prec<I>(
+        &mut self,
+        name: impl Into<Cow<'static, str>>,
+        left: SymbolID,
+        right: I,
+        prec_token: Option<SymbolID>,
     ) -> Result<RuleID, GrammarDefError>
     where
         I: IntoIterator<Item = SymbolID>,
@@ -348,6 +417,14 @@ impl GrammarDef<'_> {
             msg: "incorrect rule name".into(),
         })?;
 
+        if let Some(prec) = prec_token {
+            if !self.symbols[&prec].is_terminal() {
+                return Err(GrammarDefError {
+                    msg: "The prec symbol must be terminal".into(),
+                });
+            }
+        }
+
         let id = RuleID::new(self.next_rule_id);
         self.next_rule_id += 1;
         self.rules.insert(
@@ -356,24 +433,56 @@ impl GrammarDef<'_> {
                 left,
                 right: right.into_iter().collect(),
                 export_name: Some(export_name),
+                prec_token,
             },
         );
 
         Ok(id)
     }
 
-    /// Specify the start symbol.
+    /// Specify the start symbol for this grammar.
     pub fn start_symbol(&mut self, symbol: SymbolID) -> Result<(), GrammarDefError> {
-        if self
-            .symbols
-            .get(&symbol)
-            .map_or(true, |s| s.kind != SymbolKind::Nonterminal)
-        {
+        if self.symbols[&symbol].is_terminal() {
             return Err(GrammarDefError {
                 msg: "the start symbol must be nonterminal".into(),
             });
         }
         self.start.replace(symbol);
+        Ok(())
+    }
+
+    /// Specify the precedence for the terminal symbols.
+    pub fn precedence<I>(&mut self, assoc: Assoc, tokens: I) -> Result<(), GrammarDefError>
+    where
+        I: IntoIterator<Item = SymbolID>,
+    {
+        let priority = self.next_priority;
+        let mut changed = false;
+        for token in tokens {
+            let symbol = &mut self.symbols[&token];
+            if !symbol.is_terminal() {
+                return Err(GrammarDefError {
+                    msg: "nonterminal cannot have precedence".into(),
+                });
+            }
+            match symbol.precedence {
+                Some(..) => {
+                    return Err(GrammarDefError {
+                        msg: format!(
+                            "The token {} has already been set the precedence",
+                            symbol.export_name().unwrap_or("<bogus>")
+                        ),
+                    })
+                }
+                None => symbol.precedence = Some(Precedence { priority, assoc }),
+            }
+            changed = true;
+        }
+
+        if changed {
+            self.next_priority += 1;
+        }
+
         Ok(())
     }
 
@@ -397,6 +506,7 @@ impl GrammarDef<'_> {
                 left: SymbolID::ACCEPT,
                 right: vec![start],
                 export_name: None,
+                prec_token: None,
             },
         })
     }

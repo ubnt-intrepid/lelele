@@ -115,17 +115,16 @@ impl fmt::Display for DFADisplay<'_> {
                 if let Some(n) = action.shift {
                     writeln!(f, "    - shift({:02})", n)?;
                 }
+                if action.accepted {
+                    writeln!(f, "    - accept")?;
+                }
                 for r in &action.reduces {
-                    if *r == RuleID::ACCEPT {
-                        writeln!(f, "    - accept")?;
-                    } else {
-                        let rule = self.grammar.rule(*r);
-                        writeln!(
-                            f,
-                            "    - reduce({})",
-                            rule.export_name().unwrap_or("<unnamed>")
-                        )?;
-                    }
+                    let rule = self.grammar.rule(*r);
+                    writeln!(
+                        f,
+                        "    - reduce({})",
+                        rule.export_name().unwrap_or("<unnamed>")
+                    )?;
                 }
             }
         }
@@ -191,6 +190,7 @@ impl DFANode {
 pub struct Action {
     pub(crate) shift: Option<NodeID>,
     pub(crate) reduces: Vec<RuleID>,
+    pub(crate) accepted: bool,
 }
 
 // === DFAGenerator ===
@@ -455,7 +455,11 @@ impl<'g> DFAGenerator<'g> {
                 }
                 for lookahead in lookaheads {
                     let action = actions.entry(*lookahead).or_default();
-                    action.reduces.push(core_item.rule_id);
+                    if core_item.rule_id == RuleID::ACCEPT {
+                        action.accepted = true;
+                    } else {
+                        action.reduces.push(core_item.rule_id);
+                    }
                 }
             }
 

@@ -1,6 +1,6 @@
 //! Grammar definition for integration tests.
 
-use lelele::grammar::GrammarDef;
+use lelele::grammar::{Assoc, GrammarDef};
 
 type Result<T = (), E = lelele::grammar::GrammarDefError> = std::result::Result<T, E>;
 
@@ -291,7 +291,7 @@ pub fn g10(g: &mut GrammarDef<'_>) -> Result {
 // TODO: G11 ~ G17
 
 pub fn min_caml(g: &mut GrammarDef<'_>) -> Result {
-    // WIP
+    // imported from: https://github.com/esumii/min-caml/blob/master/parser.mly
 
     let l_paren = g.token("LPAREN")?;
     let r_paren = g.token("RPAREN")?;
@@ -326,21 +326,44 @@ pub fn min_caml(g: &mut GrammarDef<'_>) -> Result {
     let dot = g.token("DOT")?;
 
     let simple_exp = g.symbol("SIMPLE_EXP")?;
-    let app_exp = g.symbol("APP_EXP")?;
-    let neg_exp = g.symbol("NEG_EXP")?;
-    let mult_exp = g.symbol("MULT_EXP")?;
-    let add_exp = g.symbol("ADD_EXP")?;
-    let rel_exp = g.symbol("REL_EXP")?;
-    let tuple_exp = g.symbol("TUPLE_EXP")?;
-    let put_exp = g.symbol("PUT_EXP")?;
-    let if_exp = g.symbol("IF_EXP")?;
-    let let_exp = g.symbol("LET_EXP")?;
-    let exp = g.symbol("EXPR")?;
+    let exp = g.symbol("EXP")?;
     let formal_args = g.symbol("FORMAL_ARGS")?;
     let actual_args = g.symbol("ACTUAL_ARGS")?;
-    let tuple_exp_rest = g.symbol("TUPLE_EXP_REST")?;
     let fundef = g.symbol("FUNDEF")?;
     let pat = g.symbol("PAT")?;
+    let elems = g.symbol("ELEMS")?;
+
+    let prec_let = g.bogus_token()?;
+    let prec_if = g.bogus_token()?;
+    let prec_tuple = g.bogus_token()?;
+    let prec_unary_minus = g.bogus_token()?;
+    let prec_app = g.bogus_token()?;
+
+    g.precedence(Assoc::Nonassoc, [t_in])?;
+    g.precedence(Assoc::Right, [prec_let])?;
+    g.precedence(Assoc::Right, [semicolon])?;
+    g.precedence(Assoc::Right, [prec_if])?;
+    g.precedence(Assoc::Right, [less_minus])?;
+    g.precedence(Assoc::Nonassoc, [prec_tuple])?;
+    g.precedence(Assoc::Left, [comma])?;
+    g.precedence(
+        Assoc::Left,
+        [
+            equal,
+            less_greater,
+            less,
+            greater,
+            less_equal,
+            greater_equal,
+        ],
+    )?;
+    g.precedence(Assoc::Left, [plus, minus, plus_dot, minus_dot])?;
+    g.precedence(Assoc::Left, [star_dot, slash_dot])?;
+    g.precedence(Assoc::Right, [prec_unary_minus])?;
+    g.precedence(Assoc::Left, [prec_app])?;
+    g.precedence(Assoc::Left, [dot])?;
+
+    g.start_symbol(exp)?;
 
     g.rule("SIMPLE_EXP_PAREN", simple_exp, [l_paren, exp, r_paren])?;
     g.rule("SIMPLE_EXP_UNIT", simple_exp, [l_paren, r_paren])?;
@@ -355,75 +378,58 @@ pub fn min_caml(g: &mut GrammarDef<'_>) -> Result {
         [simple_exp, dot, l_paren, exp, r_paren],
     )?;
 
-    g.rule("APP_EXP_REDIRECT", app_exp, [simple_exp])?;
-    g.rule("APP_EXP_APPLY", app_exp, [simple_exp, actual_args])?;
-    g.rule(
-        "APP_EXP_ARRAY_MAKE",
-        app_exp,
-        [array_make, simple_exp, simple_exp],
+    g.rule("EXP_REDIRECT", exp, [simple_exp])?;
+    g.rule_with_prec("EXP_NOT", exp, [t_not, exp], Some(prec_app))?;
+    g.rule_with_prec("EXP_NEG", exp, [minus, exp], Some(prec_unary_minus))?;
+    g.rule_with_prec("EXP_NEG_DOT", exp, [minus_dot, exp], Some(prec_unary_minus))?;
+    g.rule("EXP_ADD", exp, [exp, plus, exp])?;
+    g.rule("EXP_SUB", exp, [exp, minus, exp])?;
+    g.rule("EXP_FADD", exp, [exp, plus_dot, exp])?;
+    g.rule("EXP_FSUB", exp, [exp, minus_dot, exp])?;
+    g.rule("EXP_FMUL", exp, [exp, star_dot, exp])?;
+    g.rule("EXP_FDIV", exp, [exp, slash_dot, exp])?;
+    g.rule("EXP_EQUAL", exp, [exp, equal, exp])?;
+    g.rule("EXP_LESS_GREATER", exp, [exp, less_greater, exp])?;
+    g.rule("EXP_LESS", exp, [exp, less, exp])?;
+    g.rule("EXP_GREATER", exp, [exp, greater, exp])?;
+    g.rule("EXP_LESS_EQ", exp, [exp, less_equal, exp])?;
+    g.rule("EXP_GREATER_EQ", exp, [exp, greater_equal, exp])?;
+    g.rule_with_prec(
+        "EXP_IF",
+        exp,
+        [t_if, exp, t_then, exp, t_else, exp],
+        Some(prec_if),
     )?;
-    g.rule("APP_EXP_NOT", app_exp, [t_not, app_exp])?;
-
-    g.rule("NEG_EXP_REDIRECT", neg_exp, [app_exp])?;
-    g.rule("NEG_EXP_NEG", neg_exp, [minus, neg_exp])?;
-    g.rule("NEG_EXP_NEG_DOT", neg_exp, [minus_dot, neg_exp])?;
-
-    g.rule("MULT_EXP_REDIRECT", mult_exp, [neg_exp])?;
-    g.rule("MULT_EXP_MUL", mult_exp, [mult_exp, star_dot, neg_exp])?;
-    g.rule("MULT_EXP_DIV", mult_exp, [mult_exp, slash_dot, neg_exp])?;
-
-    g.rule("ADD_EXP_REDIRECT", add_exp, [mult_exp])?;
-    g.rule("ADD_EXP_ADD", add_exp, [add_exp, plus, mult_exp])?;
-    g.rule("ADD_EXP_SUB", add_exp, [add_exp, minus, mult_exp])?;
-    g.rule("ADD_EXP_ADD_DOT", add_exp, [add_exp, plus_dot, mult_exp])?;
-    g.rule("ADD_EXP_SUB_DOT", add_exp, [add_exp, minus_dot, mult_exp])?;
-
-    g.rule("REL_EXP_REDIRECT", rel_exp, [add_exp])?;
-    g.rule("REL_EXP_EQ", rel_exp, [rel_exp, equal, add_exp])?;
-    g.rule("REL_EXP_LG", rel_exp, [rel_exp, less_greater, add_exp])?;
-    g.rule("REL_EXP_LT", rel_exp, [rel_exp, less, add_exp])?;
-    g.rule("REL_EXP_GT", rel_exp, [rel_exp, greater, add_exp])?;
-    g.rule("REL_EXP_LE", rel_exp, [rel_exp, less_equal, add_exp])?;
-    g.rule("REL_EXP_GE", rel_exp, [rel_exp, greater_equal, add_exp])?;
-
-    g.rule("TUPLE_EXP_REDIRECT", tuple_exp, [rel_exp])?;
-    g.rule(
-        "TUPLE_EXP_TUPLE",
-        tuple_exp,
-        [rel_exp, comma, tuple_exp_rest],
+    g.rule_with_prec(
+        "EXP_LET",
+        exp,
+        [t_let, ident, equal, exp, t_in, exp],
+        Some(prec_let),
     )?;
-
-    g.rule("TUPLE_EXP_REST_ELEM", tuple_exp_rest, [rel_exp])?;
-    g.rule(
-        "TUPLE_EXP_REST_ELEMS",
-        tuple_exp_rest,
-        [rel_exp, comma, tuple_exp_rest],
+    g.rule_with_prec(
+        "EXP_LET_REC",
+        exp,
+        [t_let, t_rec, fundef, t_in, exp],
+        Some(prec_let),
     )?;
-
-    g.rule("PUT_EXP_REDIRECT", put_exp, [tuple_exp])?;
     g.rule(
-        "PUT_EXP_ARRAY_PUT",
-        put_exp,
+        "EXP_LET_TUPLE",
+        exp,
+        [t_let, l_paren, pat, r_paren, equal, exp, t_in, exp],
+    )?;
+    g.rule_with_prec("EXP_APP", exp, [simple_exp, actual_args], Some(prec_app))?;
+    g.rule_with_prec("EXP_ELEMS", exp, [elems], Some(prec_tuple))?;
+    g.rule(
+        "EXP_ARRAY_PUT",
+        exp,
         [simple_exp, dot, l_paren, exp, r_paren, less_minus, exp],
     )?;
-
-    g.rule("IF_EXP_REDIRECT", if_exp, [put_exp])?;
-    g.rule("IF_EXP_IF", if_exp, [t_if, exp, t_then, exp, t_else, exp])?;
-
-    g.rule(
-        "LET_EXP_LET",
-        let_exp,
-        [t_let, ident, equal, exp, t_in, exp],
-    )?;
-    g.rule(
-        "LET_EXP_LET_REC",
-        let_exp,
-        [t_let, t_rec, fundef, t_in, exp],
-    )?;
-    g.rule(
-        "LET_EXP_LET_TUPLE",
-        let_exp,
-        [t_let, l_paren, pat, r_paren, equal, exp, t_in, exp],
+    g.rule("EXP_SEMICOLON", exp, [exp, semicolon, exp])?;
+    g.rule_with_prec(
+        "EXP_ARRAY_CREATE",
+        exp,
+        [array_make, simple_exp, simple_exp],
+        Some(prec_app),
     )?;
 
     g.rule("FUNDEF", fundef, [ident, formal_args, equal, exp])?;
@@ -431,17 +437,24 @@ pub fn min_caml(g: &mut GrammarDef<'_>) -> Result {
     g.rule("FORMAL_ARGS_LIST", formal_args, [ident, formal_args])?;
     g.rule("FORMAL_ARGS_ELEM", formal_args, [ident])?;
 
-    g.rule("ACTUAL_ARGS_LIST", actual_args, [actual_args, simple_exp])?;
-    g.rule("ACTUAL_ARGS_ELEM", actual_args, [simple_exp])?;
+    g.rule_with_prec(
+        "ACTUAL_ARGS_LIST",
+        actual_args,
+        [actual_args, simple_exp],
+        Some(prec_app),
+    )?;
+    g.rule_with_prec(
+        "ACTUAL_ARGS_ELEM",
+        actual_args,
+        [simple_exp],
+        Some(prec_app),
+    )?;
+
+    g.rule("ELEMS", elems, [elems, comma, exp])?;
+    g.rule("ELEMS_TAIL", elems, [exp, comma, exp])?;
 
     g.rule("PAT_LIST", pat, [pat, comma, ident])?;
     g.rule("PAT_TAIL", pat, [ident, comma, ident])?;
-
-    g.rule("EXP_IF", exp, [if_exp])?;
-    g.rule("EXP_SEMICOLON", exp, [if_exp, semicolon, exp])?;
-    g.rule("EXP_LET", exp, [let_exp])?;
-
-    g.start_symbol(exp)?;
 
     Ok(())
 }

@@ -3,6 +3,7 @@
 pub mod codegen;
 pub mod dfa;
 pub mod grammar;
+pub mod parse_table;
 
 // type shortcut
 type BuildFxHasher = std::hash::BuildHasherDefault<rustc_hash::FxHasher>;
