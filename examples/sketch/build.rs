@@ -9,14 +9,23 @@ fn main() {
     // 冗長なコード生成の抑制
     println!("cargo:rerun-if-changed=build.rs");
 
+    let project_root = env::var_os("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .unwrap();
+
     // 文法定義から構文解析表を導出する
     let grammar = Grammar::define(grammar_def).unwrap();
-    let dfa = DFA::generate(&grammar);
-    eprintln!("Grammar:\n{}", grammar);
+    fs::write(project_root.join("sketch.grammar"), grammar.to_string()).unwrap();
 
-    let parser_def = Codegen::new(&grammar, &dfa);
+    let dfa = DFA::generate(&grammar);
+    fs::write(
+        project_root.join("sketch.automaton"),
+        dfa.display(&grammar).to_string(),
+    )
+    .unwrap();
 
     // 生成された構文解析表をコードに出力
+    let codegen = Codegen::new(&grammar, &dfa);
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("parser.rs");
     let mut out = fs::File::options()
         .write(true)
@@ -24,7 +33,7 @@ fn main() {
         .create(true)
         .open(out_path)
         .unwrap();
-    write!(out, "{}", parser_def).unwrap();
+    write!(out, "{}", codegen).unwrap();
 }
 
 fn grammar_def(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {

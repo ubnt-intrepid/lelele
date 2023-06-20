@@ -19,15 +19,27 @@ fn generate_parser(
     name: &str,
     grammar_def: impl FnOnce(&mut GrammarDef<'_>) -> Result<(), GrammarDefError>,
 ) -> anyhow::Result<()> {
+    let project_root = env::var("CARGO_MANIFEST_DIR").map(PathBuf::from).unwrap();
+
     let grammar = Grammar::define(grammar_def).unwrap();
+    fs::write(
+        project_root.join(format!("{}.grammar", name)),
+        grammar.to_string(),
+    )?;
+
     let dfa = DFA::generate(&grammar);
-    let parser_def = Codegen::new(&grammar, &dfa);
+    fs::write(
+        project_root.join(format!("{}.automaton", name)),
+        dfa.display(&grammar).to_string(),
+    )?;
+
+    let codegen = Codegen::new(&grammar, &dfa);
 
     let out_dir = env::var("OUT_DIR").map(PathBuf::from).unwrap().join(name);
     fs::create_dir_all(&out_dir)
         .with_context(|| format!("create_dir_all({})", out_dir.display()))?;
     let out_path = out_dir.join("parser.rs");
-    fs::write(&out_path, parser_def.to_string())
+    fs::write(&out_path, codegen.to_string())
         .with_context(|| format!("write({}, <parser definition>)", out_path.display()))?;
 
     Ok(())

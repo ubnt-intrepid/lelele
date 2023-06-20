@@ -131,43 +131,6 @@ impl Rule {
     pub fn export_name(&self) -> Option<&str> {
         self.export_name.as_deref()
     }
-
-    pub fn display<'g>(&'g self, grammar: &'g Grammar) -> impl fmt::Display + '_ {
-        RuleDisplay {
-            grammar,
-            rule: self,
-        }
-    }
-}
-
-struct RuleDisplay<'g> {
-    grammar: &'g Grammar,
-    rule: &'g Rule,
-}
-
-impl fmt::Display for RuleDisplay<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Self {
-            grammar,
-            rule: Rule { left, right, .. },
-        } = self;
-        write!(
-            f,
-            "{} : ",
-            grammar.symbol(*left).export_name().unwrap_or("<bogus>")
-        )?;
-        for (i, symbol) in right.iter().enumerate() {
-            if i > 0 {
-                write!(f, " ")?;
-            }
-            write!(
-                f,
-                "{}",
-                grammar.symbol(*symbol).export_name().unwrap_or("<bogus>")
-            )?;
-        }
-        Ok(())
-    }
 }
 
 /// The grammar definition used to derive the parser tables.
@@ -181,31 +144,45 @@ pub struct Grammar {
 
 impl fmt::Display for Grammar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "terminals: ")?;
-        for (i, (_, sym)) in self.terminals().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
+        writeln!(f, "## terminals:")?;
+        for (_, sym) in self.terminals() {
+            let name = sym.export_name().unwrap_or("<bogus>");
+            writeln!(f, "- {}", name)?;
+        }
+
+        writeln!(f, "\n## nonterminals:")?;
+        for (id, sym) in self.nonterminals() {
+            write!(f, "- {}", sym.export_name().unwrap_or("<bogus>"))?;
+            if id == self.start_symbol {
+                write!(f, " (start)")?;
             }
-            write!(f, "{}", sym.export_name().unwrap_or("<bogus>"))?;
+            writeln!(f)?;
         }
-        write!(f, "\nnonterminals: ")?;
-        for (i, (_, sym)) in self.nonterminals().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
+
+        writeln!(f, "\n## rules:")?;
+        for (_, rule) in self.rules() {
+            write!(f, "- ")?;
+            if let Some(name) = rule.export_name() {
+                write!(f, "[{}] ", name)?;
             }
-            write!(f, "{}", sym.export_name().unwrap_or("<bogus>"))?;
+            write!(
+                f,
+                "{} : ",
+                self.symbol(rule.left()).export_name().unwrap_or("<bogus>")
+            )?;
+            for (i, symbol) in rule.right().iter().enumerate() {
+                if i > 0 {
+                    write!(f, " ")?;
+                }
+                write!(
+                    f,
+                    "{}",
+                    self.symbol(*symbol).export_name().unwrap_or("<bogus>")
+                )?;
+            }
+            writeln!(f)?;
         }
-        writeln!(
-            f,
-            "\nstart_symbol: {}",
-            self.symbol(self.start_symbol)
-                .export_name()
-                .unwrap_or("<bogus>")
-        )?;
-        write!(f, "rules:\n")?;
-        for (id, rule) in self.rules() {
-            writeln!(f, "  [{:02}] {}", id, rule.display(self))?;
-        }
+
         Ok(())
     }
 }
