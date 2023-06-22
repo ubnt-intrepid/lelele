@@ -45,29 +45,16 @@ fn resolve_action(
         return Ok(Accept);
     }
 
-    let mut reduces = action.reduces.clone();
-    reduces.sort_by(|r1, r2| {
-        let p1 = grammar.rule(*r1).precedence(grammar);
-        let p2 = grammar.rule(*r2).precedence(grammar);
-        match (p1, p2) {
-            (Some(p1), Some(p2)) => Ord::cmp(&p2.priority, &p1.priority),
-            (None, Some(..)) => Ordering::Greater,
-            (Some(..), None) => Ordering::Less,
-            (None, None) => Ordering::Equal,
-        }
-    });
-
-    match (action.shift, &reduces[..]) {
-        (None, []) => unreachable!(),
-        (None, [reduce]) => Ok(Reduce(*reduce)),
-        (None, [_, ..]) => Err(ResolveError::MultipleReduces),
+    match (action.shift, &action.reduces[..]) {
         (Some(next), []) => Ok(Shift(next)),
+        (None, [reduce]) => Ok(Reduce(*reduce)),
 
         (Some(next), [reduce, remains @ ..]) => {
             let shift_prec = grammar.symbol(symbol_id).precedence();
-            let reduce_prec = grammar.rule(*reduce).precedence(grammar);
 
+            let reduce_prec = grammar.rule(*reduce).precedence(grammar);
             let resolved = resolve_shift_reduce_conflict(shift_prec, reduce_prec)?;
+
             if matches!(resolved, Some(false)) && !remains.is_empty() {
                 return Err(ResolveError::ResolutionMismatched);
             }
@@ -86,6 +73,10 @@ fn resolve_action(
                 None => Ok(Fail),
             }
         }
+
+        (None, [_, ..]) => Err(ResolveError::MultipleReduces),
+
+        (None, []) => unreachable!(),
     }
 }
 
