@@ -65,22 +65,6 @@ enum SymbolKind {
 }
 
 impl Symbol {
-    const EOI: Self = Self {
-        id: SymbolID::EOI,
-        export_name: None,
-        kind: SymbolKind::Terminal,
-        precedence: None,
-    };
-
-    const ACCEPT: Self = Self {
-        id: SymbolID::ACCEPT,
-        export_name: None,
-        kind: SymbolKind::Nonterminal,
-        precedence: None,
-    };
-}
-
-impl Symbol {
     pub const fn id(&self) -> SymbolID {
         self.id
     }
@@ -286,6 +270,25 @@ impl Grammar {
             _marker: PhantomData,
         };
 
+        def.terminals.insert(
+            SymbolID::EOI,
+            Symbol {
+                id: SymbolID::EOI,
+                export_name: None,
+                kind: SymbolKind::Terminal,
+                precedence: None,
+            },
+        );
+        def.nonterminals.insert(
+            SymbolID::ACCEPT,
+            Symbol {
+                id: SymbolID::ACCEPT,
+                export_name: None,
+                kind: SymbolKind::Nonterminal,
+                precedence: None,
+            },
+        );
+
         f(&mut def)?;
 
         def.end()
@@ -293,17 +296,15 @@ impl Grammar {
 
     /// Returns the terminal symbol declared in this grammar.
     pub fn terminals(&self) -> impl Iterator<Item = &Symbol> + '_ {
-        Some(&Symbol::EOI)
-            .into_iter()
-            .chain(self.terminals.values())
+        self.terminals
+            .values()
             .inspect(|s| debug_assert!(s.is_terminal()))
     }
 
     /// Returns the nonterminal symbol declared in this grammar.
     pub fn nonterminals(&self) -> impl Iterator<Item = &Symbol> + '_ {
-        Some(&Symbol::ACCEPT)
-            .into_iter()
-            .chain(self.nonterminals.values())
+        self.nonterminals
+            .values()
             .inspect(|sym| debug_assert!(!sym.is_terminal()))
     }
 
@@ -311,15 +312,10 @@ impl Grammar {
     where
         Q: Borrow<SymbolID>,
     {
-        match key.borrow() {
-            &SymbolID::EOI => &Symbol::EOI,
-            &SymbolID::ACCEPT => &Symbol::ACCEPT,
-            id => self
-                .terminals
-                .get(id)
-                .or_else(|| self.nonterminals.get(id))
-                .expect("unexpected symbol id"),
-        }
+        self.terminals
+            .get(key.borrow())
+            .or_else(|| self.nonterminals.get(key.borrow()))
+            .expect("unexpected symbol id")
     }
 
     pub fn start_symbol(&self) -> &Symbol {
