@@ -84,11 +84,11 @@ impl fmt::Display for DFADisplay<'_> {
             writeln!(f, "  item_sets:")?;
             for (core_item, lookaheads) in &node.item_set {
                 let LRCoreItem { rule_id, marker } = core_item;
-                let rule = self.grammar.rule(*rule_id);
-                let start = self.grammar.symbol(rule.left());
+                let rule = self.grammar.rule(rule_id);
+                let start = self.grammar.symbol(&rule.left());
                 write!(f, "  - {} :", start.export_name().unwrap_or("<bogus>"))?;
                 for (i, prod) in rule.right().iter().enumerate() {
-                    let prod = self.grammar.symbol(*prod);
+                    let prod = self.grammar.symbol(prod);
                     if i == *marker {
                         f.write_str(" @")?;
                     }
@@ -99,7 +99,7 @@ impl fmt::Display for DFADisplay<'_> {
                 }
                 write!(f, " [")?;
                 for (i, lookahead) in lookaheads.iter().enumerate() {
-                    let lookahead = self.grammar.symbol(*lookahead);
+                    let lookahead = self.grammar.symbol(lookahead);
                     if i > 0 {
                         f.write_str("/")?;
                     }
@@ -109,7 +109,7 @@ impl fmt::Display for DFADisplay<'_> {
             }
             writeln!(f, "  actions:")?;
             for (token, action) in &node.actions {
-                let token = self.grammar.symbol(*token);
+                let token = self.grammar.symbol(token);
                 let token = token.export_name().unwrap_or("<bogus>");
                 writeln!(f, "  - On {}:", token)?;
                 if let Some(n) = action.shift {
@@ -119,7 +119,7 @@ impl fmt::Display for DFADisplay<'_> {
                     writeln!(f, "    - accept")?;
                 }
                 for r in &action.reduces {
-                    let rule = self.grammar.rule(*r);
+                    let rule = self.grammar.rule(r);
                     writeln!(
                         f,
                         "    - reduce({})",
@@ -246,12 +246,12 @@ impl NodeExtractor<'_> {
             // 候補の抽出
             let mut added: IndexMap<LRCoreItem, IndexSet<SymbolID>> = IndexMap::default();
             for (core, lookaheads) in &mut *items {
-                let rule = self.grammar.rule(core.rule_id);
+                let rule = self.grammar.rule(&core.rule_id);
 
                 // [X -> ... @ Y beta]
                 //  Y: one nonterminal symbol
                 let (y_symbol, beta) = match &rule.right()[core.marker..] {
-                    [y_symbol, beta @ ..] if !self.grammar.symbol(*y_symbol).is_terminal() => {
+                    [y_symbol, beta @ ..] if !self.grammar.symbol(y_symbol).is_terminal() => {
                         (*y_symbol, beta)
                     }
                     _ => continue,
@@ -261,14 +261,17 @@ impl NodeExtractor<'_> {
                 //   x \in First(beta x1) \cup ... \cup First(beta xk)
                 // を満たすすべての終端記号を考える
                 let x = self.first_sets.get(beta, &*lookaheads);
-                for (rule_id, rule) in self.grammar.rules() {
+                for rule in self.grammar.rules() {
                     // Y: ... という形式の構文規則のみを対象にする
                     if rule.left() != y_symbol {
                         continue;
                     }
 
                     added
-                        .entry(LRCoreItem { rule_id, marker: 0 })
+                        .entry(LRCoreItem {
+                            rule_id: rule.id(),
+                            marker: 0,
+                        })
                         .or_default()
                         .extend(&x);
                 }
@@ -290,7 +293,7 @@ impl NodeExtractor<'_> {
     fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<SymbolID, LRItemSet> {
         let mut item_sets: IndexMap<SymbolID, LRItemSet> = IndexMap::default();
         for (core, lookaheads) in items {
-            let rule = self.grammar.rule(core.rule_id);
+            let rule = self.grammar.rule(&core.rule_id);
 
             // markerが終わりまで到達していれば無視する
             if core.marker >= rule.right().len() {
@@ -449,7 +452,7 @@ impl<'g> DFAGenerator<'g> {
             for (core_item, lookaheads) in &item_set {
                 // reduce, accept
                 let grammar = self.extractor.grammar;
-                let rule = grammar.rule(core_item.rule_id);
+                let rule = grammar.rule(&core_item.rule_id);
                 if core_item.marker < rule.right().len() {
                     continue;
                 }
@@ -570,14 +573,14 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
     // ruleからnullableであることが分かっている場合は追加する
     let mut nulls: IndexSet<SymbolID> = grammar
         .rules()
-        .filter_map(|(_id, rule)| rule.right().is_empty().then_some(rule.left()))
+        .filter_map(|rule| rule.right().is_empty().then_some(rule.left()))
         .collect();
 
     // 値が更新されなくなるまで繰り返す
     let mut changed = true;
     while changed {
         changed = false;
-        for (_, rule) in grammar.rules() {
+        for rule in grammar.rules() {
             if nulls.contains(&rule.left()) {
                 continue;
             }
@@ -602,13 +605,13 @@ fn first_set(
     let mut map: IndexMap<SymbolID, IndexSet<SymbolID>> = IndexMap::default();
 
     // terminal symbols については First(T) = {T} になる
-    for (id, _) in grammar.terminals() {
-        map.insert(id, Some(id).into_iter().collect());
+    for token in grammar.terminals() {
+        map.insert(token.id(), Some(token.id()).into_iter().collect());
     }
 
     // nonterminal symbols は First(T) = {} と初期化する
-    for (id, _) in grammar.nonterminals() {
-        map.insert(id, IndexSet::default());
+    for symbol in grammar.nonterminals() {
+        map.insert(symbol.id(), IndexSet::default());
     }
 
     // 制約条件の抽出
@@ -624,7 +627,7 @@ fn first_set(
     let mut constraints = vec![];
     for rule in grammar
         .rules()
-        .flat_map(|(id, rule)| (id != RuleID::ACCEPT).then_some(rule))
+        .flat_map(|rule| (rule.id() != RuleID::ACCEPT).then_some(rule))
     {
         for symbol in rule.right() {
             if rule.left() != *symbol {

@@ -121,7 +121,22 @@ impl SymbolID {\n",
             SymbolID::EOI.raw(),
         )?;
 
-        for (id, symbol) in self.grammar.symbols() {
+        for terminal in self.grammar.terminals() {
+            let export_name = match terminal.export_name() {
+                Some(name) => name,
+                None => continue,
+            };
+            writeln!(
+                f,
+                "\
+/// Terminal `{export_name}`
+pub const {export_name}: Self = Self {{ __raw: {id} }};",
+                export_name = export_name,
+                id = terminal.id().raw(),
+            )?;
+        }
+
+        for symbol in self.grammar.nonterminals() {
             let export_name = match symbol.export_name() {
                 Some(name) => name,
                 None => continue,
@@ -129,10 +144,10 @@ impl SymbolID {\n",
             writeln!(
                 f,
                 "\
-/// `{export_name}`
+/// Nonterminal `{export_name}`
 pub const {export_name}: Self = Self {{ __raw: {id} }};",
                 export_name = export_name,
-                id = id.raw(),
+                id = symbol.id().raw(),
             )?;
         }
 
@@ -151,20 +166,20 @@ pub struct RuleID { __raw: u64 }
 impl RuleID {\n",
         )?;
 
-        'rules: for (rule_id, rule) in self.grammar.rules() {
+        'rules: for rule in self.grammar.rules() {
             let export_name = match rule.export_name() {
                 Some(name) => name,
                 None => continue 'rules,
             };
 
-            let comment_lhs = match self.grammar.symbol(rule.left()).export_name() {
+            let comment_lhs = match self.grammar.symbol(&rule.left()).export_name() {
                 Some(name) => name,
                 None => continue 'rules,
             };
 
             let mut comment_rhs = String::new();
             for (i, s) in rule.right().iter().enumerate() {
-                let name = match self.grammar.symbol(*s).export_name() {
+                let name = match self.grammar.symbol(s).export_name() {
                     Some(name) => name,
                     None => continue 'rules,
                 };
@@ -179,7 +194,7 @@ impl RuleID {\n",
                 f,
                 "    pub const {export_name}: Self = Self {{ __raw: {id} }};",
                 export_name = export_name,
-                id = rule_id.raw()
+                id = rule.id().raw()
             )?;
         }
 
@@ -209,7 +224,7 @@ const PARSE_TABLE: &[ lelele::phf::Map<u64, ParseAction> ] = &[\n",
                         format!("ParseAction::Shift(NodeID {{ __raw: {} }})", n)
                     }
                     ResolvedAction::Reduce(r) => {
-                        let rule = self.grammar.rule(*r);
+                        let rule = self.grammar.rule(r);
                         format!("ParseAction::Reduce(RuleID {{ __raw: {} }}, SymbolID {{ __raw: {} }}, {})", r.raw(), rule.left().raw(), rule.right().len())
                     }
                     ResolvedAction::Accept => "ParseAction::Accept".into(),

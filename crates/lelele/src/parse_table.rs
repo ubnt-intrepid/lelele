@@ -50,9 +50,9 @@ fn resolve_action(
         (None, [reduce]) => Ok(Reduce(*reduce)),
 
         (Some(next), [reduce, remains @ ..]) => {
-            let shift_prec = grammar.symbol(symbol_id).precedence();
+            let shift_prec = grammar.symbol(&symbol_id).precedence();
 
-            let reduce_prec = grammar.rule(*reduce).precedence(grammar);
+            let reduce_prec = grammar.rule(reduce).precedence(grammar);
             let resolved = resolve_shift_reduce_conflict(shift_prec, reduce_prec)?;
 
             if matches!(resolved, Some(false)) && !remains.is_empty() {
@@ -60,7 +60,7 @@ fn resolve_action(
             }
 
             for reduce in remains {
-                let reduce_prec = grammar.rule(*reduce).precedence(grammar);
+                let reduce_prec = grammar.rule(reduce).precedence(grammar);
                 let new_resolved = resolve_shift_reduce_conflict(shift_prec, reduce_prec)?;
                 if resolved != new_resolved {
                     return Err(ResolveError::ResolutionMismatched);

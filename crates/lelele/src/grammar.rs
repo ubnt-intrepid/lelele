@@ -1,7 +1,11 @@
 //! Grammar types.
 
 use crate::IndexMap;
-use std::{borrow::Cow, fmt, marker::PhantomData};
+use std::{
+    borrow::{Borrow, Cow},
+    fmt,
+    marker::PhantomData,
+};
 
 const SYMBOL_ID_OFFSET: u64 = 0x4;
 const RULE_ID_OFFSET: u64 = 0x4;
@@ -48,6 +52,7 @@ impl fmt::Display for SymbolID {
 
 #[derive(Debug)]
 pub struct Symbol {
+    id: SymbolID,
     export_name: Option<Cow<'static, str>>,
     kind: SymbolKind,
     precedence: Option<Precedence>,
@@ -59,37 +64,16 @@ enum SymbolKind {
     Nonterminal,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[non_exhaustive]
-pub enum Assoc {
-    Left,
-    Right,
-    Nonassoc,
-}
-impl fmt::Display for Assoc {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Left => write!(f, "left"),
-            Self::Right => write!(f, "right"),
-            Self::Nonassoc => write!(f, "nonassoc"),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[non_exhaustive]
-pub struct Precedence {
-    pub priority: usize,
-    pub assoc: Assoc,
-}
-
 impl Symbol {
     const EOI: Self = Self {
+        id: SymbolID::EOI,
         export_name: None,
         kind: SymbolKind::Terminal,
         precedence: None,
     };
+
     const ACCEPT: Self = Self {
+        id: SymbolID::ACCEPT,
         export_name: None,
         kind: SymbolKind::Nonterminal,
         precedence: None,
@@ -97,6 +81,10 @@ impl Symbol {
 }
 
 impl Symbol {
+    pub const fn id(&self) -> SymbolID {
+        self.id
+    }
+
     pub fn export_name(&self) -> Option<&str> {
         self.export_name.as_deref()
     }
@@ -107,6 +95,37 @@ impl Symbol {
 
     pub fn precedence(&self) -> Option<&Precedence> {
         self.precedence.as_ref()
+    }
+}
+
+impl Borrow<SymbolID> for Symbol {
+    fn borrow(&self) -> &SymbolID {
+        &self.id
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct Precedence {
+    pub priority: usize,
+    pub assoc: Assoc,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum Assoc {
+    Left,
+    Right,
+    Nonassoc,
+}
+
+impl fmt::Display for Assoc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Left => write!(f, "left"),
+            Self::Right => write!(f, "right"),
+            Self::Nonassoc => write!(f, "nonassoc"),
+        }
     }
 }
 
@@ -143,6 +162,7 @@ impl fmt::Display for RuleID {
 /// The type that represents a production rule in grammar.
 #[derive(Debug)]
 pub struct Rule {
+    id: RuleID,
     left: SymbolID,
     right: Vec<SymbolID>,
     export_name: Option<Cow<'static, str>>,
@@ -150,6 +170,10 @@ pub struct Rule {
 }
 
 impl Rule {
+    pub const fn id(&self) -> RuleID {
+        self.id
+    }
+
     /// Return the left-hand side of this production.
     pub fn left(&self) -> SymbolID {
         self.left
@@ -166,10 +190,10 @@ impl Rule {
 
     pub fn precedence<'g>(&'g self, grammar: &'g Grammar) -> Option<&'g Precedence> {
         match self.prec_token {
-            Some(ref tok) => grammar.symbols[tok].precedence(),
+            Some(ref tok) => grammar.terminals[tok].precedence(),
             None => {
                 for id in self.right.iter().rev() {
-                    let symbol = grammar.symbol(*id);
+                    let symbol = grammar.symbol(id);
                     if symbol.is_terminal() {
                         return symbol.precedence();
                     }
@@ -180,10 +204,17 @@ impl Rule {
     }
 }
 
+impl Borrow<RuleID> for Rule {
+    fn borrow(&self) -> &RuleID {
+        &self.id
+    }
+}
+
 /// The grammar definition used to derive the parser tables.
 #[derive(Debug)]
 pub struct Grammar {
-    symbols: IndexMap<SymbolID, Symbol>,
+    terminals: IndexMap<SymbolID, Symbol>,
+    nonterminals: IndexMap<SymbolID, Symbol>,
     rules: IndexMap<RuleID, Rule>,
     start_symbol: SymbolID,
     accept_rule: Rule,
@@ -192,7 +223,7 @@ pub struct Grammar {
 impl fmt::Display for Grammar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "## terminals:")?;
-        for (_, sym) in self.terminals() {
+        for sym in self.terminals() {
             let name = sym.export_name().unwrap_or("<bogus>");
             write!(f, "- {}", name)?;
             if let Some(prec) = sym.precedence() {
@@ -202,16 +233,16 @@ impl fmt::Display for Grammar {
         }
 
         writeln!(f, "\n## nonterminals:")?;
-        for (id, sym) in self.nonterminals() {
+        for sym in self.nonterminals() {
             write!(f, "- {}", sym.export_name().unwrap_or("<bogus>"))?;
-            if id == self.start_symbol {
+            if sym.id() == self.start_symbol {
                 write!(f, " (start)")?;
             }
             writeln!(f)?;
         }
 
         writeln!(f, "\n## rules:")?;
-        for (_, rule) in self.rules() {
+        for rule in self.rules() {
             write!(f, "- ")?;
             if let Some(name) = rule.export_name() {
                 write!(f, "[{}] ", name)?;
@@ -219,7 +250,7 @@ impl fmt::Display for Grammar {
             write!(
                 f,
                 "{} : ",
-                self.symbol(rule.left()).export_name().unwrap_or("<bogus>")
+                self.symbol(&rule.left()).export_name().unwrap_or("<bogus>")
             )?;
             for (i, symbol) in rule.right().iter().enumerate() {
                 if i > 0 {
@@ -228,7 +259,7 @@ impl fmt::Display for Grammar {
                 write!(
                     f,
                     "{}",
-                    self.symbol(*symbol).export_name().unwrap_or("<bogus>")
+                    self.symbol(symbol).export_name().unwrap_or("<bogus>")
                 )?;
             }
             writeln!(f)?;
@@ -245,7 +276,8 @@ impl Grammar {
         F: FnOnce(&mut GrammarDef) -> Result<(), GrammarDefError>,
     {
         let mut def = GrammarDef {
-            symbols: IndexMap::default(),
+            terminals: IndexMap::default(),
+            nonterminals: IndexMap::default(),
             rules: IndexMap::default(),
             start: None,
             next_symbol_id: SYMBOL_ID_OFFSET,
@@ -259,43 +291,52 @@ impl Grammar {
         def.end()
     }
 
-    pub fn symbols(&self) -> impl Iterator<Item = (SymbolID, &Symbol)> + '_ {
-        [
-            (SymbolID::EOI, &Symbol::EOI),
-            (SymbolID::ACCEPT, &Symbol::ACCEPT),
-        ]
-        .into_iter()
-        .chain(self.symbols.iter().map(|(id, sym)| (*id, sym)))
+    /// Returns the terminal symbol declared in this grammar.
+    pub fn terminals(&self) -> impl Iterator<Item = &Symbol> + '_ {
+        Some(&Symbol::EOI)
+            .into_iter()
+            .chain(self.terminals.values())
+            .inspect(|s| debug_assert!(s.is_terminal()))
     }
 
-    pub fn terminals(&self) -> impl Iterator<Item = (SymbolID, &Symbol)> + '_ {
-        self.symbols().filter(|(_id, sym)| sym.is_terminal())
+    /// Returns the nonterminal symbol declared in this grammar.
+    pub fn nonterminals(&self) -> impl Iterator<Item = &Symbol> + '_ {
+        Some(&Symbol::ACCEPT)
+            .into_iter()
+            .chain(self.nonterminals.values())
+            .inspect(|sym| debug_assert!(!sym.is_terminal()))
     }
 
-    pub fn nonterminals(&self) -> impl Iterator<Item = (SymbolID, &Symbol)> + '_ {
-        self.symbols().filter(|(_id, sym)| !sym.is_terminal())
-    }
-
-    pub fn symbol(&self, id: SymbolID) -> &Symbol {
-        match id {
-            SymbolID::EOI => &Symbol::EOI,
-            SymbolID::ACCEPT => &Symbol::ACCEPT,
-            id => &self.symbols[&id],
+    pub fn symbol<Q: ?Sized>(&self, key: &Q) -> &Symbol
+    where
+        Q: Borrow<SymbolID>,
+    {
+        match key.borrow() {
+            &SymbolID::EOI => &Symbol::EOI,
+            &SymbolID::ACCEPT => &Symbol::ACCEPT,
+            id => self
+                .terminals
+                .get(id)
+                .or_else(|| self.nonterminals.get(id))
+                .expect("unexpected symbol id"),
         }
     }
 
-    pub fn start_symbol(&self) -> (SymbolID, &Symbol) {
-        (self.start_symbol, self.symbol(self.start_symbol))
+    pub fn start_symbol(&self) -> &Symbol {
+        self.symbol(&self.start_symbol)
     }
 
-    pub fn rules(&self) -> impl Iterator<Item = (RuleID, &Rule)> + '_ {
-        Some((RuleID::ACCEPT, &self.accept_rule))
+    pub fn rules(&self) -> impl Iterator<Item = &Rule> + '_ {
+        Some(&self.accept_rule)
             .into_iter()
-            .chain(self.rules.iter().map(|(id, rule)| (*id, rule)))
+            .chain(self.rules.values())
     }
 
-    pub fn rule(&self, id: RuleID) -> &Rule {
-        match id {
+    pub fn rule<Q: ?Sized>(&self, key: &Q) -> &Rule
+    where
+        Q: Borrow<RuleID>,
+    {
+        match *key.borrow() {
             RuleID::ACCEPT => &self.accept_rule,
             id => &self.rules[&id],
         }
@@ -305,7 +346,8 @@ impl Grammar {
 /// The contextural values for building a `Grammar`.
 #[derive(Debug)]
 pub struct GrammarDef<'def> {
-    symbols: IndexMap<SymbolID, Symbol>,
+    terminals: IndexMap<SymbolID, Symbol>,
+    nonterminals: IndexMap<SymbolID, Symbol>,
     rules: IndexMap<RuleID, Rule>,
     start: Option<SymbolID>,
     next_symbol_id: u64,
@@ -315,32 +357,6 @@ pub struct GrammarDef<'def> {
 }
 
 impl GrammarDef<'_> {
-    fn add_symbol(&mut self, added: Symbol) -> Result<SymbolID, GrammarDefError> {
-        match self
-            .symbols
-            .iter_mut()
-            .find(|(_, sym)| sym.export_name == added.export_name)
-        {
-            Some((id, sym)) => {
-                if sym.kind != added.kind {
-                    return Err(GrammarDefError {
-                        msg: format!(
-                            "conflict symbol kind (name={})",
-                            sym.export_name().unwrap_or("<bogus>")
-                        ),
-                    });
-                }
-                Ok(*id)
-            }
-            None => {
-                let id = SymbolID::new(self.next_symbol_id);
-                self.next_symbol_id += 1;
-                self.symbols.insert(id, added);
-                Ok(id)
-            }
-        }
-    }
-
     /// Specify a terminal symbol used in this grammar.
     pub fn token(
         &mut self,
@@ -349,20 +365,43 @@ impl GrammarDef<'_> {
         let export_name = verify_ident(export_name.into()).ok_or_else(|| GrammarDefError {
             msg: "incorrect token name".into(),
         })?;
-        self.add_symbol(Symbol {
-            export_name: Some(export_name),
-            kind: SymbolKind::Terminal,
-            precedence: None,
-        })
+        self.add_token(Some(export_name))
     }
 
     /// Add a "bogus" token symbol into this grammar.
     pub fn bogus_token(&mut self) -> Result<SymbolID, GrammarDefError> {
-        self.add_symbol(Symbol {
-            export_name: None,
-            kind: SymbolKind::Terminal,
-            precedence: None,
-        })
+        self.add_token(None)
+    }
+
+    fn add_token(
+        &mut self,
+        export_name: Option<Cow<'static, str>>,
+    ) -> Result<SymbolID, GrammarDefError> {
+        for terminal in self.terminals.values() {
+            if matches!((&terminal.export_name, &export_name), (Some(n1), Some(n2)) if n1 == n2) {
+                return Err(GrammarDefError {
+                    msg: format!(
+                        "The terminal `{}' has already been exported",
+                        terminal.export_name().unwrap_or("<bogus>")
+                    ),
+                });
+            }
+        }
+
+        let id = SymbolID::new(self.next_symbol_id);
+        self.next_symbol_id += 1;
+
+        self.terminals.insert(
+            id,
+            Symbol {
+                id,
+                kind: SymbolKind::Terminal,
+                export_name,
+                precedence: None,
+            },
+        );
+
+        Ok(id)
     }
 
     /// Specify a nonterminal symbol used in this grammar.
@@ -373,11 +412,32 @@ impl GrammarDef<'_> {
         let export_name = verify_ident(export_name.into()).ok_or_else(|| GrammarDefError {
             msg: "incorrect symbol name".into(),
         })?;
-        self.add_symbol(Symbol {
-            export_name: Some(export_name),
-            kind: SymbolKind::Nonterminal,
-            precedence: None,
-        })
+
+        for sym in self.nonterminals.values() {
+            if matches!(&sym.export_name, Some(name) if *name == export_name) {
+                return Err(GrammarDefError {
+                    msg: format!(
+                        "The nonterminal export `{}' has already been used",
+                        sym.export_name().unwrap_or("<bogus>")
+                    ),
+                });
+            }
+        }
+
+        let id = SymbolID::new(self.next_symbol_id);
+        self.next_symbol_id += 1;
+
+        self.nonterminals.insert(
+            id,
+            Symbol {
+                id,
+                kind: SymbolKind::Nonterminal,
+                export_name: Some(export_name),
+                precedence: None,
+            },
+        );
+
+        Ok(id)
     }
 
     /// Specify a production rule into this grammer.
@@ -403,11 +463,7 @@ impl GrammarDef<'_> {
     where
         I: IntoIterator<Item = SymbolID>,
     {
-        if self
-            .symbols
-            .get(&left)
-            .map_or(true, |lhs| lhs.kind != SymbolKind::Nonterminal)
-        {
+        if !self.nonterminals.contains_key(&left) {
             return Err(GrammarDefError {
                 msg: "The starting symbol in production rule must be nonterminal".into(),
             });
@@ -417,12 +473,10 @@ impl GrammarDef<'_> {
             msg: "incorrect rule name".into(),
         })?;
 
-        if let Some(prec) = prec_token {
-            if !self.symbols[&prec].is_terminal() {
-                return Err(GrammarDefError {
-                    msg: "The prec symbol must be terminal".into(),
-                });
-            }
+        if prec_token.map_or(false, |prec| !self.terminals.contains_key(&prec)) {
+            return Err(GrammarDefError {
+                msg: "The prec symbol must be terminal".into(),
+            });
         }
 
         let id = RuleID::new(self.next_rule_id);
@@ -430,6 +484,7 @@ impl GrammarDef<'_> {
         self.rules.insert(
             id,
             Rule {
+                id,
                 left,
                 right: right.into_iter().collect(),
                 export_name: Some(export_name),
@@ -442,7 +497,7 @@ impl GrammarDef<'_> {
 
     /// Specify the start symbol for this grammar.
     pub fn start_symbol(&mut self, symbol: SymbolID) -> Result<(), GrammarDefError> {
-        if self.symbols[&symbol].is_terminal() {
+        if !self.nonterminals.contains_key(&symbol) {
             return Err(GrammarDefError {
                 msg: "the start symbol must be nonterminal".into(),
             });
@@ -459,12 +514,12 @@ impl GrammarDef<'_> {
         let priority = self.next_priority;
         let mut changed = false;
         for token in tokens {
-            let symbol = &mut self.symbols[&token];
-            if !symbol.is_terminal() {
-                return Err(GrammarDefError {
+            let symbol = &mut self
+                .terminals
+                .get_mut(&token)
+                .ok_or_else(|| GrammarDefError {
                     msg: "nonterminal cannot have precedence".into(),
-                });
-            }
+                })?;
             match symbol.precedence {
                 Some(..) => {
                     return Err(GrammarDefError {
@@ -492,17 +547,22 @@ impl GrammarDef<'_> {
         let start = match self.start.take() {
             Some(start) => start,
             None => self
-                .symbols
-                .iter()
-                .find_map(|(id, sym)| (sym.kind == SymbolKind::Nonterminal).then_some(*id))
-                .unwrap(),
+                .nonterminals
+                .keys()
+                .copied()
+                .next()
+                .ok_or_else(|| GrammarDefError {
+                    msg: "empty nonterminal symbols".into(),
+                })?,
         };
 
         Ok(Grammar {
-            symbols: self.symbols,
+            terminals: self.terminals,
+            nonterminals: self.nonterminals,
             rules: self.rules,
             start_symbol: start,
             accept_rule: Rule {
+                id: RuleID::ACCEPT,
                 left: SymbolID::ACCEPT,
                 right: vec![start],
                 export_name: None,
