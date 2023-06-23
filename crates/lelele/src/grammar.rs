@@ -3,7 +3,6 @@
 use crate::IndexSet;
 use std::{
     borrow::{Borrow, Cow},
-    cell::OnceCell,
     fmt,
     hash::{Hash, Hasher},
     marker::PhantomData,
@@ -63,7 +62,7 @@ struct SymbolInner {
     id: SymbolID,
     export_name: Option<Cow<'static, str>>,
     kind: SymbolKind,
-    precedence: OnceCell<Precedence>,
+    precedence: Option<Precedence>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -86,7 +85,7 @@ impl Symbol {
     }
 
     pub fn precedence(&self) -> Option<&Precedence> {
-        self.inner.precedence.get()
+        self.inner.precedence.as_ref()
     }
 }
 
@@ -111,31 +110,6 @@ impl Borrow<SymbolID> for Symbol {
 impl Borrow<SymbolID> for &Symbol {
     fn borrow(&self) -> &SymbolID {
         &self.inner.id
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[non_exhaustive]
-pub struct Precedence {
-    pub priority: usize,
-    pub assoc: Assoc,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[non_exhaustive]
-pub enum Assoc {
-    Left,
-    Right,
-    Nonassoc,
-}
-
-impl fmt::Display for Assoc {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Left => write!(f, "left"),
-            Self::Right => write!(f, "right"),
-            Self::Nonassoc => write!(f, "nonassoc"),
-        }
     }
 }
 
@@ -181,7 +155,7 @@ struct RuleInner {
     left: Symbol,
     right: Vec<Symbol>,
     export_name: Option<Cow<'static, str>>,
-    prec_token: Option<Symbol>,
+    precedence: Option<Precedence>,
 }
 
 impl Rule {
@@ -204,8 +178,8 @@ impl Rule {
     }
 
     pub fn precedence(&self) -> Option<&Precedence> {
-        match self.inner.prec_token {
-            Some(ref tok) => tok.precedence(),
+        match self.inner.precedence {
+            Some(ref prec) => Some(prec),
             None => {
                 for symbol in self.inner.right.iter().rev() {
                     if symbol.is_terminal() {
@@ -247,6 +221,37 @@ impl Ord for Rule {
 impl Borrow<RuleID> for Rule {
     fn borrow(&self) -> &RuleID {
         &self.inner.id
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct Precedence {
+    pub priority: usize,
+    pub assoc: Assoc,
+}
+
+impl Precedence {
+    pub const fn new(priority: usize, assoc: Assoc) -> Self {
+        Self { priority, assoc }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum Assoc {
+    Left,
+    Right,
+    Nonassoc,
+}
+
+impl fmt::Display for Assoc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Left => write!(f, "left"),
+            Self::Right => write!(f, "right"),
+            Self::Nonassoc => write!(f, "nonassoc"),
+        }
     }
 }
 
@@ -314,7 +319,6 @@ impl Grammar {
             start: None,
             next_symbol_id: SYMBOL_ID_OFFSET,
             next_rule_id: RULE_ID_OFFSET,
-            next_priority: 0,
             _marker: PhantomData,
         };
 
@@ -323,7 +327,7 @@ impl Grammar {
                 id: SymbolID::EOI,
                 export_name: None,
                 kind: SymbolKind::Terminal,
-                precedence: OnceCell::new(),
+                precedence: None,
             }),
         });
         def.nonterminals.insert(Symbol {
@@ -331,7 +335,7 @@ impl Grammar {
                 id: SymbolID::ACCEPT,
                 export_name: None,
                 kind: SymbolKind::Nonterminal,
-                precedence: OnceCell::new(),
+                precedence: None,
             }),
         });
 
@@ -380,7 +384,6 @@ pub struct GrammarDef<'def> {
     start: Option<Symbol>,
     next_symbol_id: u64,
     next_rule_id: u64,
-    next_priority: usize,
     _marker: PhantomData<&'def mut ()>,
 }
 
@@ -390,20 +393,32 @@ impl GrammarDef<'_> {
         &mut self,
         export_name: impl Into<Cow<'static, str>>,
     ) -> Result<SymbolID, GrammarDefError> {
+        self.token_with_prec(export_name, None)
+    }
+
+    pub fn token_with_prec(
+        &mut self,
+        export_name: impl Into<Cow<'static, str>>,
+        precedence: Option<Precedence>,
+    ) -> Result<SymbolID, GrammarDefError> {
         let export_name = verify_ident(export_name.into()).ok_or_else(|| GrammarDefError {
             msg: "incorrect token name".into(),
         })?;
-        self.add_token(Some(export_name))
+        self.add_token(Some(export_name), precedence)
     }
 
     /// Add a "bogus" token symbol into this grammar.
-    pub fn bogus_token(&mut self) -> Result<SymbolID, GrammarDefError> {
-        self.add_token(None)
+    pub fn bogus_token(
+        &mut self,
+        precedence: Option<Precedence>,
+    ) -> Result<SymbolID, GrammarDefError> {
+        self.add_token(None, precedence)
     }
 
     fn add_token(
         &mut self,
         export_name: Option<Cow<'static, str>>,
+        precedence: Option<Precedence>,
     ) -> Result<SymbolID, GrammarDefError> {
         for terminal in &self.terminals {
             if matches!((&terminal.export_name(), &export_name), (Some(n1), Some(n2)) if n1 == n2) {
@@ -424,7 +439,7 @@ impl GrammarDef<'_> {
                 id,
                 kind: SymbolKind::Terminal,
                 export_name,
-                precedence: OnceCell::new(),
+                precedence,
             }),
         });
 
@@ -459,7 +474,7 @@ impl GrammarDef<'_> {
                 id,
                 kind: SymbolKind::Nonterminal,
                 export_name: Some(export_name),
-                precedence: OnceCell::new(),
+                precedence: None,
             }),
         });
 
@@ -484,7 +499,7 @@ impl GrammarDef<'_> {
         name: impl Into<Cow<'static, str>>,
         left: SymbolID,
         right: I,
-        prec_token: Option<SymbolID>,
+        precedence: Option<Precedence>,
     ) -> Result<RuleID, GrammarDefError>
     where
         I: IntoIterator<Item = SymbolID>,
@@ -512,19 +527,6 @@ impl GrammarDef<'_> {
             msg: "incorrect rule name".into(),
         })?;
 
-        let mut prec = None;
-        if let Some(prec_token) = prec_token {
-            prec =
-                Some(
-                    self.terminals
-                        .get(&prec_token)
-                        .cloned()
-                        .ok_or_else(|| GrammarDefError {
-                            msg: "The prec symbol must be terminal".into(),
-                        })?,
-                );
-        }
-
         let id = RuleID::new(self.next_rule_id);
         self.next_rule_id += 1;
         self.rules.insert(Rule {
@@ -533,7 +535,7 @@ impl GrammarDef<'_> {
                 left,
                 right: right_,
                 export_name: Some(export_name),
-                prec_token: prec,
+                precedence,
             }),
         });
 
@@ -549,36 +551,6 @@ impl GrammarDef<'_> {
                 msg: "the start symbol must be nonterminal".into(),
             })?;
         self.start.replace(symbol.clone());
-        Ok(())
-    }
-
-    /// Specify the precedence for the terminal symbols.
-    pub fn precedence<I>(&mut self, assoc: Assoc, tokens: I) -> Result<(), GrammarDefError>
-    where
-        I: IntoIterator<Item = SymbolID>,
-    {
-        let priority = self.next_priority;
-        let mut changed = false;
-        for token in tokens {
-            let symbol = &mut self.terminals.get(&token).ok_or_else(|| GrammarDefError {
-                msg: "nonterminal cannot have precedence".into(),
-            })?;
-
-            if let Err(..) = symbol.inner.precedence.set(Precedence { priority, assoc }) {
-                return Err(GrammarDefError {
-                    msg: format!(
-                        "The token {} has already been set the precedence",
-                        symbol.export_name().unwrap_or("<bogus>")
-                    ),
-                });
-            }
-            changed = true;
-        }
-
-        if changed {
-            self.next_priority += 1;
-        }
-
         Ok(())
     }
 
@@ -603,7 +575,7 @@ impl GrammarDef<'_> {
                 left: self.nonterminals.get(&SymbolID::ACCEPT).cloned().unwrap(),
                 right: vec![start.clone()],
                 export_name: None,
-                prec_token: None,
+                precedence: None,
             }),
         };
 

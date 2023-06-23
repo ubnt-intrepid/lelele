@@ -1,6 +1,6 @@
 //! Grammar definition for integration tests.
 
-use lelele::grammar::{Assoc, GrammarDef};
+use lelele::grammar::{Assoc, GrammarDef, Precedence};
 
 type Result<T = (), E = lelele::grammar::GrammarDefError> = std::result::Result<T, E>;
 
@@ -293,6 +293,28 @@ pub fn g10(g: &mut GrammarDef<'_>) -> Result {
 pub fn min_caml(g: &mut GrammarDef<'_>) -> Result {
     // imported from: https://github.com/esumii/min-caml/blob/master/parser.mly
 
+    let mut prec = {
+        let mut next_priority = 0;
+        move |assoc| {
+            let priority = next_priority;
+            next_priority += 1;
+            Precedence::new(priority, assoc)
+        }
+    };
+    let prec_in = prec(Assoc::Nonassoc);
+    let prec_let = prec(Assoc::Right);
+    let prec_semicolon = prec(Assoc::Right);
+    let prec_if = prec(Assoc::Right);
+    let prec_less_minus = prec(Assoc::Right);
+    let prec_tuple = prec(Assoc::Nonassoc);
+    let prec_comma = prec(Assoc::Left);
+    let prec_cmp = prec(Assoc::Left);
+    let prec_add = prec(Assoc::Left);
+    let prec_mul = prec(Assoc::Left);
+    let prec_neg = prec(Assoc::Right);
+    let prec_app = prec(Assoc::Left);
+    let prec_dot = prec(Assoc::Left);
+
     let l_paren = g.token("LPAREN")?;
     let r_paren = g.token("RPAREN")?;
     let t_true = g.token("TRUE")?;
@@ -301,29 +323,29 @@ pub fn min_caml(g: &mut GrammarDef<'_>) -> Result {
     let float = g.token("FLOAT")?;
     let ident = g.token("IDENT")?;
     let t_not = g.token("NOT")?;
-    let plus = g.token("PLUS")?;
-    let plus_dot = g.token("PLUS_DOT")?;
-    let minus = g.token("MINUS")?;
-    let minus_dot = g.token("MINUS_DOT")?;
-    let star_dot = g.token("STAR_DOT")?;
-    let slash_dot = g.token("SLASH_DOT")?;
-    let equal = g.token("EQUAL")?;
-    let less_greater = g.token("LESS_GREATER")?;
-    let less = g.token("LESS")?;
-    let greater = g.token("GREATER")?;
-    let less_equal = g.token("LESS_EQUAL")?;
-    let greater_equal = g.token("GREATER_EQUAL")?;
-    let less_minus = g.token("LESS_MINUS")?;
-    let comma = g.token("COMMA")?;
-    let semicolon = g.token("SEMICOLON")?;
+    let plus = g.token_with_prec("PLUS", Some(prec_add))?;
+    let plus_dot = g.token_with_prec("PLUS_DOT", Some(prec_add))?;
+    let minus = g.token_with_prec("MINUS", Some(prec_add))?;
+    let minus_dot = g.token_with_prec("MINUS_DOT", Some(prec_add))?;
+    let star_dot = g.token_with_prec("STAR_DOT", Some(prec_mul))?;
+    let slash_dot = g.token_with_prec("SLASH_DOT", Some(prec_mul))?;
+    let equal = g.token_with_prec("EQUAL", Some(prec_cmp))?;
+    let less_greater = g.token_with_prec("LESS_GREATER", Some(prec_cmp))?;
+    let less = g.token_with_prec("LESS", Some(prec_cmp))?;
+    let greater = g.token_with_prec("GREATER", Some(prec_cmp))?;
+    let less_equal = g.token_with_prec("LESS_EQUAL", Some(prec_cmp))?;
+    let greater_equal = g.token_with_prec("GREATER_EQUAL", Some(prec_cmp))?;
+    let less_minus = g.token_with_prec("LESS_MINUS", Some(prec_less_minus))?;
+    let comma = g.token_with_prec("COMMA", Some(prec_comma))?;
+    let semicolon = g.token_with_prec("SEMICOLON", Some(prec_semicolon))?;
     let t_if = g.token("IF")?;
     let t_then = g.token("THEN")?;
     let t_else = g.token("ELSE")?;
     let t_let = g.token("LET")?;
     let t_rec = g.token("REC")?;
-    let t_in = g.token("IN")?;
+    let t_in = g.token_with_prec("IN", Some(prec_in))?;
     let array_make = g.token("ARRAY_MAKE")?;
-    let dot = g.token("DOT")?;
+    let dot = g.token_with_prec("DOT", Some(prec_dot))?;
 
     let simple_exp = g.symbol("SIMPLE_EXP")?;
     let exp = g.symbol("EXP")?;
@@ -332,36 +354,6 @@ pub fn min_caml(g: &mut GrammarDef<'_>) -> Result {
     let fundef = g.symbol("FUNDEF")?;
     let pat = g.symbol("PAT")?;
     let elems = g.symbol("ELEMS")?;
-
-    let prec_let = g.bogus_token()?;
-    let prec_if = g.bogus_token()?;
-    let prec_tuple = g.bogus_token()?;
-    let prec_unary_minus = g.bogus_token()?;
-    let prec_app = g.bogus_token()?;
-
-    g.precedence(Assoc::Nonassoc, [t_in])?;
-    g.precedence(Assoc::Right, [prec_let])?;
-    g.precedence(Assoc::Right, [semicolon])?;
-    g.precedence(Assoc::Right, [prec_if])?;
-    g.precedence(Assoc::Right, [less_minus])?;
-    g.precedence(Assoc::Nonassoc, [prec_tuple])?;
-    g.precedence(Assoc::Left, [comma])?;
-    g.precedence(
-        Assoc::Left,
-        [
-            equal,
-            less_greater,
-            less,
-            greater,
-            less_equal,
-            greater_equal,
-        ],
-    )?;
-    g.precedence(Assoc::Left, [plus, minus, plus_dot, minus_dot])?;
-    g.precedence(Assoc::Left, [star_dot, slash_dot])?;
-    g.precedence(Assoc::Right, [prec_unary_minus])?;
-    g.precedence(Assoc::Left, [prec_app])?;
-    g.precedence(Assoc::Left, [dot])?;
 
     g.start_symbol(exp)?;
 
@@ -380,8 +372,8 @@ pub fn min_caml(g: &mut GrammarDef<'_>) -> Result {
 
     g.rule("EXP_REDIRECT", exp, [simple_exp])?;
     g.rule_with_prec("EXP_NOT", exp, [t_not, exp], Some(prec_app))?;
-    g.rule_with_prec("EXP_NEG", exp, [minus, exp], Some(prec_unary_minus))?;
-    g.rule_with_prec("EXP_NEG_DOT", exp, [minus_dot, exp], Some(prec_unary_minus))?;
+    g.rule_with_prec("EXP_NEG", exp, [minus, exp], Some(prec_neg))?;
+    g.rule_with_prec("EXP_NEG_DOT", exp, [minus_dot, exp], Some(prec_neg))?;
     g.rule("EXP_ADD", exp, [exp, plus, exp])?;
     g.rule("EXP_SUB", exp, [exp, minus, exp])?;
     g.rule("EXP_FADD", exp, [exp, plus_dot, exp])?;

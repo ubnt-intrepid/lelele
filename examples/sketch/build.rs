@@ -1,7 +1,7 @@
 use lelele::{
     codegen::Codegen,
     dfa::DFA,
-    grammar::{Assoc, Grammar, GrammarDef, GrammarDefError},
+    grammar::{Assoc, Grammar, GrammarDef, GrammarDefError, Precedence},
     parse_table::ParseTable,
 };
 use std::{env, fs, io::Write, path::PathBuf};
@@ -36,27 +36,25 @@ fn main() {
 }
 
 fn grammar_def(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {
+    // declare precedences.
+    let prec_add = Precedence::new(0, Assoc::Left);
+    let prec_mul = Precedence::new(1, Assoc::Left);
+    let prec_neg = Precedence::new(2, Assoc::Right);
+
     // declare terminal symbols.
     let lparen = g.token("LPAREN")?;
     let rparen = g.token("RPAREN")?;
-    let plus = g.token("PLUS")?;
-    let minus = g.token("MINUS")?;
-    let star = g.token("STAR")?;
-    let slash = g.token("SLASH")?;
+    let plus = g.token_with_prec("PLUS", Some(prec_add))?;
+    let minus = g.token_with_prec("MINUS", Some(prec_add))?;
+    let star = g.token_with_prec("STAR", Some(prec_mul))?;
+    let slash = g.token_with_prec("SLASH", Some(prec_mul))?;
     let num = g.token("NUM")?;
     g.token("UNUSED_0")?;
-
-    // The `bogus` tokens will never exported.
-    let unary_minus = g.bogus_token()?;
 
     // declare nonterminal symbols.
     let expr = g.symbol("EXPR")?;
 
     g.start_symbol(expr)?;
-
-    g.precedence(Assoc::Left, [plus, minus])?;
-    g.precedence(Assoc::Left, [star, slash])?;
-    g.precedence(Assoc::Right, [unary_minus])?;
 
     // declare production rules.
     g.rule("EXPR_ADD", expr, [expr, plus, expr])?;
@@ -65,7 +63,7 @@ fn grammar_def(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {
     g.rule("EXPR_DIV", expr, [expr, slash, expr])?;
     g.rule("EXPR_NUM", expr, [num])?;
     g.rule("EXPR_PAREN", expr, [lparen, expr, rparen])?;
-    g.rule_with_prec("EXPR_NEG", expr, [minus, expr], Some(unary_minus))?;
+    g.rule_with_prec("EXPR_NEG", expr, [minus, expr], Some(prec_neg))?;
 
     Ok(())
 }
