@@ -12,19 +12,19 @@ fn smoketest_grammar(f: impl FnOnce(&mut GrammarDef<'_>) -> Result<(), GrammarDe
     eprintln!("DFA(canonical):");
     let dfa = Config::new().use_canonical().generate(&grammar);
     eprintln!("num_nodes: {}", dfa.nodes().count());
-    eprintln!("---\n{}\n", dfa.display(&grammar));
+    eprintln!("---\n{}\n", dfa);
     eprintln!();
 
     eprintln!("DFA(PGM):");
     let dfa = Config::new().use_pgm().generate(&grammar);
     eprintln!("num_nodes: {}", dfa.nodes().count());
-    eprintln!("---\n{}\n", dfa.display(&grammar));
+    eprintln!("---\n{}\n", dfa);
     eprintln!();
 
     eprintln!("DFA(LALR):");
     let dfa = Config::new().use_lalr().generate(&grammar);
     eprintln!("num_nodes: {}", dfa.nodes().count());
-    eprintln!("---\n{}\n", dfa.display(&grammar));
+    eprintln!("---\n{}\n", dfa);
 }
 
 #[test]

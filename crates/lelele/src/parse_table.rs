@@ -1,26 +1,26 @@
 use crate::{
     dfa::{Action, NodeID, DFA},
-    grammar::{Assoc, Grammar, Precedence, RuleID, SymbolID},
+    grammar::{Assoc, Precedence, Rule, Symbol},
     IndexMap,
 };
 use std::cmp::Ordering;
 
 #[derive(Debug)]
 pub struct ParseTable {
-    pub(crate) map: IndexMap<NodeID, IndexMap<SymbolID, ResolvedAction>>,
+    pub(crate) map: IndexMap<NodeID, IndexMap<Symbol, ResolvedAction>>,
 }
 
 impl ParseTable {
-    pub fn generate(grammar: &Grammar, dfa: &DFA) -> Self {
+    pub fn generate(dfa: &DFA) -> Self {
         let mut map = IndexMap::default();
 
         for (node_id, node) in dfa.nodes() {
-            let mut actions = IndexMap::<SymbolID, ResolvedAction>::default();
+            let mut actions = IndexMap::<Symbol, ResolvedAction>::default();
 
-            for (symbol_id, action) in node.actions() {
+            for (symbol, action) in node.actions() {
                 // FIXME: report conflict
-                if let Ok(resolved) = resolve_action(grammar, symbol_id, action) {
-                    actions.insert(symbol_id, resolved);
+                if let Ok(resolved) = resolve_action(symbol, action) {
+                    actions.insert(symbol.clone(), resolved);
                 }
             }
 
@@ -32,11 +32,7 @@ impl ParseTable {
 }
 
 /// Attempts to resolve shift/reduce conflicts based on precedence/associativity.
-fn resolve_action(
-    grammar: &Grammar,
-    symbol_id: SymbolID,
-    action: &Action,
-) -> Result<ResolvedAction, ResolveError> {
+fn resolve_action(symbol: &Symbol, action: &Action) -> Result<ResolvedAction, ResolveError> {
     use ResolvedAction::*;
 
     if action.accepted {
@@ -47,12 +43,12 @@ fn resolve_action(
 
     match (action.shift, &action.reduces[..]) {
         (Some(next), []) => Ok(Shift(next)),
-        (None, [reduce]) => Ok(Reduce(*reduce)),
+        (None, [reduce]) => Ok(Reduce(reduce.clone())),
 
         (Some(next), [reduce, remains @ ..]) => {
-            let shift_prec = grammar.symbol(&symbol_id).precedence();
+            let shift_prec = symbol.precedence();
 
-            let reduce_prec = grammar.rule(reduce).precedence(grammar);
+            let reduce_prec = reduce.precedence();
             let resolved = resolve_shift_reduce_conflict(shift_prec, reduce_prec)?;
 
             if matches!(resolved, Some(false)) && !remains.is_empty() {
@@ -60,7 +56,7 @@ fn resolve_action(
             }
 
             for reduce in remains {
-                let reduce_prec = grammar.rule(reduce).precedence(grammar);
+                let reduce_prec = reduce.precedence();
                 let new_resolved = resolve_shift_reduce_conflict(shift_prec, reduce_prec)?;
                 if resolved != new_resolved {
                     return Err(ResolveError::ResolutionMismatched);
@@ -69,7 +65,7 @@ fn resolve_action(
 
             match resolved {
                 Some(true) => Ok(Shift(next)),
-                Some(false) => Ok(Reduce(*reduce)),
+                Some(false) => Ok(Reduce(reduce.clone())),
                 None => Ok(Fail),
             }
         }
@@ -101,7 +97,7 @@ fn resolve_shift_reduce_conflict(
 #[derive(Debug)]
 pub(crate) enum ResolvedAction {
     Shift(NodeID),
-    Reduce(RuleID),
+    Reduce(Rule),
     Accept,
     Fail,
 }

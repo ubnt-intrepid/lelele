@@ -31,10 +31,10 @@ fn generate_parser(
     let dfa = DFA::generate(&grammar);
     fs::write(
         project_root.join(format!("{}.automaton", name)),
-        dfa.display(&grammar).to_string(),
+        dfa.to_string(),
     )?;
 
-    let table = ParseTable::generate(&grammar, &dfa);
+    let table = ParseTable::generate(&dfa);
 
     let codegen = Codegen::new(&grammar, &table);
 

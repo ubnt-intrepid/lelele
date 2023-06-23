@@ -1,10 +1,11 @@
 //! Definition and generation of LR(1) automata.
 
 use crate::{
-    grammar::{Grammar, RuleID, SymbolID},
+    grammar::{Grammar, Rule, RuleID, Symbol},
     IndexMap, IndexSet,
 };
 use std::{
+    borrow::Borrow,
     collections::{BTreeMap, BTreeSet, VecDeque},
     fmt,
 };
@@ -66,29 +67,21 @@ impl DFA {
     pub fn node(&self, id: NodeID) -> &DFANode {
         &self.nodes[&id]
     }
-
-    pub fn display<'g>(&'g self, grammar: &'g Grammar) -> impl fmt::Display + 'g {
-        DFADisplay { grammar, dfa: self }
-    }
 }
 
-struct DFADisplay<'g> {
-    grammar: &'g Grammar,
-    dfa: &'g DFA,
-}
-
-impl fmt::Display for DFADisplay<'_> {
+impl fmt::Display for DFA {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (id, node) in self.dfa.nodes() {
+        for (id, node) in self.nodes() {
             writeln!(f, "- id: {:02}", id)?;
             writeln!(f, "  item_sets:")?;
             for (core_item, lookaheads) in &node.item_set {
-                let LRCoreItem { rule_id, marker } = core_item;
-                let rule = self.grammar.rule(rule_id);
-                let start = self.grammar.symbol(&rule.left());
-                write!(f, "  - {} :", start.export_name().unwrap_or("<bogus>"))?;
+                let LRCoreItem { rule, marker } = core_item;
+                write!(
+                    f,
+                    "  - {} :",
+                    rule.left().export_name().unwrap_or("<bogus>")
+                )?;
                 for (i, prod) in rule.right().iter().enumerate() {
-                    let prod = self.grammar.symbol(prod);
                     if i == *marker {
                         f.write_str(" @")?;
                     }
@@ -99,7 +92,6 @@ impl fmt::Display for DFADisplay<'_> {
                 }
                 write!(f, " [")?;
                 for (i, lookahead) in lookaheads.iter().enumerate() {
-                    let lookahead = self.grammar.symbol(lookahead);
                     if i > 0 {
                         f.write_str("/")?;
                     }
@@ -109,7 +101,6 @@ impl fmt::Display for DFADisplay<'_> {
             }
             writeln!(f, "  actions:")?;
             for (token, action) in &node.actions {
-                let token = self.grammar.symbol(token);
                 let token = token.export_name().unwrap_or("<bogus>");
                 writeln!(f, "  - On {}:", token)?;
                 if let Some(n) = action.shift {
@@ -118,12 +109,11 @@ impl fmt::Display for DFADisplay<'_> {
                 if action.accepted {
                     writeln!(f, "    - accept")?;
                 }
-                for r in &action.reduces {
-                    let rule = self.grammar.rule(r);
+                for reduce in &action.reduces {
                     writeln!(
                         f,
                         "    - reduce({})",
-                        rule.export_name().unwrap_or("<unnamed>")
+                        reduce.export_name().unwrap_or("<unnamed>")
                     )?;
                 }
             }
@@ -156,40 +146,38 @@ impl fmt::Display for NodeID {
 #[derive(Debug)]
 pub struct DFANode {
     item_set: LRItemSet,
-    actions: IndexMap<SymbolID, Action>,
+    actions: IndexMap<Symbol, Action>,
 }
 
 // LR(1) item
 // X: Y1 Y2 ... Yn という構文規則があったとき、それにマーカ位置を付与したもの
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 struct LRCoreItem {
     // grammer内におけるruleの識別子
-    rule_id: RuleID,
+    rule: Rule,
     // marker位置
     marker: usize,
 }
 
 //  - key: core item
 //  - value: 紐付けられた先読み記号 (Eq,Hashを実装できないので別に持つ)
-type LRItemSet = BTreeMap<LRCoreItem, IndexSet<SymbolID>>;
+type LRItemSet = BTreeMap<LRCoreItem, IndexSet<Symbol>>;
 type LRCoreItems = BTreeSet<LRCoreItem>;
 
 impl DFANode {
-    pub fn actions(&self) -> impl Iterator<Item = (SymbolID, &Action)> + '_ {
-        self.actions
-            .iter()
-            .map(|(&symbol, action)| (symbol, action))
+    pub fn actions(&self) -> impl Iterator<Item = (&Symbol, &Action)> + '_ {
+        self.actions.iter()
     }
 
-    pub fn action(&self, token: SymbolID) -> Option<&Action> {
-        self.actions.get(&token)
+    pub fn action(&self, token: &Symbol) -> Option<&Action> {
+        self.actions.get(token)
     }
 }
 
 #[derive(Debug, Default)]
 pub struct Action {
     pub(crate) shift: Option<NodeID>,
-    pub(crate) reduces: Vec<RuleID>,
+    pub(crate) reduces: Vec<Rule>,
     pub(crate) accepted: bool,
 }
 
@@ -244,36 +232,34 @@ impl NodeExtractor<'_> {
             changed = false;
 
             // 候補の抽出
-            let mut added: IndexMap<LRCoreItem, IndexSet<SymbolID>> = IndexMap::default();
+            let mut added: IndexMap<LRCoreItem, IndexSet<Symbol>> = IndexMap::default();
             for (core, lookaheads) in &mut *items {
-                let rule = self.grammar.rule(&core.rule_id);
+                let rule = &core.rule;
 
                 // [X -> ... @ Y beta]
                 //  Y: one nonterminal symbol
                 let (y_symbol, beta) = match &rule.right()[core.marker..] {
-                    [y_symbol, beta @ ..] if !self.grammar.symbol(y_symbol).is_terminal() => {
-                        (*y_symbol, beta)
-                    }
+                    [y_symbol, beta @ ..] if !y_symbol.is_terminal() => (y_symbol, beta),
                     _ => continue,
                 };
 
                 // lookaheads = {x1,x2,...,xk} としたとき、
                 //   x \in First(beta x1) \cup ... \cup First(beta xk)
                 // を満たすすべての終端記号を考える
-                let x = self.first_sets.get(beta, &*lookaheads);
+                let x = self.first_sets.get(beta.into_iter(), lookaheads.iter());
                 for rule in self.grammar.rules() {
                     // Y: ... という形式の構文規則のみを対象にする
-                    if rule.left() != y_symbol {
+                    if rule.left().id() != y_symbol.id() {
                         continue;
                     }
 
                     added
                         .entry(LRCoreItem {
-                            rule_id: rule.id(),
+                            rule: rule.clone(),
                             marker: 0,
                         })
                         .or_default()
-                        .extend(&x);
+                        .extend(x.iter().cloned());
                 }
             }
 
@@ -290,25 +276,25 @@ impl NodeExtractor<'_> {
     }
 
     /// 指定したLRアイテム集合から遷移先のLRアイテム集合（未展開）とラベルを抽出する
-    fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<SymbolID, LRItemSet> {
-        let mut item_sets: IndexMap<SymbolID, LRItemSet> = IndexMap::default();
+    fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<Symbol, LRItemSet> {
+        let mut item_sets: IndexMap<Symbol, LRItemSet> = IndexMap::default();
         for (core, lookaheads) in items {
-            let rule = self.grammar.rule(&core.rule_id);
+            let rule = &core.rule;
 
             // markerが終わりまで到達していれば無視する
             if core.marker >= rule.right().len() {
                 continue;
             }
 
-            let label = rule.right()[core.marker];
-            let new_item_set = item_sets.entry(label).or_default();
+            let label = &rule.right()[core.marker];
+            let new_item_set = item_sets.entry(label.clone()).or_default();
             new_item_set
                 .entry(LRCoreItem {
                     marker: core.marker + 1,
                     ..core.clone()
                 })
                 .or_default()
-                .extend(lookaheads);
+                .extend(lookaheads.iter().cloned());
         }
         item_sets
     }
@@ -318,7 +304,7 @@ impl NodeExtractor<'_> {
 struct DFAGenerator<'g> {
     extractor: NodeExtractor<'g>,
     pending_nodes: PendingNodes,
-    nodes: IndexMap<NodeID, (LRItemSet, IndexMap<SymbolID, NodeID>)>,
+    nodes: IndexMap<NodeID, (LRItemSet, IndexMap<Symbol, NodeID>)>,
     same_cores: IndexMap<LRCoreItems, IndexSet<NodeID>>,
     mode: MergeMode,
 }
@@ -332,10 +318,10 @@ impl<'g> DFAGenerator<'g> {
         let mut item_set = BTreeMap::new();
         item_set.insert(
             LRCoreItem {
-                rule_id: RuleID::ACCEPT,
+                rule: grammar.accept_rule().clone(),
                 marker: 0,
             },
-            Some(SymbolID::EOI).into_iter().collect(),
+            Some(grammar.eoi().clone()).into_iter().collect(),
         );
         pending_nodes
             .queue
@@ -361,7 +347,7 @@ impl<'g> DFAGenerator<'g> {
             // クロージャ展開
             self.extractor.expand_closures(&mut new_item_set);
 
-            let core_items: LRCoreItems = new_item_set.keys().copied().collect();
+            let core_items: LRCoreItems = new_item_set.keys().cloned().collect();
 
             // 互換性のあるノードを検索し、存在する場合はそのノードを修正し新規にノードは生成しない
             if let Some(same_cores) = self.same_cores.get(&core_items) {
@@ -378,7 +364,7 @@ impl<'g> DFAGenerator<'g> {
                             for (new_core, new_lookaheads) in &new_item_set {
                                 let lookaheads = orig_node.0.get_mut(new_core).unwrap();
                                 for l in new_lookaheads {
-                                    modified |= lookaheads.insert(*l);
+                                    modified |= lookaheads.insert(l.clone());
                                 }
                             }
 
@@ -442,7 +428,7 @@ impl<'g> DFAGenerator<'g> {
         for (orig_id, (item_set, edges)) in self.nodes {
             let id = new_node_ids[&orig_id];
 
-            let mut actions: IndexMap<SymbolID, Action> = IndexMap::default();
+            let mut actions: IndexMap<Symbol, Action> = IndexMap::default();
             for (label, target) in edges {
                 // shift, goto
                 let target = new_node_ids[&target];
@@ -451,17 +437,15 @@ impl<'g> DFAGenerator<'g> {
             }
             for (core_item, lookaheads) in &item_set {
                 // reduce, accept
-                let grammar = self.extractor.grammar;
-                let rule = grammar.rule(&core_item.rule_id);
-                if core_item.marker < rule.right().len() {
+                if core_item.marker < core_item.rule.right().len() {
                     continue;
                 }
                 for lookahead in lookaheads {
-                    let action = actions.entry(*lookahead).or_default();
-                    if core_item.rule_id == RuleID::ACCEPT {
+                    let action = actions.entry(lookahead.clone()).or_default();
+                    if core_item.rule.id() == RuleID::ACCEPT {
                         action.accepted = true;
                     } else {
-                        action.reduces.push(core_item.rule_id);
+                        action.reduces.push(core_item.rule.clone());
                     }
                 }
             }
@@ -533,8 +517,8 @@ fn is_pgm_weakly_compatible_c2(items: &LRItemSet) -> bool {
 
 #[derive(Debug)]
 struct FirstSets {
-    nulls: IndexSet<SymbolID>,
-    first_sets: IndexMap<SymbolID, IndexSet<SymbolID>>,
+    nulls: IndexSet<Symbol>,
+    first_sets: IndexMap<Symbol, IndexSet<Symbol>>,
 }
 
 impl FirstSets {
@@ -545,23 +529,30 @@ impl FirstSets {
     }
 
     /// `First(prefix lookaheads)`
-    pub fn get<'i, I>(&self, prefix: &[SymbolID], lookaheads: I) -> IndexSet<SymbolID>
+    pub fn get<P, L>(&self, prefix: P, lookaheads: L) -> IndexSet<Symbol>
     where
-        I: IntoIterator<Item = &'i SymbolID>,
+        P: IntoIterator,
+        P::Item: Borrow<Symbol>,
+        L: IntoIterator,
+        L::Item: Borrow<Symbol>,
     {
         let mut res = IndexSet::default();
 
         let mut is_end = false;
         for token in prefix {
-            res.extend(self.first_sets[token].iter().copied());
-            if !self.nulls.contains(token) {
+            res.extend(self.first_sets[token.borrow()].iter().cloned());
+            if !self.nulls.contains(token.borrow()) {
                 is_end = true;
                 break;
             }
         }
 
         if !is_end {
-            res.extend(lookaheads.into_iter().flat_map(|x| &self.first_sets[x]));
+            res.extend(
+                lookaheads
+                    .into_iter()
+                    .flat_map(|x| self.first_sets[x.borrow()].clone()),
+            );
         }
 
         res
@@ -569,11 +560,11 @@ impl FirstSets {
 }
 
 /// Calculate the set of nullable symbols in this grammar.
-fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
+fn nulls_set(grammar: &Grammar) -> IndexSet<Symbol> {
     // ruleからnullableであることが分かっている場合は追加する
-    let mut nulls: IndexSet<SymbolID> = grammar
+    let mut nulls: IndexSet<Symbol> = grammar
         .rules()
-        .filter_map(|rule| rule.right().is_empty().then_some(rule.left()))
+        .filter_map(|rule| rule.right().is_empty().then(|| rule.left().clone()))
         .collect();
 
     // 値が更新されなくなるまで繰り返す
@@ -581,14 +572,14 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
     while changed {
         changed = false;
         for rule in grammar.rules() {
-            if nulls.contains(&rule.left()) {
+            if nulls.contains(&rule.left().id()) {
                 continue;
             }
             // 右辺のsymbolsがすべてnullableかどうか
-            let is_rhs_nullable = rule.right().iter().all(|t| nulls.contains(t));
+            let is_rhs_nullable = rule.right().iter().all(|t| nulls.contains(&t.id()));
             if is_rhs_nullable {
                 changed = true;
-                nulls.insert(rule.left());
+                nulls.insert(rule.left().clone());
                 continue;
             }
         }
@@ -598,20 +589,17 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<SymbolID> {
 }
 
 /// Constructs the instance for calculating first sets in this grammar.
-fn first_set(
-    grammar: &Grammar,
-    nulls: &IndexSet<SymbolID>,
-) -> IndexMap<SymbolID, IndexSet<SymbolID>> {
-    let mut map: IndexMap<SymbolID, IndexSet<SymbolID>> = IndexMap::default();
+fn first_set(grammar: &Grammar, nulls: &IndexSet<Symbol>) -> IndexMap<Symbol, IndexSet<Symbol>> {
+    let mut map: IndexMap<Symbol, IndexSet<Symbol>> = IndexMap::default();
 
     // terminal symbols については First(T) = {T} になる
     for token in grammar.terminals() {
-        map.insert(token.id(), Some(token.id()).into_iter().collect());
+        map.insert(token.clone(), Some(token.clone()).into_iter().collect());
     }
 
     // nonterminal symbols は First(T) = {} と初期化する
     for symbol in grammar.nonterminals() {
-        map.insert(symbol.id(), IndexSet::default());
+        map.insert(symbol.clone(), IndexSet::default());
     }
 
     // 制約条件の抽出
@@ -620,9 +608,9 @@ fn first_set(
     //    - Y1 Y2 ... Y(k-1) が nullable で Yk が non-nullable となる
     //  2. Yi (i=1,2,..,k) それぞれに対し First(X) \supseteq First(Yi) という制約を追加する
     #[derive(Debug)]
-    struct Constraint {
-        sup: SymbolID,
-        sub: SymbolID,
+    struct Constraint<'g> {
+        sup: &'g Symbol,
+        sub: &'g Symbol,
     }
     let mut constraints = vec![];
     for rule in grammar
@@ -630,13 +618,13 @@ fn first_set(
         .flat_map(|rule| (rule.id() != RuleID::ACCEPT).then_some(rule))
     {
         for symbol in rule.right() {
-            if rule.left() != *symbol {
+            if rule.left().id() != symbol.id() {
                 constraints.push(Constraint {
                     sup: rule.left(),
-                    sub: *symbol,
+                    sub: symbol,
                 });
             }
-            if !nulls.contains(symbol) {
+            if !nulls.contains(&symbol.id()) {
                 break;
             }
         }
@@ -650,17 +638,17 @@ fn first_set(
         changed = false;
 
         for Constraint { sup, sub } in &constraints {
-            let mut superset = map.remove(sup).unwrap();
-            let subset = map.get(sub).unwrap();
+            let mut superset = map.remove(*sup).unwrap();
+            let subset = map.get(*sub).unwrap();
 
             for tok in subset {
                 if !superset.contains(tok) {
-                    superset.insert(*tok);
+                    superset.insert(tok.clone());
                     changed = true;
                 }
             }
 
-            map.insert(*sup, superset);
+            map.insert((*sup).clone(), superset);
         }
     }
 
@@ -698,7 +686,7 @@ mod tests {
         eprintln!("{}", grammar);
 
         let dfa = DFA::generate(&grammar);
-        eprintln!("DFA Nodes:\n---\n{}", dfa.display(&grammar));
+        eprintln!("DFA Nodes:\n---\n{}", dfa);
     }
 
     #[test]
@@ -740,6 +728,6 @@ mod tests {
         eprintln!("{}", grammar);
 
         let dfa = DFA::generate(&grammar);
-        eprintln!("DFA Nodes:\n---\n{}", dfa.display(&grammar));
+        eprintln!("DFA Nodes:\n---\n{}", dfa);
     }
 }

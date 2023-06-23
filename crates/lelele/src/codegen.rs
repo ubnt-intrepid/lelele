@@ -172,14 +172,14 @@ impl RuleID {\n",
                 None => continue 'rules,
             };
 
-            let comment_lhs = match self.grammar.symbol(&rule.left()).export_name() {
+            let comment_lhs = match rule.left().export_name() {
                 Some(name) => name,
                 None => continue 'rules,
             };
 
             let mut comment_rhs = String::new();
             for (i, s) in rule.right().iter().enumerate() {
-                let name = match self.grammar.symbol(s).export_name() {
+                let name = match s.export_name() {
                     Some(name) => name,
                     None => continue 'rules,
                 };
@@ -223,14 +223,13 @@ const PARSE_TABLE: &[ lelele::phf::Map<u64, ParseAction> ] = &[\n",
                     ResolvedAction::Shift(n) => {
                         format!("ParseAction::Shift(NodeID {{ __raw: {} }})", n)
                     }
-                    ResolvedAction::Reduce(r) => {
-                        let rule = self.grammar.rule(r);
-                        format!("ParseAction::Reduce(RuleID {{ __raw: {} }}, SymbolID {{ __raw: {} }}, {})", r.raw(), rule.left().raw(), rule.right().len())
+                    ResolvedAction::Reduce(rule) => {
+                        format!("ParseAction::Reduce(RuleID {{ __raw: {} }}, SymbolID {{ __raw: {} }}, {})", rule.id().raw(), rule.left().id().raw(), rule.right().len())
                     }
                     ResolvedAction::Accept => "ParseAction::Accept".into(),
                     ResolvedAction::Fail => continue,
                 };
-                actions_g.entry(symbol.raw(), &action_g);
+                actions_g.entry(symbol.id().raw(), &action_g);
             }
 
             writeln!(f, "{},", actions_g.build())?;
