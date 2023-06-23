@@ -6,16 +6,16 @@ use lelele_runtime::parser::{ParseEvent::*, ParseItem::*};
 use std::convert::Infallible;
 
 #[derive(Debug)]
-pub struct Token(p::SymbolID);
-impl lelele_runtime::parser::Token<p::SymbolID> for Token {
-    fn as_symbol(&self) -> p::SymbolID {
+pub struct Token(p::TokenID);
+impl lelele_runtime::parser::Token<p::TokenID> for Token {
+    fn as_symbol(&self) -> p::TokenID {
         self.0
     }
 }
 
 pub fn tokens<I>(iter: I) -> impl Iterator<Item = Result<Token, Infallible>>
 where
-    I: IntoIterator<Item = p::SymbolID>,
+    I: IntoIterator<Item = p::TokenID>,
 {
     iter.into_iter().map(|t| Ok(Token(t)))
 }
@@ -27,14 +27,14 @@ macro_rules! assert_matches {
 
 #[test]
 fn case1() {
-    let mut tokens = tokens([p::SymbolID::NUM, p::SymbolID::EQUAL, p::SymbolID::NUM]);
+    let mut tokens = tokens([p::TokenID::NUM, p::TokenID::EQUAL, p::TokenID::NUM]);
     let mut parser = p::parser::<Token>();
     let mut args = vec![];
 
     let event = parser.next_event(&mut tokens, &mut args).unwrap();
     assert_matches!(
         (event, &args[..]),
-        (Reduce(p::RuleID::T0), [T(Token(p::SymbolID::NUM))])
+        (Reduce(p::RuleID::T0), [T(Token(p::TokenID::NUM))])
     );
 
     let event = parser.next_event(&mut tokens, &mut args).unwrap();
@@ -46,7 +46,7 @@ fn case1() {
     let event = parser.next_event(&mut tokens, &mut args).unwrap();
     assert_matches!(
         (event, &args[..]),
-        (Reduce(p::RuleID::T0), [T(Token(p::SymbolID::NUM))])
+        (Reduce(p::RuleID::T0), [T(Token(p::TokenID::NUM))])
     );
 
     let event = parser.next_event(&mut tokens, &mut args).unwrap();
@@ -62,7 +62,7 @@ fn case1() {
             Reduce(p::RuleID::A0),
             [
                 N(p::SymbolID::E),
-                T(Token(p::SymbolID::EQUAL)),
+                T(Token(p::TokenID::EQUAL)),
                 N(p::SymbolID::E)
             ]
         )

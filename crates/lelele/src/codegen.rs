@@ -33,7 +33,7 @@ pub type Parser<TTok> = lelele::Parser<ParserDef, TTok>;
 /// Create an instance of parser using generated definition.
 pub fn parser<TTok>() -> Parser<TTok>
 where
-    TTok: lelele::Token<SymbolID>,
+    TTok: lelele::Token<TokenID>,
 {
     lelele::Parser::new(
         ParserDef::default()
@@ -48,6 +48,7 @@ pub struct ParserDef {
 
 impl lelele::ParserDef for ParserDef {
     type State = NodeID;
+    type Token = TokenID;
     type Symbol = SymbolID;
     type Reduce = RuleID;
 
@@ -57,17 +58,26 @@ impl lelele::ParserDef for ParserDef {
     }
 
     #[inline]
-    fn action<TCtx>(&self, mut cx: TCtx) -> Result<TCtx::Ok, TCtx::Err>
+    fn action<TCtx>(
+        &self,
+        mut cx: TCtx,
+    ) -> Result<TCtx::Ok, TCtx::Err>
     where
         TCtx: lelele::ParseContext<
             State = Self::State,
+            Token = Self::Token,
             Symbol = Self::Symbol,
             Reduce = Self::Reduce,
         >,
     {
         match PARSE_TABLE.get(cx.current_state().__raw) {
             Some(actions) => {
-                let lookahead = cx.lookahead().unwrap_or(SymbolID::__EOI).__raw;
+                let lookahead = match cx.lookahead() {
+                    lelele::Lookahead::T(t) => t.__raw,
+                    lelele::Lookahead::N(s) => s.__raw,
+                    lelele::Lookahead::Eoi => TokenID::__EOI.__raw,
+                    _ => unreachable!(),
+                };
                 match actions.get(&lookahead) {
                     Some(ParseAction::Shift(n)) => cx.shift(*n)?,
                     Some(ParseAction::Reduce(r, s, i)) => cx.reduce(*r, *s, *i)?,
@@ -105,14 +115,14 @@ impl NodeID {\n",
         Ok(())
     }
 
-    fn fmt_symbol_id_def(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt_token_id_def(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(
             "\
 /// The type to identify terminal or nonterminal symbols used in generated DFA.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct SymbolID { __raw: u64 }
-impl SymbolID {\n",
+pub struct TokenID { __raw: u64 }
+impl TokenID {\n",
         )?;
 
         writeln!(
@@ -135,6 +145,21 @@ pub const {export_name}: Self = Self {{ __raw: {id} }};",
                 id = terminal.id().raw(),
             )?;
         }
+
+        f.write_str("}\n")?;
+
+        Ok(())
+    }
+
+    fn fmt_symbol_id_def(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(
+            "\
+/// The type to identify nonterminal symbols used in generated DFA.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct SymbolID { __raw: u64 }
+impl SymbolID {\n",
+        )?;
 
         for symbol in self.grammar.nonterminals() {
             let export_name = match symbol.export_name() {
@@ -245,6 +270,7 @@ impl<'g> fmt::Display for Codegen<'g> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.fmt_preamble(f)?;
         self.fmt_node_id_def(f)?;
+        self.fmt_token_id_def(f)?;
         self.fmt_symbol_id_def(f)?;
         self.fmt_rule_id_def(f)?;
         self.fmt_parse_table(f)?;

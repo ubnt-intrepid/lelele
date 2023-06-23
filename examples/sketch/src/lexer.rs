@@ -1,4 +1,4 @@
-use crate::parser::SymbolID;
+use crate::parser::TokenID;
 use logos::Logos;
 
 // 入力のトークン列
@@ -27,16 +27,16 @@ pub enum Token<'source> {
     Num(&'source str),
 }
 
-impl lelele_runtime::parser::Token<SymbolID> for Token<'_> {
-    fn as_symbol(&self) -> SymbolID {
+impl lelele_runtime::parser::Token<TokenID> for Token<'_> {
+    fn as_symbol(&self) -> TokenID {
         match self {
-            Self::LParen => SymbolID::LPAREN,
-            Self::RParen => SymbolID::RPAREN,
-            Self::Plus => SymbolID::PLUS,
-            Self::Minus => SymbolID::MINUS,
-            Self::Star => SymbolID::STAR,
-            Self::Slash => SymbolID::SLASH,
-            Self::Num(..) => SymbolID::NUM,
+            Self::LParen => TokenID::LPAREN,
+            Self::RParen => TokenID::RPAREN,
+            Self::Plus => TokenID::PLUS,
+            Self::Minus => TokenID::MINUS,
+            Self::Star => TokenID::STAR,
+            Self::Slash => TokenID::SLASH,
+            Self::Num(..) => TokenID::NUM,
         }
     }
 }

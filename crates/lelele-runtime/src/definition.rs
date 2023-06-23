@@ -12,6 +12,8 @@ pub trait ParserDef {
     /// The number to identify the state of LR(1) automaton.
     type State: Copy;
 
+    type Token: Copy;
+
     /// The number to identify the terminal/nonterminal symbols.
     type Symbol: Copy;
 
@@ -25,11 +27,17 @@ pub trait ParserDef {
     /// the current state and lookahead symbol.
     fn action<TCtx>(&self, cx: TCtx) -> Result<TCtx::Ok, TCtx::Err>
     where
-        TCtx: ParseContext<State = Self::State, Symbol = Self::Symbol, Reduce = Self::Reduce>;
+        TCtx: ParseContext<
+            State = Self::State,
+            Token = Self::Token,
+            Symbol = Self::Symbol,
+            Reduce = Self::Reduce,
+        >;
 }
 
 pub trait ParseContext {
     type State: Copy;
+    type Token: Copy;
     type Symbol: Copy;
     type Reduce;
 
@@ -40,7 +48,7 @@ pub trait ParseContext {
     fn current_state(&self) -> Self::State;
 
     /// Return the most recent lookahead symbol in this context.
-    fn lookahead(&self) -> Option<Self::Symbol>;
+    fn lookahead(&self) -> Lookahead<Self::Token, Self::Symbol>;
 
     /// Tells the parser engine that the next action is "shift to state `next`".
     fn shift(&mut self, next: Self::State) -> Result<(), Self::Err>;
@@ -62,6 +70,7 @@ where
     T: ParserDef,
 {
     type State = T::State;
+    type Token = T::Token;
     type Symbol = T::Symbol;
     type Reduce = T::Reduce;
 
@@ -72,7 +81,12 @@ where
     #[inline]
     fn action<TCtx>(&self, cx: TCtx) -> Result<TCtx::Ok, TCtx::Err>
     where
-        TCtx: ParseContext<State = Self::State, Symbol = Self::Symbol, Reduce = Self::Reduce>,
+        TCtx: ParseContext<
+            State = Self::State,
+            Token = Self::Token,
+            Symbol = Self::Symbol,
+            Reduce = Self::Reduce,
+        >,
     {
         (**self).action(cx)
     }
@@ -83,6 +97,7 @@ where
     T: ParserDef,
 {
     type State = T::State;
+    type Token = T::Token;
     type Symbol = T::Symbol;
     type Reduce = T::Reduce;
 
@@ -93,7 +108,12 @@ where
     #[inline]
     fn action<TCtx>(&self, cx: TCtx) -> Result<TCtx::Ok, TCtx::Err>
     where
-        TCtx: ParseContext<State = Self::State, Symbol = Self::Symbol, Reduce = Self::Reduce>,
+        TCtx: ParseContext<
+            State = Self::State,
+            Token = Self::Token,
+            Symbol = Self::Symbol,
+            Reduce = Self::Reduce,
+        >,
     {
         (**self).action(cx)
     }
@@ -104,6 +124,7 @@ where
     T: ParserDef,
 {
     type State = T::State;
+    type Token = T::Token;
     type Symbol = T::Symbol;
     type Reduce = T::Reduce;
 
@@ -114,8 +135,21 @@ where
     #[inline]
     fn action<TCtx>(&self, cx: TCtx) -> Result<TCtx::Ok, TCtx::Err>
     where
-        TCtx: ParseContext<State = Self::State, Symbol = Self::Symbol, Reduce = Self::Reduce>,
+        TCtx: ParseContext<
+            State = Self::State,
+            Token = Self::Token,
+            Symbol = Self::Symbol,
+            Reduce = Self::Reduce,
+        >,
     {
         (**self).action(cx)
     }
+}
+
+#[derive(Debug, Copy, Clone)]
+#[non_exhaustive]
+pub enum Lookahead<T, N> {
+    T(T),
+    N(N),
+    Eoi,
 }

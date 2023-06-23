@@ -1,11 +1,11 @@
 //! Parser.
 
-use crate::definition::ParserDef;
+use crate::definition::{Lookahead, ParserDef};
 use std::{fmt, mem};
 
 /// A trait for abstracting token symbols.
-pub trait Token<TSym> {
-    fn as_symbol(&self) -> TSym;
+pub trait Token<TTok> {
+    fn as_symbol(&self) -> TTok;
 }
 
 /// The parser driven based on the generated parse table.
@@ -13,7 +13,7 @@ pub trait Token<TSym> {
 pub struct Parser<TDef, TTok>
 where
     TDef: ParserDef,
-    TTok: Token<TDef::Symbol>,
+    TTok: Token<TDef::Token>,
 {
     definition: TDef,
     state_stack: Vec<TDef::State>,
@@ -32,7 +32,7 @@ enum ParserState {
 impl<TDef, TTok> Parser<TDef, TTok>
 where
     TDef: ParserDef,
-    TTok: Token<TDef::Symbol>,
+    TTok: Token<TDef::Token>,
 {
     /// Create an instance of `Parser` using the specified parse table.
     pub fn new(definition: TDef) -> Self {
@@ -69,15 +69,18 @@ where
                     .last()
                     .ok_or_else(|| ParseError::EmptyItemStack)?
                 {
-                    ParseItem::N(s) => Some(*s),
-                    ParseItem::T(t) => Some(t.as_symbol()),
+                    ParseItem::N(s) => Lookahead::N(*s),
+                    ParseItem::T(t) => Lookahead::T(t.as_symbol()),
                     _ => unreachable!(),
                 },
                 _ => {
                     if self.peeked_token.is_none() {
                         self.peeked_token = tokens.next().transpose().map_err(ParseError::Lexer)?;
                     }
-                    self.peeked_token.as_ref().map(|t| t.as_symbol())
+                    match self.peeked_token {
+                        Some(ref t) => Lookahead::T(t.as_symbol()),
+                        None => Lookahead::Eoi,
+                    }
                 }
             };
 
@@ -154,16 +157,17 @@ enum ParseAction<TState, TSymbol, TReduce> {
     Error(String),
 }
 
-struct ParseContext<TState, TSymbol, TReduce> {
+struct ParseContext<TState, TToken, TSymbol, TReduce> {
     current: TState,
-    lookahead: Option<TSymbol>,
+    lookahead: Lookahead<TToken, TSymbol>,
     action: Option<ParseAction<TState, TSymbol, TReduce>>,
 }
 
-impl<TState: Copy, TSymbol: Copy, TReduce> crate::definition::ParseContext
-    for ParseContext<TState, TSymbol, TReduce>
+impl<TState: Copy, TToken: Copy, TSymbol: Copy, TReduce> crate::definition::ParseContext
+    for ParseContext<TState, TToken, TSymbol, TReduce>
 {
     type State = TState;
+    type Token = TToken;
     type Symbol = TSymbol;
     type Reduce = TReduce;
 
@@ -173,7 +177,8 @@ impl<TState: Copy, TSymbol: Copy, TReduce> crate::definition::ParseContext
     fn current_state(&self) -> Self::State {
         self.current
     }
-    fn lookahead(&self) -> Option<Self::Symbol> {
+
+    fn lookahead(&self) -> Lookahead<Self::Token, Self::Symbol> {
         self.lookahead
     }
 
