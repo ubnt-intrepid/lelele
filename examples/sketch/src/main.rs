@@ -15,7 +15,10 @@ fn main() -> anyhow::Result<()> {
     let mut args = vec![];
     let mut ast_stack = vec![];
     loop {
-        match parser.next_event(&mut tokens, &mut args)? {
+        match parser.next_event(&mut tokens, &mut args).map_err(|e| {
+            eprintln!("parse error: {:?}", e);
+            e
+        })? {
             ParseEvent::Reduce(RuleID::EXPR_ADD) => {
                 match (ast_stack.pop(), args[1].take(), ast_stack.pop()) {
                     (Some(rhs), Some(T(op)), Some(lhs)) => {
