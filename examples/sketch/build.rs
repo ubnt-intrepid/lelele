@@ -42,28 +42,28 @@ fn grammar_def(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {
     let prec_neg = Precedence::new(2, Assoc::Right);
 
     // declare terminal symbols.
-    let lparen = g.token("LPAREN")?;
-    let rparen = g.token("RPAREN")?;
-    let plus = g.token_with_prec("PLUS", Some(prec_add))?;
-    let minus = g.token_with_prec("MINUS", Some(prec_add))?;
-    let star = g.token_with_prec("STAR", Some(prec_mul))?;
-    let slash = g.token_with_prec("SLASH", Some(prec_mul))?;
-    let num = g.token("NUM")?;
-    g.token("UNUSED_0")?;
+    let lparen = g.terminal("LPAREN", None)?;
+    let rparen = g.terminal("RPAREN", None)?;
+    let plus = g.terminal("PLUS", Some(prec_add))?;
+    let minus = g.terminal("MINUS", Some(prec_add))?;
+    let star = g.terminal("STAR", Some(prec_mul))?;
+    let slash = g.terminal("SLASH", Some(prec_mul))?;
+    let num = g.terminal("NUM", None)?;
+    let _unused = g.terminal("UNUSED", None)?;
 
     // declare nonterminal symbols.
-    let expr = g.symbol("EXPR")?;
+    let expr = g.nonterminal("EXPR")?;
 
     g.start_symbol(expr)?;
 
     // declare production rules.
-    g.rule("EXPR_ADD", expr, [expr, plus, expr])?;
-    g.rule("EXPR_SUB", expr, [expr, minus, expr])?;
-    g.rule("EXPR_MUL", expr, [expr, star, expr])?;
-    g.rule("EXPR_DIV", expr, [expr, slash, expr])?;
-    g.rule("EXPR_NUM", expr, [num])?;
-    g.rule("EXPR_PAREN", expr, [lparen, expr, rparen])?;
-    g.rule_with_prec("EXPR_NEG", expr, [minus, expr], Some(prec_neg))?;
+    g.rule(expr, [expr, plus, expr], "EXPR_ADD", None)?;
+    g.rule(expr, [expr, minus, expr], "EXPR_SUB", None)?;
+    g.rule(expr, [expr, star, expr], "EXPR_MUL", None)?;
+    g.rule(expr, [expr, slash, expr], "EXPR_DIV", None)?;
+    g.rule(expr, [num], "EXPR_NUM", None)?;
+    g.rule(expr, [lparen, expr, rparen], "EXPR_PAREN", None)?;
+    g.rule(expr, [minus, expr], "EXPR_NEG", Some(prec_neg))?;
 
     Ok(())
 }

@@ -388,15 +388,8 @@ pub struct GrammarDef<'def> {
 }
 
 impl GrammarDef<'_> {
-    /// Specify a terminal symbol used in this grammar.
-    pub fn token(
-        &mut self,
-        export_name: impl Into<Cow<'static, str>>,
-    ) -> Result<SymbolID, GrammarDefError> {
-        self.token_with_prec(export_name, None)
-    }
-
-    pub fn token_with_prec(
+    /// Declare a terminal symbol used in this grammar.
+    pub fn terminal(
         &mut self,
         export_name: impl Into<Cow<'static, str>>,
         precedence: Option<Precedence>,
@@ -404,24 +397,9 @@ impl GrammarDef<'_> {
         let export_name = verify_ident(export_name.into()).ok_or_else(|| GrammarDefError {
             msg: "incorrect token name".into(),
         })?;
-        self.add_token(Some(export_name), precedence)
-    }
 
-    /// Add a "bogus" token symbol into this grammar.
-    pub fn bogus_token(
-        &mut self,
-        precedence: Option<Precedence>,
-    ) -> Result<SymbolID, GrammarDefError> {
-        self.add_token(None, precedence)
-    }
-
-    fn add_token(
-        &mut self,
-        export_name: Option<Cow<'static, str>>,
-        precedence: Option<Precedence>,
-    ) -> Result<SymbolID, GrammarDefError> {
         for terminal in &self.terminals {
-            if matches!((&terminal.export_name(), &export_name), (Some(n1), Some(n2)) if n1 == n2) {
+            if matches!(terminal.export_name(), Some(name) if name == export_name) {
                 return Err(GrammarDefError {
                     msg: format!(
                         "The terminal `{}' has already been exported",
@@ -438,7 +416,7 @@ impl GrammarDef<'_> {
             inner: Rc::new(SymbolInner {
                 id,
                 kind: SymbolKind::Terminal,
-                export_name,
+                export_name: Some(export_name),
                 precedence,
             }),
         });
@@ -446,8 +424,8 @@ impl GrammarDef<'_> {
         Ok(id)
     }
 
-    /// Specify a nonterminal symbol used in this grammar.
-    pub fn symbol(
+    /// Declare a nonterminal symbol used in this grammar.
+    pub fn nonterminal(
         &mut self,
         export_name: impl Into<Cow<'static, str>>,
     ) -> Result<SymbolID, GrammarDefError> {
@@ -484,21 +462,9 @@ impl GrammarDef<'_> {
     /// Specify a production rule into this grammer.
     pub fn rule<I>(
         &mut self,
-        name: impl Into<Cow<'static, str>>,
         left: SymbolID,
         right: I,
-    ) -> Result<RuleID, GrammarDefError>
-    where
-        I: IntoIterator<Item = SymbolID>,
-    {
-        self.rule_with_prec(name, left, right, None)
-    }
-
-    pub fn rule_with_prec<I>(
-        &mut self,
-        name: impl Into<Cow<'static, str>>,
-        left: SymbolID,
-        right: I,
+        export_name: impl Into<Cow<'static, str>>,
         precedence: Option<Precedence>,
     ) -> Result<RuleID, GrammarDefError>
     where
@@ -523,7 +489,7 @@ impl GrammarDef<'_> {
             );
         }
 
-        let export_name = verify_ident(name.into()).ok_or_else(|| GrammarDefError {
+        let export_name = verify_ident(export_name.into()).ok_or_else(|| GrammarDefError {
             msg: "incorrect rule name".into(),
         })?;
 

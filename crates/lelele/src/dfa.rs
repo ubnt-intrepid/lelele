@@ -662,23 +662,23 @@ mod tests {
     #[test]
     fn smoketest1() {
         let grammar = Grammar::define(|def| {
-            let equal = def.token("EQUAL")?;
-            let plus = def.token("PLUS")?;
-            let ident = def.token("ID")?;
-            let num = def.token("NUM")?;
+            let equal = def.terminal("EQUAL", None)?;
+            let plus = def.terminal("PLUS", None)?;
+            let ident = def.terminal("ID", None)?;
+            let num = def.terminal("NUM", None)?;
 
-            let a = def.symbol("A")?;
-            let e = def.symbol("E")?;
-            let t = def.symbol("T")?;
+            let a = def.nonterminal("A")?;
+            let e = def.nonterminal("E")?;
+            let t = def.nonterminal("T")?;
 
             def.start_symbol(a)?;
 
-            def.rule("A1", a, [e, equal, e])?;
-            def.rule("A2", a, [ident])?;
-            def.rule("E1", e, [e, plus, t])?;
-            def.rule("E2", e, [t])?;
-            def.rule("T1", t, [num])?;
-            def.rule("T2", t, [ident])?;
+            def.rule(a, [e, equal, e], "A1", None)?;
+            def.rule(a, [ident], "A2", None)?;
+            def.rule(e, [e, plus, t], "E1", None)?;
+            def.rule(e, [t], "E2", None)?;
+            def.rule(t, [num], "T1", None)?;
+            def.rule(t, [ident], "T2", None)?;
 
             Ok(())
         })
@@ -693,32 +693,32 @@ mod tests {
     fn smoketest2() {
         let grammar = Grammar::define(|g| {
             // declare terminal symbols.
-            let lparen = g.token("LPAREN")?;
-            let rparen = g.token("RPAREN")?;
-            let plus = g.token("PLUS")?;
-            let minus = g.token("MINUS")?;
-            let star = g.token("STAR")?;
-            let slash = g.token("SLASH")?;
-            let num = g.token("NUM")?;
-            let _ = g.token("UNUSED_0")?;
+            let lparen = g.terminal("LPAREN", None)?;
+            let rparen = g.terminal("RPAREN", None)?;
+            let plus = g.terminal("PLUS", None)?;
+            let minus = g.terminal("MINUS", None)?;
+            let star = g.terminal("STAR", None)?;
+            let slash = g.terminal("SLASH", None)?;
+            let num = g.terminal("NUM", None)?;
+            let _ = g.terminal("UNUSED_0", None)?;
 
             // declare nonterminal symbols.
-            let expr = g.symbol("EXPR")?;
-            let factor = g.symbol("FACTOR")?;
-            let term = g.symbol("TERM")?;
-            let _ = g.symbol("UNUSED_1")?;
+            let expr = g.nonterminal("EXPR")?;
+            let factor = g.nonterminal("FACTOR")?;
+            let term = g.nonterminal("TERM")?;
+            let _ = g.nonterminal("UNUSED_1")?;
 
             // declare syntax rules.
-            g.rule("EXPR1", expr, [expr, plus, factor])?; // expr '+' factor
-            g.rule("EXPR2", expr, [expr, minus, factor])?; // expr '-' factor
-            g.rule("EXPR3", expr, [factor])?; // factor
+            g.rule(expr, [expr, plus, factor], "EXPR1", None)?;
+            g.rule(expr, [expr, minus, factor], "EXPR2", None)?;
+            g.rule(expr, [factor], "EXPR3", None)?;
 
-            g.rule("FACTOR1", factor, [factor, star, term])?; // factor '*' term
-            g.rule("FACTOR2", factor, [factor, slash, term])?; // factor '/' term
-            g.rule("FACTOR3", factor, [term])?; // term
+            g.rule(factor, [factor, star, term], "FACTOR1", None)?;
+            g.rule(factor, [factor, slash, term], "FACTOR2", None)?;
+            g.rule(factor, [term], "FACTOR3", None)?;
 
-            g.rule("TERM1", term, [num])?; // num
-            g.rule("TERM2", term, [lparen, expr, rparen])?; // '(' expr ')'
+            g.rule(term, [num], "TERM1", None)?;
+            g.rule(term, [lparen, expr, rparen], "TERM2", None)?;
 
             g.start_symbol(expr)?;
 
