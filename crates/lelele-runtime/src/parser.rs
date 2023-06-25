@@ -19,7 +19,7 @@ where
     state_stack: Vec<TDef::State>,
     item_stack: Vec<ParseItem<TTok, TDef::Symbol>>,
     parser_state: ParserState<TDef::Symbol>,
-    peeked_token: Option<TTok>,
+    lookahead: Option<TTok>,
 }
 
 #[derive(Debug)]
@@ -42,7 +42,7 @@ where
             state_stack: vec![initial_state],
             item_stack: vec![],
             parser_state: ParserState::Reading,
-            peeked_token: None,
+            lookahead: None,
         }
     }
 
@@ -57,34 +57,30 @@ where
         I: Iterator<Item = Result<TTok, E>>,
     {
         match self.parser_state {
-            ParserState::PendingGoto(s) => {
-                let current = self
-                    .state_stack
-                    .last()
-                    .copied()
-                    .ok_or_else(|| ParseError::EmptyNodeStack)?;
-                let next = self.definition.goto(current, s);
-                self.parser_state = ParserState::Reading;
+            ParserState::PendingGoto(symbol) => {
+                let current = self.state_stack.last().copied().unwrap();
+                let next = self.definition.goto(current, symbol);
                 self.state_stack.push(next);
+                self.item_stack.push(ParseItem::N(symbol));
+                self.parser_state = ParserState::Reading;
             }
-            ParserState::Accepted => return Err(ParseError::AlreadyAccepted),
+            ParserState::Accepted => {
+                return Err(ParseError::AlreadyAccepted);
+            }
             _ => (),
         }
 
         loop {
-            let current = self
-                .state_stack
-                .last()
-                .copied()
-                .ok_or_else(|| ParseError::EmptyNodeStack)?;
-
+            let current = self.state_stack.last().copied().unwrap();
             let lookahead = {
-                if self.peeked_token.is_none() {
-                    self.peeked_token = tokens.next().transpose().map_err(ParseError::Lexer)?;
+                if self.lookahead.is_none() {
+                    self.lookahead = tokens.next().transpose().map_err(ParseError::Lexer)?;
                 }
-                self.peeked_token.as_ref().map(|t| t.as_symbol())
+                match self.lookahead {
+                    Some(ref t) => Some(t.as_symbol()),
+                    None => None,
+                }
             };
-
             let action = self
                 .definition
                 .action(
@@ -94,11 +90,11 @@ where
                         _marker: PhantomData,
                     },
                 )
-                .map_err(|_| ParseError::ParserDef("error".into()))?;
+                .unwrap();
 
             match action {
                 ParseAction::Shift(n) => {
-                    let t = match self.peeked_token.take() {
+                    let t = match self.lookahead.take() {
                         Some(t) => t,
                         None => tokens
                             .next()
@@ -116,21 +112,16 @@ where
                     args.resize_with(n, Default::default);
                     for i in 0..n {
                         self.state_stack.pop();
-                        let arg = self
-                            .item_stack
-                            .pop()
-                            .ok_or_else(|| ParseError::EmptyItemStack)?;
+                        let arg = self.item_stack.pop().unwrap();
                         args[n - i - 1] = arg;
                     }
                     self.parser_state = ParserState::PendingGoto(lhs);
+
                     return Ok(ParseEvent::Reduce(reduce));
                 }
 
                 ParseAction::Accept => {
-                    let arg = self
-                        .item_stack
-                        .pop()
-                        .ok_or_else(|| ParseError::EmptyItemStack)?;
+                    let arg = self.item_stack.pop().unwrap();
                     args.clear();
                     args.push(arg);
 
@@ -170,7 +161,7 @@ impl<TState: Copy, TToken: Copy, TSymbol: Copy, TReduce> crate::definition::Pars
     type Reduce = TReduce;
 
     type Ok = ParseAction<TState, TToken, TSymbol, TReduce>;
-    type Error = ();
+    type Error = std::convert::Infallible;
 
     fn shift(self, next: Self::State) -> Result<Self::Ok, Self::Error> {
         Ok(ParseAction::Shift(next))
@@ -244,12 +235,6 @@ pub enum ParseError<L, TToken> {
 
     #[error("unexpected EOI")]
     UnexpectedEOI,
-
-    #[error("empty node stack")]
-    EmptyNodeStack,
-
-    #[error("empty item stack")]
-    EmptyItemStack,
 
     #[error("already accepted")]
     AlreadyAccepted,
