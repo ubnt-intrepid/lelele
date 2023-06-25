@@ -3,22 +3,6 @@ pub mod p {
 }
 #[allow(unused_imports)]
 use lelele_runtime::parser::{ParseEvent::*, ParseItem::*};
-use std::convert::Infallible;
-
-#[derive(Debug)]
-pub struct Token(p::TokenID);
-impl lelele_runtime::parser::Token<p::TokenID> for Token {
-    fn as_symbol(&self) -> p::TokenID {
-        self.0
-    }
-}
-
-pub fn tokens<I>(iter: I) -> impl Iterator<Item = Result<Token, Infallible>>
-where
-    I: IntoIterator<Item = p::TokenID>,
-{
-    iter.into_iter().map(|t| Ok(Token(t)))
-}
 
 #[allow(unused_macros)]
 macro_rules! assert_matches {
@@ -27,47 +11,51 @@ macro_rules! assert_matches {
 
 #[test]
 fn case1() {
-    let mut tokens = tokens([p::TokenID::NUM, p::TokenID::EQUAL, p::TokenID::NUM]);
-    let mut parser = p::parser::<Token>();
+    let mut parser = p::parser::<p::TokenID>();
     let mut args = vec![];
 
-    let event = parser.next_event(&mut tokens, &mut args).unwrap();
+    assert_matches!(parser.next_event(&mut args), Ok(InputNeeded));
+    parser.offer_token(p::TokenID::NUM);
+
+    assert_matches!(parser.next_event(&mut args), Ok(InputNeeded));
+    parser.offer_token(p::TokenID::EQUAL);
+
     assert_matches!(
-        (event, &args[..]),
-        (Reduce(p::RuleID::T0), [T(Token(p::TokenID::NUM))])
+        (parser.next_event(&mut args), &args[..]),
+        (Ok(AboutToReduce(p::RuleID::T0)), [T(p::TokenID::NUM)])
     );
 
-    let event = parser.next_event(&mut tokens, &mut args).unwrap();
     assert_matches!(
-        (event, &args[..]),
-        (Reduce(p::RuleID::E1), [N(p::SymbolID::T)])
+        (parser.next_event(&mut args), &args[..]),
+        (Ok(AboutToReduce(p::RuleID::E1)), [N(p::SymbolID::T)])
     );
 
-    let event = parser.next_event(&mut tokens, &mut args).unwrap();
+    assert_matches!(parser.next_event(&mut args), Ok(InputNeeded));
+    parser.offer_token(p::TokenID::NUM);
+
+    assert_matches!(parser.next_event(&mut args), Ok(InputNeeded));
+    parser.offer_eoi();
+
     assert_matches!(
-        (event, &args[..]),
-        (Reduce(p::RuleID::T0), [T(Token(p::TokenID::NUM))])
+        (parser.next_event(&mut args), &args[..]),
+        (Ok(AboutToReduce(p::RuleID::T0)), [T(p::TokenID::NUM)])
     );
 
-    let event = parser.next_event(&mut tokens, &mut args).unwrap();
     assert_matches!(
-        (event, &args[..]),
-        (Reduce(p::RuleID::E1), [N(p::SymbolID::T)])
+        (parser.next_event(&mut args), &args[..]),
+        (Ok(AboutToReduce(p::RuleID::E1)), [N(p::SymbolID::T)])
     );
 
-    let event = parser.next_event(&mut tokens, &mut args).unwrap();
     assert_matches!(
-        (event, &args[..]),
+        (parser.next_event(&mut args), &args[..]),
         (
-            Reduce(p::RuleID::A0),
-            [
-                N(p::SymbolID::E),
-                T(Token(p::TokenID::EQUAL)),
-                N(p::SymbolID::E)
-            ]
+            Ok(AboutToReduce(p::RuleID::A0)),
+            [N(p::SymbolID::E), T(p::TokenID::EQUAL), N(p::SymbolID::E)]
         )
     );
 
-    let event = parser.next_event(&mut tokens, &mut args).unwrap();
-    assert_matches!((event, &args[..]), (Accept, [N(p::SymbolID::A)]));
+    assert_matches!(
+        (parser.next_event(&mut args), &args[..]),
+        (Ok(Accepted), [N(p::SymbolID::A)])
+    );
 }

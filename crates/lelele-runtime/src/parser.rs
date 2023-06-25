@@ -8,6 +8,12 @@ pub trait Token<TTok> {
     fn as_symbol(&self) -> TTok;
 }
 
+impl<TTok: Copy> Token<TTok> for TTok {
+    fn as_symbol(&self) -> TTok {
+        *self
+    }
+}
+
 /// The parser driven based on the generated parse table.
 #[derive(Debug)]
 pub struct Parser<TDef, TTok>
@@ -17,9 +23,9 @@ where
 {
     definition: TDef,
     state_stack: Vec<TDef::State>,
-    item_stack: Vec<ParseItem<TTok, TDef::Symbol>>,
+    item_stack: Vec<StackItem<TTok, TDef::Symbol>>,
     parser_state: ParserState<TDef::Symbol>,
-    lookahead: Option<TTok>,
+    lookahead: Option<Option<TTok>>,
 }
 
 #[derive(Debug)]
@@ -27,6 +33,12 @@ enum ParserState<TSymbol> {
     Reading,
     PendingGoto(TSymbol),
     Accepted,
+}
+
+#[derive(Debug)]
+enum StackItem<TTok, TSymbol> {
+    T(Option<TTok>),
+    N(TSymbol),
 }
 
 impl<TDef, TTok> Parser<TDef, TTok>
@@ -46,22 +58,38 @@ where
         }
     }
 
+    pub fn offer_token(&mut self, token: TTok) -> Option<TTok> {
+        match self.lookahead {
+            Some(..) => Some(token),
+            None => {
+                self.lookahead.replace(Some(token));
+                None
+            }
+        }
+    }
+
+    pub fn offer_eoi(&mut self) -> bool {
+        match self.lookahead {
+            Some(..) => false,
+            None => {
+                self.lookahead.replace(None);
+                true
+            }
+        }
+    }
+
     /// Consume some tokens and drive the state machine
     /// until it matches a certain production rule.
-    pub fn next_event<I, E>(
+    pub fn next_event(
         &mut self,
-        tokens: &mut I,
         args: &mut Vec<ParseItem<TTok, TDef::Symbol>>,
-    ) -> Result<ParseEvent<TDef>, ParseError<E, TDef::Token>>
-    where
-        I: Iterator<Item = Result<TTok, E>>,
-    {
+    ) -> Result<ParseEvent<TDef>, ParseError<TDef::Token>> {
         match self.parser_state {
             ParserState::PendingGoto(symbol) => {
                 let current = self.state_stack.last().copied().unwrap();
                 let next = self.definition.goto(current, symbol);
                 self.state_stack.push(next);
-                self.item_stack.push(ParseItem::N(symbol));
+                self.item_stack.push(StackItem::N(symbol));
                 self.parser_state = ParserState::Reading;
             }
             ParserState::Accepted => {
@@ -72,14 +100,9 @@ where
 
         loop {
             let current = self.state_stack.last().copied().unwrap();
-            let lookahead = {
-                if self.lookahead.is_none() {
-                    self.lookahead = tokens.next().transpose().map_err(ParseError::Lexer)?;
-                }
-                match self.lookahead {
-                    Some(ref t) => Some(t.as_symbol()),
-                    None => None,
-                }
+            let lookahead = match self.lookahead {
+                Some(ref lookahead) => lookahead.as_ref().map(|t| t.as_symbol()),
+                None => return Ok(ParseEvent::InputNeeded),
             };
             let action = self
                 .definition
@@ -93,17 +116,10 @@ where
                 .unwrap();
 
             match action {
-                ParseAction::Shift(n) => {
-                    let t = match self.lookahead.take() {
-                        Some(t) => t,
-                        None => tokens
-                            .next()
-                            .transpose()
-                            .map_err(ParseError::Lexer)?
-                            .ok_or_else(|| ParseError::UnexpectedEOI)?,
-                    };
-                    self.item_stack.push(ParseItem::T(t));
-                    self.state_stack.push(n);
+                ParseAction::Shift(next) => {
+                    let lookahead = self.lookahead.take().unwrap();
+                    self.item_stack.push(StackItem::T(lookahead));
+                    self.state_stack.push(next);
                     self.parser_state = ParserState::Reading;
                     continue;
                 }
@@ -112,21 +128,28 @@ where
                     args.resize_with(n, Default::default);
                     for i in 0..n {
                         self.state_stack.pop();
-                        let arg = self.item_stack.pop().unwrap();
-                        args[n - i - 1] = arg;
+                        let item = self.item_stack.pop().unwrap();
+                        args[n - i - 1] = match item {
+                            StackItem::N(symbol) => ParseItem::N(symbol),
+                            StackItem::T(Some(tok)) => ParseItem::T(tok),
+                            StackItem::T(None) => unreachable!(),
+                        };
                     }
                     self.parser_state = ParserState::PendingGoto(lhs);
 
-                    return Ok(ParseEvent::Reduce(reduce));
+                    return Ok(ParseEvent::AboutToReduce(reduce));
                 }
 
                 ParseAction::Accept => {
-                    let arg = self.item_stack.pop().unwrap();
                     args.clear();
-                    args.push(arg);
+                    let item = self.item_stack.pop().unwrap();
+                    args.push(match item {
+                        StackItem::N(symbol) => ParseItem::N(symbol),
+                        StackItem::T(..) => unreachable!(),
+                    });
 
                     self.parser_state = ParserState::Accepted;
-                    return Ok(ParseEvent::Accept);
+                    return Ok(ParseEvent::Accepted);
                 }
 
                 ParseAction::Fail { expected } => {
@@ -215,15 +238,13 @@ pub enum ParseEvent<TDef>
 where
     TDef: ParserDef,
 {
-    Reduce(TDef::Reduce),
-    Accept,
+    InputNeeded,
+    AboutToReduce(TDef::Reduce),
+    Accepted,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ParseError<L, TToken> {
-    #[error("from lexer")]
-    Lexer(L),
-
+pub enum ParseError<TToken> {
     #[error("from parser definition: {}", _0)]
     ParserDef(String),
 
