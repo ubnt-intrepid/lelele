@@ -3,7 +3,6 @@ use lelele::{
     codegen::Codegen,
     dfa::DFA,
     grammar::{Grammar, GrammarDef, GrammarDefError},
-    parse_table::ParseTable,
 };
 use lelele_tests::grammars;
 use std::{env, fs, path::PathBuf};
@@ -34,9 +33,7 @@ fn generate_parser(
         dfa.to_string(),
     )?;
 
-    let table = ParseTable::generate(&dfa);
-
-    let codegen = Codegen::new(&grammar, &table);
+    let codegen = Codegen::new(&grammar, &dfa);
 
     let out_dir = env::var("OUT_DIR").map(PathBuf::from).unwrap().join(name);
     fs::create_dir_all(&out_dir)

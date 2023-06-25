@@ -2,7 +2,6 @@ use lelele::{
     codegen::Codegen,
     dfa::DFA,
     grammar::{Assoc, Grammar, GrammarDef, GrammarDefError, Precedence},
-    parse_table::ParseTable,
 };
 use std::{env, fs, io::Write, path::PathBuf};
 
@@ -21,10 +20,8 @@ fn main() {
     let dfa = DFA::generate(&grammar);
     fs::write(project_root.join("sketch.automaton"), dfa.to_string()).unwrap();
 
-    let parse_table = ParseTable::generate(&dfa);
-
     // 生成された構文解析表をコードに出力
-    let codegen = Codegen::new(&grammar, &parse_table);
+    let codegen = Codegen::new(&grammar, &dfa);
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("parser.rs");
     let mut out = fs::File::options()
         .write(true)

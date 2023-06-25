@@ -1,11 +1,12 @@
 //! Definition and generation of LR(1) automata.
 
 use crate::{
-    grammar::{Grammar, Rule, RuleID, Symbol},
+    grammar::{Assoc, Grammar, Precedence, Rule, RuleID, Symbol},
     IndexMap, IndexSet,
 };
 use std::{
     borrow::Borrow,
+    cmp::Ordering,
     collections::{BTreeMap, BTreeSet, VecDeque},
     fmt,
 };
@@ -103,18 +104,26 @@ impl fmt::Display for DFA {
             for (token, action) in &node.actions {
                 let token = token.export_name().unwrap_or("<bogus>");
                 writeln!(f, "  - On {}:", token)?;
-                if let Some(n) = action.shift {
-                    writeln!(f, "    - shift({:02})", n)?;
-                }
-                if action.accepted {
-                    writeln!(f, "    - accept")?;
-                }
-                for reduce in &action.reduces {
-                    writeln!(
-                        f,
-                        "    - reduce({})",
-                        reduce.export_name().unwrap_or("<unnamed>")
-                    )?;
+                match action {
+                    Action::Shift(n) => {
+                        writeln!(f, "    - shift({:02})", n)?;
+                    }
+                    Action::Reduce(reduce) => {
+                        writeln!(
+                            f,
+                            "    - reduce({})",
+                            reduce.export_name().unwrap_or("<unnamed>")
+                        )?;
+                    }
+                    Action::Accept => {
+                        writeln!(f, "    - accept")?;
+                    }
+                    Action::Fail => {
+                        writeln!(f, "    - fail")?;
+                    }
+                    Action::Inconsistent { .. } => {
+                        writeln!(f, "    - conflict")?;
+                    }
                 }
             }
         }
@@ -147,6 +156,7 @@ impl fmt::Display for NodeID {
 pub struct DFANode {
     item_set: LRItemSet,
     actions: IndexMap<Symbol, Action>,
+    gotos: IndexMap<Symbol, NodeID>,
 }
 
 // LR(1) item
@@ -169,16 +179,59 @@ impl DFANode {
         self.actions.iter()
     }
 
-    pub fn action(&self, token: &Symbol) -> Option<&Action> {
-        self.actions.get(token)
+    pub fn gotos(&self) -> impl Iterator<Item = (&Symbol, NodeID)> {
+        self.gotos.iter().map(|(symbol, goto)| (symbol, *goto))
     }
 }
 
-#[derive(Debug, Default)]
-pub struct Action {
-    pub(crate) shift: Option<NodeID>,
-    pub(crate) reduces: Vec<Rule>,
-    pub(crate) accepted: bool,
+/// The action that the LR automaton in a state performs on a particular
+/// lookahead symbol.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum Action {
+    /// Read a lookahead symbol and transition to the specified state.
+    Shift(NodeID),
+
+    /// Reduce to the specified production rule.
+    Reduce(Rule),
+
+    /// Reduce to the top-level production rule and accept symbols.
+    Accept,
+
+    /// Reject the specified lookahead symbol.
+    ///
+    /// The behavior of this action is the same as if no action exists
+    /// for the given lookahead symbol, but is explicitly inserted by
+    /// resolving some shift/reduce conflicts.
+    Fail,
+
+    /// There are multiple conflicting actions for the lookahead symbol.
+    Inconsistent {
+        shift: Option<NodeID>,
+        reduces: Vec<Rule>,
+        accepted: bool,
+        reason: ConflictReason,
+    },
+}
+impl Action {
+    pub fn is_consistent(&self) -> bool {
+        !matches!(self, Self::Inconsistent { .. })
+    }
+}
+
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ConflictReason {
+    /// The state has multiple reductions even though it has no shift action
+    /// on the target lookahead symbol.
+    MultipleReductionWithoutShift,
+
+    /// At least one of the competing actions has no precedence.
+    MissingPrecedence,
+
+    /// At least one of shift/reduce conflict resolution result is
+    /// inconsistent with the others.
+    InconsistentShiftResolution,
 }
 
 // === DFAGenerator ===
@@ -428,12 +481,17 @@ impl<'g> DFAGenerator<'g> {
         for (orig_id, (item_set, edges)) in self.nodes {
             let id = new_node_ids[&orig_id];
 
-            let mut actions: IndexMap<Symbol, Action> = IndexMap::default();
-            for (label, target) in edges {
+            let mut pending_actions: IndexMap<Symbol, PendingAction> = IndexMap::default();
+            let mut gotos: IndexMap<Symbol, NodeID> = IndexMap::default();
+            for (symbol, target) in edges {
                 // shift, goto
                 let target = new_node_ids[&target];
-                let action = actions.entry(label).or_default();
-                action.shift.replace(target);
+                if symbol.is_terminal() {
+                    let action = pending_actions.entry(symbol).or_default();
+                    action.shift.replace(target);
+                } else {
+                    gotos.insert(symbol, target);
+                }
             }
             for (core_item, lookaheads) in &item_set {
                 // reduce, accept
@@ -441,7 +499,7 @@ impl<'g> DFAGenerator<'g> {
                     continue;
                 }
                 for lookahead in lookaheads {
-                    let action = actions.entry(lookahead.clone()).or_default();
+                    let action = pending_actions.entry(lookahead.clone()).or_default();
                     if core_item.rule.id() == RuleID::ACCEPT {
                         action.accepted = true;
                     } else {
@@ -450,7 +508,28 @@ impl<'g> DFAGenerator<'g> {
                 }
             }
 
-            nodes.insert(id, DFANode { item_set, actions });
+            let mut actions: IndexMap<Symbol, Action> = IndexMap::default();
+            for (symbol, action) in pending_actions {
+                let resolved = match resolve_conflict(&symbol, &action) {
+                    Ok(resolved) => resolved,
+                    Err(reason) => Action::Inconsistent {
+                        reason,
+                        shift: action.shift,
+                        reduces: action.reduces,
+                        accepted: action.accepted,
+                    },
+                };
+                actions.insert(symbol, resolved);
+            }
+
+            nodes.insert(
+                id,
+                DFANode {
+                    item_set,
+                    actions,
+                    gotos,
+                },
+            );
         }
 
         DFA { nodes }
@@ -653,6 +732,76 @@ fn first_set(grammar: &Grammar, nulls: &IndexSet<Symbol>) -> IndexMap<Symbol, In
     }
 
     map
+}
+
+#[derive(Debug, Default)]
+struct PendingAction {
+    shift: Option<NodeID>,
+    reduces: Vec<Rule>,
+    accepted: bool,
+}
+
+/// Attempts to resolve shift/reduce conflicts based on precedence/associativity.
+fn resolve_conflict(symbol: &Symbol, action: &PendingAction) -> Result<Action, ConflictReason> {
+    use Action::*;
+
+    if action.accepted {
+        debug_assert!(action.shift.is_none(), "detect shift/accept conflict");
+        debug_assert!(action.reduces.is_empty(), "detect reduce/accept conflict");
+        return Ok(Accept);
+    }
+
+    match (action.shift, &action.reduces[..]) {
+        (Some(next), []) => Ok(Shift(next)),
+        (None, [reduce]) => Ok(Reduce(reduce.clone())),
+
+        (Some(next), [reduce, remains @ ..]) => {
+            let shift_prec = symbol.precedence();
+
+            let reduce_prec = reduce.precedence();
+            let resolved = resolve_shift_reduce_conflict(shift_prec, reduce_prec)?;
+
+            if matches!(resolved, Some(false)) && !remains.is_empty() {
+                return Err(ConflictReason::InconsistentShiftResolution);
+            }
+
+            for reduce in remains {
+                let reduce_prec = reduce.precedence();
+                let new_resolved = resolve_shift_reduce_conflict(shift_prec, reduce_prec)?;
+                if resolved != new_resolved {
+                    return Err(ConflictReason::InconsistentShiftResolution);
+                }
+            }
+
+            match resolved {
+                Some(true) => Ok(Shift(next)),
+                Some(false) => Ok(Reduce(reduce.clone())),
+                None => Ok(Fail),
+            }
+        }
+
+        (None, [_, ..]) => Err(ConflictReason::MultipleReductionWithoutShift),
+
+        (None, []) => unreachable!(),
+    }
+}
+
+fn resolve_shift_reduce_conflict(
+    shift_prec: Option<&Precedence>,
+    reduce_prec: Option<&Precedence>,
+) -> Result<Option<bool>, ConflictReason> {
+    match (shift_prec, reduce_prec) {
+        (Some(p1), Some(p2)) => match Ord::cmp(&p1.priority, &p2.priority) {
+            Ordering::Greater => Ok(Some(true)),
+            Ordering::Less => Ok(Some(false)),
+            Ordering::Equal => match p1.assoc {
+                Assoc::Left => Ok(Some(false)),
+                Assoc::Right => Ok(Some(true)),
+                Assoc::Nonassoc => Ok(None),
+            },
+        },
+        _ => return Err(ConflictReason::MissingPrecedence), // 比較不可能
+    }
 }
 
 #[cfg(test)]

@@ -1,24 +1,20 @@
 //! code generation.
 
 use crate::{
-    dfa::NodeID,
+    dfa::{Action, NodeID, DFA},
     grammar::{Grammar, SymbolID},
-    parse_table::{ParseTable, ResolvedAction},
 };
 use std::fmt;
 
 #[derive(Debug)]
 pub struct Codegen<'g> {
     grammar: &'g Grammar,
-    parse_table: &'g ParseTable,
+    dfa: &'g DFA,
 }
 
 impl<'g> Codegen<'g> {
-    pub fn new(grammar: &'g Grammar, parse_table: &'g ParseTable) -> Self {
-        Self {
-            grammar,
-            parse_table,
-        }
+    pub fn new(grammar: &'g Grammar, dfa: &'g DFA) -> Self {
+        Self { grammar, dfa }
     }
 
     fn fmt_preamble(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -234,16 +230,16 @@ impl lelele::ParserDef for ParserDef {
 const PARSE_TABLE: &[ lelele::phf::Map<u64, ParseAction> ] = &[\n",
         )?;
 
-        for (_, actions) in &self.parse_table.map {
+        for (_id, node) in self.dfa.nodes() {
             let mut actions_g = phf_codegen::Map::<u64>::new();
             actions_g.phf_path("lelele::phf");
 
-            for (symbol, action) in actions {
+            for (symbol, action) in node.actions() {
                 let action_g = match action {
-                    ResolvedAction::Shift(n) => {
+                    Action::Shift(n) => {
                         format!("ParseAction::Shift(NodeID {{ __raw: {} }})", n)
                     }
-                    ResolvedAction::Reduce(rule) => {
+                    Action::Reduce(rule) => {
                         format!(
                             "ParseAction::Reduce(RuleID {{ __raw: {} }}, SymbolID {{ __raw: {} }}, {})",
                             rule.id().raw(),
@@ -251,8 +247,9 @@ const PARSE_TABLE: &[ lelele::phf::Map<u64, ParseAction> ] = &[\n",
                             rule.right().len(),
                         )
                     }
-                    ResolvedAction::Accept => "ParseAction::Accept".into(),
-                    ResolvedAction::Fail => "ParseAction::Fail".into(),
+                    Action::Accept => "ParseAction::Accept".into(),
+                    Action::Fail => "ParseAction::Fail".into(),
+                    Action::Inconsistent { .. } => "ParseAction::Fail".into(),
                 };
                 actions_g.entry(symbol.id().raw(), &action_g);
             }
@@ -265,16 +262,15 @@ const PARSE_TABLE: &[ lelele::phf::Map<u64, ParseAction> ] = &[\n",
 const GOTO_TABLE: &[ lelele::phf::Map<u64, NodeID> ] = &[\n",
         )?;
 
-        for (_, actions) in &self.parse_table.map {
+        for (_, node) in self.dfa.nodes() {
             let mut actions_g = phf_codegen::Map::<u64>::new();
             actions_g.phf_path("lelele::phf");
 
-            for (symbol, action) in actions.iter().filter(|(s, _)| !s.is_terminal()) {
-                let action_g = match action {
-                    ResolvedAction::Shift(n) => format!("NodeID {{ __raw: {} }}", n),
-                    _ => unreachable!(),
-                };
-                actions_g.entry(symbol.id().raw(), &action_g);
+            for (symbol, target) in node.gotos() {
+                actions_g.entry(
+                    symbol.id().raw(),
+                    &format!("NodeID {{ __raw: {} }}", target),
+                );
             }
 
             writeln!(f, "{},", actions_g.build())?;
