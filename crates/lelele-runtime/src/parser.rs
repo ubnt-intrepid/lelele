@@ -129,8 +129,9 @@ where
 
         match action {
             ParseAction::Shift(next) => {
+                let lookahead = self.lookahead.as_ref().unwrap();
                 self.state = ParserState::Shifting(next);
-                return Ok(ParseEvent::Shifting);
+                return Ok(ParseEvent::Shifting(lookahead.as_ref()));
             }
 
             ParseAction::Reduce(reduce, lhs, n) => {
@@ -222,7 +223,7 @@ where
     TTok: Token<TDef::Token>,
 {
     InputNeeded,
-    Shifting,
+    Shifting(Option<&'p TTok>),
     AboutToReduce(TDef::Reduce, &'p [ParseItem<TTok, TDef::Symbol>]),
     AboutToAccept(&'p ParseItem<TTok, TDef::Symbol>),
     Accepted,

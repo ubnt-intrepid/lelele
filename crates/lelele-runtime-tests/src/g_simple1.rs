@@ -16,7 +16,7 @@ fn case1() {
     assert_matches!(parser.next_event(), Ok(InputNeeded));
     parser.offer_token(p::TokenID::NUM);
 
-    assert_matches!(parser.next_event(), Ok(Shifting));
+    assert_matches!(parser.next_event(), Ok(Shifting(Some(&p::TokenID::NUM))));
 
     assert_matches!(parser.next_event(), Ok(InputNeeded));
     parser.offer_token(p::TokenID::EQUAL);
@@ -31,12 +31,12 @@ fn case1() {
         Ok(AboutToReduce(p::RuleID::E1, [N(p::SymbolID::T)]))
     );
 
-    assert_matches!(parser.next_event(), Ok(Shifting));
+    assert_matches!(parser.next_event(), Ok(Shifting(Some(&p::TokenID::EQUAL))));
 
     assert_matches!(parser.next_event(), Ok(InputNeeded));
     parser.offer_token(p::TokenID::NUM);
 
-    assert_matches!(parser.next_event(), Ok(Shifting));
+    assert_matches!(parser.next_event(), Ok(Shifting(Some(&p::TokenID::NUM))));
 
     assert_matches!(parser.next_event(), Ok(InputNeeded));
     parser.offer_eoi();

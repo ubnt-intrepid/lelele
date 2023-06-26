@@ -26,7 +26,7 @@ fn main() -> anyhow::Result<()> {
                     parser.offer_eoi();
                 }
             },
-            ParseEvent::Shifting => {}
+            ParseEvent::Shifting(_lookahead) => {}
             ParseEvent::AboutToReduce(RuleID::EXPR_ADD, args) => {
                 match (ast_stack.pop(), args[1], ast_stack.pop()) {
                     (Some(rhs), T(Some(op)), Some(lhs)) => {
