@@ -78,7 +78,7 @@ where
     }
 
     /// Consume some tokens and drive the state machine until it matches a certain production rule.
-    pub fn next_event(&mut self) -> Result<ParseEvent<'_, TDef, TTok>, ParseError<TDef::Token>> {
+    pub fn resume(&mut self) -> Result<ParseEvent<'_, TDef, TTok>, ParseError<TDef::Token>> {
         match self.state {
             ParserState::Shifting(next) => {
                 let lookahead = self.lookahead.take().unwrap();

@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
     let mut parser = parser();
     let mut ast_stack = vec![];
     loop {
-        match parser.next_event().map_err(|e| {
+        match parser.resume().map_err(|e| {
             eprintln!("parse error: {:?}", e);
             e
         })? {

@@ -13,46 +13,46 @@ macro_rules! assert_matches {
 fn case1() {
     let mut parser = p::parser::<p::TokenID>();
 
-    assert_matches!(parser.next_event(), Ok(InputNeeded));
+    assert_matches!(parser.resume(), Ok(InputNeeded));
     parser.offer_token(p::TokenID::NUM);
 
-    assert_matches!(parser.next_event(), Ok(Shifting(Some(&p::TokenID::NUM))));
+    assert_matches!(parser.resume(), Ok(Shifting(Some(&p::TokenID::NUM))));
 
-    assert_matches!(parser.next_event(), Ok(InputNeeded));
+    assert_matches!(parser.resume(), Ok(InputNeeded));
     parser.offer_token(p::TokenID::EQUAL);
 
     assert_matches!(
-        parser.next_event(),
+        parser.resume(),
         Ok(AboutToReduce(p::RuleID::T0, [T(Some(p::TokenID::NUM))]))
     );
 
     assert_matches!(
-        parser.next_event(),
+        parser.resume(),
         Ok(AboutToReduce(p::RuleID::E1, [N(p::SymbolID::T)]))
     );
 
-    assert_matches!(parser.next_event(), Ok(Shifting(Some(&p::TokenID::EQUAL))));
+    assert_matches!(parser.resume(), Ok(Shifting(Some(&p::TokenID::EQUAL))));
 
-    assert_matches!(parser.next_event(), Ok(InputNeeded));
+    assert_matches!(parser.resume(), Ok(InputNeeded));
     parser.offer_token(p::TokenID::NUM);
 
-    assert_matches!(parser.next_event(), Ok(Shifting(Some(&p::TokenID::NUM))));
+    assert_matches!(parser.resume(), Ok(Shifting(Some(&p::TokenID::NUM))));
 
-    assert_matches!(parser.next_event(), Ok(InputNeeded));
+    assert_matches!(parser.resume(), Ok(InputNeeded));
     parser.offer_eoi();
 
     assert_matches!(
-        parser.next_event(),
+        parser.resume(),
         Ok(AboutToReduce(p::RuleID::T0, [T(Some(p::TokenID::NUM))]))
     );
 
     assert_matches!(
-        parser.next_event(),
+        parser.resume(),
         Ok(AboutToReduce(p::RuleID::E1, [N(p::SymbolID::T)]))
     );
 
     assert_matches!(
-        parser.next_event(),
+        parser.resume(),
         Ok(AboutToReduce(
             p::RuleID::A0,
             [
@@ -63,7 +63,7 @@ fn case1() {
         ))
     );
 
-    assert_matches!(parser.next_event(), Ok(AboutToAccept(N(p::SymbolID::A))));
+    assert_matches!(parser.resume(), Ok(AboutToAccept(N(p::SymbolID::A))));
 
-    assert_matches!(parser.next_event(), Ok(Accepted));
+    assert_matches!(parser.resume(), Ok(Accepted));
 }
