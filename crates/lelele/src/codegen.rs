@@ -185,7 +185,7 @@ enum ParseAction {
     Fail,
 }
 /// The generated LR(1) parse table.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ParserDef {
     _p: (),
 }
