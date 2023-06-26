@@ -54,7 +54,7 @@ where
     Shifting(TDef::State),
     Reducing(TDef::Symbol, usize),
     Accepting,
-    HandlingError { expected: Vec<TDef::Token> },
+    HandlingError,
     Accepted,
 }
 impl<TDef> fmt::Debug for ParserState<TDef>
@@ -71,10 +71,7 @@ where
             Self::Shifting(next) => f.debug_tuple("Shifting").field(next).finish(),
             Self::Reducing(symbol, n) => f.debug_tuple("Reducing").field(symbol).field(n).finish(),
             Self::Accepting => f.debug_struct("Accepting").finish(),
-            Self::HandlingError { expected } => f
-                .debug_struct("HandlingError")
-                .field("expected", expected)
-                .finish(),
+            Self::HandlingError => f.debug_struct("HandlingError").finish(),
             Self::Accepted => f.debug_struct("Accepted").finish(),
         }
     }
@@ -97,28 +94,8 @@ where
         }
     }
 
-    pub fn offer_token(&mut self, token: TTok) -> Option<TTok> {
-        match self.lookahead {
-            Some(..) => Some(token),
-            None => {
-                self.lookahead.replace(Some(token));
-                None
-            }
-        }
-    }
-
-    pub fn offer_eoi(&mut self) -> bool {
-        match self.lookahead {
-            Some(..) => false,
-            None => {
-                self.lookahead.replace(None);
-                true
-            }
-        }
-    }
-
     /// Consume some tokens and drive the state machine until it matches a certain production rule.
-    pub fn resume(&mut self) -> Result<ParseEvent<'_, TDef, TTok>, ParseError<TDef::Token>> {
+    pub fn resume(&mut self) -> Result<ParseEvent<'_, TDef, TTok>, ParseError> {
         match self.state {
             ParserState::Shifting(next) => {
                 let lookahead = self.lookahead.take().unwrap();
@@ -144,17 +121,8 @@ where
                 return Ok(ParseEvent::Accepted);
             }
 
-            ParserState::HandlingError { ref expected } => {
-                let lookahead = self
-                    .lookahead
-                    .as_ref()
-                    .unwrap()
-                    .as_ref()
-                    .map(|t| t.as_symbol());
-                return Err(ParseError::Syntax {
-                    expected: expected.clone(),
-                    lookahead,
-                });
+            ParserState::HandlingError => {
+                return Ok(ParseEvent::Rejected);
             }
 
             ParserState::Accepted => {
@@ -167,7 +135,11 @@ where
         let current = self.state_stack.last().copied().unwrap();
         let lookahead = match self.lookahead {
             Some(ref lookahead) => lookahead.as_ref().map(|t| t.as_symbol()),
-            None => return Ok(ParseEvent::InputNeeded),
+            None => {
+                return Ok(ParseEvent::InputNeeded(SinkInput {
+                    lookahead: &mut self.lookahead,
+                }))
+            }
         };
         let action = self
             .definition
@@ -199,17 +171,93 @@ where
             }
 
             ParseAction::Fail { expected } => {
-                self.state = ParserState::HandlingError { expected };
+                self.state = ParserState::HandlingError;
                 let lr_state = self.state_stack.last().unwrap();
                 let lookahead = self.lookahead.as_ref().unwrap().as_ref();
                 return Ok(ParseEvent::HandlingError {
                     lr_state,
                     lookahead,
+                    expected,
                 });
             }
         }
     }
 }
+
+#[derive(Debug)]
+pub enum ParseEvent<'p, TDef, TTok>
+where
+    TDef: ParserDef,
+    TTok: Token<TDef::Token>,
+{
+    InputNeeded(SinkInput<'p, TTok>),
+    Shifting(Option<&'p TTok>),
+    AboutToReduce(TDef::Reduce, &'p [ParseItem<TTok, TDef::Symbol>]),
+    AboutToAccept(&'p ParseItem<TTok, TDef::Symbol>),
+    HandlingError {
+        lr_state: &'p TDef::State,
+        lookahead: Option<&'p TTok>,
+        expected: Vec<TDef::Token>,
+    },
+    Accepted,
+    Rejected,
+}
+
+#[derive(Debug)]
+pub struct SinkInput<'p, TTok> {
+    lookahead: &'p mut Option<Option<TTok>>,
+}
+impl<'p, TTok> SinkInput<'p, TTok> {
+    pub fn offer_token(self, token: TTok) -> Option<TTok> {
+        match self.lookahead {
+            Some(..) => Some(token),
+            None => {
+                self.lookahead.replace(Some(token));
+                None
+            }
+        }
+    }
+
+    pub fn offer_eoi(self) -> bool {
+        match self.lookahead {
+            Some(..) => false,
+            None => {
+                self.lookahead.replace(None);
+                true
+            }
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+#[non_exhaustive]
+pub enum ParseItem<TTok, TSym> {
+    T(Option<TTok>),
+    N(TSym),
+
+    #[doc(hidden)]
+    __Empty,
+}
+
+impl<TTok, TSym> Default for ParseItem<TTok, TSym> {
+    fn default() -> Self {
+        Self::__Empty
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseError {
+    #[error("from parser definition: {}", _0)]
+    ParserDef(String),
+
+    #[error("unexpected EOI")]
+    UnexpectedEOI,
+
+    #[error("already accepted")]
+    AlreadyAccepted,
+}
+
+// ---- ParseAction ----
 
 enum ParseAction<TState, TToken, TSymbol, TReduce> {
     Shift(TState),
@@ -253,55 +301,4 @@ impl<TState: Copy, TToken: Copy, TSymbol: Copy, TReduce> crate::definition::Pars
             expected: expected_tokens.into_iter().collect(),
         })
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-#[non_exhaustive]
-pub enum ParseItem<TTok, TSym> {
-    T(Option<TTok>),
-    N(TSym),
-
-    #[doc(hidden)]
-    __Empty,
-}
-
-impl<TTok, TSym> Default for ParseItem<TTok, TSym> {
-    fn default() -> Self {
-        Self::__Empty
-    }
-}
-
-#[derive(Debug)]
-pub enum ParseEvent<'p, TDef, TTok>
-where
-    TDef: ParserDef,
-    TTok: Token<TDef::Token>,
-{
-    InputNeeded,
-    Shifting(Option<&'p TTok>),
-    AboutToReduce(TDef::Reduce, &'p [ParseItem<TTok, TDef::Symbol>]),
-    AboutToAccept(&'p ParseItem<TTok, TDef::Symbol>),
-    HandlingError {
-        lr_state: &'p TDef::State,
-        lookahead: Option<&'p TTok>,
-    },
-    Accepted,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum ParseError<TToken> {
-    #[error("from parser definition: {}", _0)]
-    ParserDef(String),
-
-    #[error("syntax error")]
-    Syntax {
-        expected: Vec<TToken>,
-        lookahead: Option<TToken>,
-    },
-
-    #[error("unexpected EOI")]
-    UnexpectedEOI,
-
-    #[error("already accepted")]
-    AlreadyAccepted,
 }

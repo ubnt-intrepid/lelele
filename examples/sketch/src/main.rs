@@ -27,15 +27,15 @@ fn main() -> anyhow::Result<()> {
             e
         })?;
         match event {
-            ParseEvent::InputNeeded => match tokens.next() {
+            ParseEvent::InputNeeded(sink) => match tokens.next() {
                 Some(tok) => {
                     let tok = tok?;
                     tracing::trace!("offer token {:?}", tok);
-                    parser.offer_token(tok);
+                    sink.offer_token(tok);
                 }
                 None => {
                     tracing::trace!("offer end of input");
-                    parser.offer_eoi();
+                    sink.offer_eoi();
                 }
             },
 
@@ -126,11 +126,13 @@ fn main() -> anyhow::Result<()> {
             ParseEvent::HandlingError {
                 lr_state,
                 lookahead,
+                expected,
             } => {
                 tracing::trace!(
-                    "handling error: lr_state={:?}, lookahead={:?}",
+                    "handling error: lr_state={:?}, lookahead={:?}, expected={:?}",
                     lr_state,
-                    lookahead
+                    lookahead,
+                    expected,
                 );
 
                 continue;
@@ -140,6 +142,11 @@ fn main() -> anyhow::Result<()> {
                 tracing::trace!("accepted");
                 let parsed = ast_stack.pop().context("unexpected stack item")?;
                 break parsed;
+            }
+
+            ParseEvent::Rejected => {
+                tracing::trace!("rejected");
+                anyhow::bail!("rejected");
             }
         }
     };

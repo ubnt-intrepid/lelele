@@ -13,13 +13,21 @@ macro_rules! assert_matches {
 fn case1() {
     let mut parser = p::parser::<p::TokenID>();
 
-    assert_matches!(parser.resume(), Ok(InputNeeded));
-    parser.offer_token(p::TokenID::NUM);
+    match parser.resume() {
+        Ok(InputNeeded(sink)) => {
+            sink.offer_token(p::TokenID::NUM);
+        }
+        _ => panic!("mismatched"),
+    }
 
     assert_matches!(parser.resume(), Ok(Shifting(Some(&p::TokenID::NUM))));
 
-    assert_matches!(parser.resume(), Ok(InputNeeded));
-    parser.offer_token(p::TokenID::EQUAL);
+    match parser.resume() {
+        Ok(InputNeeded(sink)) => {
+            sink.offer_token(p::TokenID::EQUAL);
+        }
+        _ => panic!("mismatched"),
+    }
 
     assert_matches!(
         parser.resume(),
@@ -33,13 +41,21 @@ fn case1() {
 
     assert_matches!(parser.resume(), Ok(Shifting(Some(&p::TokenID::EQUAL))));
 
-    assert_matches!(parser.resume(), Ok(InputNeeded));
-    parser.offer_token(p::TokenID::NUM);
+    match parser.resume() {
+        Ok(InputNeeded(sink)) => {
+            sink.offer_token(p::TokenID::NUM);
+        }
+        _ => panic!("mismatched"),
+    }
 
     assert_matches!(parser.resume(), Ok(Shifting(Some(&p::TokenID::NUM))));
 
-    assert_matches!(parser.resume(), Ok(InputNeeded));
-    parser.offer_eoi();
+    match parser.resume() {
+        Ok(InputNeeded(sink)) => {
+            sink.offer_eoi();
+        }
+        _ => panic!("mismatched"),
+    }
 
     assert_matches!(
         parser.resume(),
