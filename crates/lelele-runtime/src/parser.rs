@@ -1,7 +1,7 @@
 //! Parser.
 
 use crate::definition::ParserDef;
-use std::marker::PhantomData;
+use std::{fmt, marker::PhantomData};
 
 /// A trait for abstracting token symbols.
 pub trait Token<TTok> {
@@ -15,7 +15,6 @@ impl<TTok: Copy> Token<TTok> for TTok {
 }
 
 /// The parser driven based on the generated parse table.
-#[derive(Debug)]
 pub struct Parser<TDef, TTok>
 where
     TDef: ParserDef,
@@ -27,8 +26,26 @@ where
     item_stack: Vec<ParseItem<TTok, TDef::Symbol>>,
     lookahead: Option<Option<TTok>>,
 }
+impl<TDef, TTok> fmt::Debug for Parser<TDef, TTok>
+where
+    TDef: ParserDef + fmt::Debug,
+    TDef::State: fmt::Debug,
+    TDef::Token: fmt::Debug,
+    TDef::Symbol: fmt::Debug,
+    TDef::Reduce: fmt::Debug,
+    TTok: Token<TDef::Token> + fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Parser")
+            .field("definition", &self.definition)
+            .field("state", &self.state)
+            .field("state_stack", &self.state_stack)
+            .field("item_stack", &self.item_stack)
+            .field("lookahead", &self.lookahead)
+            .finish_non_exhaustive()
+    }
+}
 
-#[derive(Debug)]
 enum ParserState<TDef>
 where
     TDef: ParserDef,
@@ -37,7 +54,30 @@ where
     Shifting(TDef::State),
     Reducing(TDef::Symbol, usize),
     Accepting,
+    HandlingError { expected: Vec<TDef::Token> },
     Accepted,
+}
+impl<TDef> fmt::Debug for ParserState<TDef>
+where
+    TDef: ParserDef,
+    TDef::State: fmt::Debug,
+    TDef::Token: fmt::Debug,
+    TDef::Symbol: fmt::Debug,
+    TDef::Reduce: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Pending => f.debug_struct("Pending").finish(),
+            Self::Shifting(next) => f.debug_tuple("Shifting").field(next).finish(),
+            Self::Reducing(symbol, n) => f.debug_tuple("Reducing").field(symbol).field(n).finish(),
+            Self::Accepting => f.debug_struct("Accepting").finish(),
+            Self::HandlingError { expected } => f
+                .debug_struct("HandlingError")
+                .field("expected", expected)
+                .finish(),
+            Self::Accepted => f.debug_struct("Accepted").finish(),
+        }
+    }
 }
 
 impl<TDef, TTok> Parser<TDef, TTok>
@@ -104,6 +144,19 @@ where
                 return Ok(ParseEvent::Accepted);
             }
 
+            ParserState::HandlingError { ref expected } => {
+                let lookahead = self
+                    .lookahead
+                    .as_ref()
+                    .unwrap()
+                    .as_ref()
+                    .map(|t| t.as_symbol());
+                return Err(ParseError::Syntax {
+                    expected: expected.clone(),
+                    lookahead,
+                });
+            }
+
             ParserState::Accepted => {
                 return Err(ParseError::AlreadyAccepted);
             }
@@ -146,9 +199,11 @@ where
             }
 
             ParseAction::Fail { expected } => {
-                // FIXME: handle parse table errors
-                return Err(ParseError::Syntax {
-                    expected,
+                self.state = ParserState::HandlingError { expected };
+                let lr_state = self.state_stack.last().unwrap();
+                let lookahead = self.lookahead.as_ref().unwrap().as_ref();
+                return Ok(ParseEvent::HandlingError {
+                    lr_state,
                     lookahead,
                 });
             }
@@ -226,6 +281,10 @@ where
     Shifting(Option<&'p TTok>),
     AboutToReduce(TDef::Reduce, &'p [ParseItem<TTok, TDef::Symbol>]),
     AboutToAccept(&'p ParseItem<TTok, TDef::Symbol>),
+    HandlingError {
+        lr_state: &'p TDef::State,
+        lookahead: Option<&'p TTok>,
+    },
     Accepted,
 }
 

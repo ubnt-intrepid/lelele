@@ -123,6 +123,19 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
+            ParseEvent::HandlingError {
+                lr_state,
+                lookahead,
+            } => {
+                tracing::trace!(
+                    "handling error: lr_state={:?}, lookahead={:?}",
+                    lr_state,
+                    lookahead
+                );
+
+                continue;
+            }
+
             ParseEvent::Accepted => {
                 tracing::trace!("accepted");
                 let parsed = ast_stack.pop().context("unexpected stack item")?;
