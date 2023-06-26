@@ -1,7 +1,7 @@
 //! Parser.
 
 use crate::definition::ParserDef;
-use std::{marker::PhantomData, mem};
+use std::marker::PhantomData;
 
 /// A trait for abstracting token symbols.
 pub trait Token<TTok> {
@@ -22,23 +22,22 @@ where
     TTok: Token<TDef::Token>,
 {
     definition: TDef,
+    state: ParserState<TDef>,
     state_stack: Vec<TDef::State>,
-    item_stack: Vec<StackItem<TTok, TDef::Symbol>>,
-    parser_state: ParserState<TDef::Symbol>,
+    item_stack: Vec<ParseItem<TTok, TDef::Symbol>>,
     lookahead: Option<Option<TTok>>,
 }
 
 #[derive(Debug)]
-enum ParserState<TSymbol> {
-    Reading,
-    PendingGoto(TSymbol),
+enum ParserState<TDef>
+where
+    TDef: ParserDef,
+{
+    Pending,
+    Shifting(TDef::State),
+    Reducing(TDef::Symbol, usize),
+    Accepting,
     Accepted,
-}
-
-#[derive(Debug)]
-enum StackItem<TTok, TSymbol> {
-    T(Option<TTok>),
-    N(TSymbol),
 }
 
 impl<TDef, TTok> Parser<TDef, TTok>
@@ -53,7 +52,7 @@ where
             definition,
             state_stack: vec![initial_state],
             item_stack: vec![],
-            parser_state: ParserState::Reading,
+            state: ParserState::Pending,
             lookahead: None,
         }
     }
@@ -78,87 +77,79 @@ where
         }
     }
 
-    /// Consume some tokens and drive the state machine
-    /// until it matches a certain production rule.
-    pub fn next_event(
-        &mut self,
-        args: &mut Vec<ParseItem<TTok, TDef::Symbol>>,
-    ) -> Result<ParseEvent<TDef>, ParseError<TDef::Token>> {
-        match self.parser_state {
-            ParserState::PendingGoto(symbol) => {
-                let current = self.state_stack.last().copied().unwrap();
-                let next = self.definition.goto(current, symbol);
+    /// Consume some tokens and drive the state machine until it matches a certain production rule.
+    pub fn next_event(&mut self) -> Result<ParseEvent<'_, TDef, TTok>, ParseError<TDef::Token>> {
+        match self.state {
+            ParserState::Shifting(next) => {
+                let lookahead = self.lookahead.take().unwrap();
+                self.item_stack.push(ParseItem::T(lookahead));
                 self.state_stack.push(next);
-                self.item_stack.push(StackItem::N(symbol));
-                self.parser_state = ParserState::Reading;
+                self.state = ParserState::Pending;
             }
+
+            ParserState::Reducing(lhs, n) => {
+                self.state_stack.truncate(self.state_stack.len() - n);
+                self.item_stack.truncate(self.item_stack.len() - n);
+
+                let current = self.state_stack.last().copied().unwrap();
+                let next = self.definition.goto(current, lhs);
+                self.state_stack.push(next);
+                self.item_stack.push(ParseItem::N(lhs));
+                self.state = ParserState::Pending;
+            }
+
+            ParserState::Accepting => {
+                self.item_stack.pop().unwrap();
+                self.state = ParserState::Accepted;
+                return Ok(ParseEvent::Accepted);
+            }
+
             ParserState::Accepted => {
                 return Err(ParseError::AlreadyAccepted);
             }
-            _ => (),
+
+            ParserState::Pending => {}
         }
 
-        loop {
-            let current = self.state_stack.last().copied().unwrap();
-            let lookahead = match self.lookahead {
-                Some(ref lookahead) => lookahead.as_ref().map(|t| t.as_symbol()),
-                None => return Ok(ParseEvent::InputNeeded),
-            };
-            let action = self
-                .definition
-                .action(
-                    current,
+        let current = self.state_stack.last().copied().unwrap();
+        let lookahead = match self.lookahead {
+            Some(ref lookahead) => lookahead.as_ref().map(|t| t.as_symbol()),
+            None => return Ok(ParseEvent::InputNeeded),
+        };
+        let action = self
+            .definition
+            .action(
+                current,
+                lookahead,
+                ParseContext {
+                    _marker: PhantomData,
+                },
+            )
+            .unwrap();
+
+        match action {
+            ParseAction::Shift(next) => {
+                self.state = ParserState::Shifting(next);
+                return Ok(ParseEvent::Shifting);
+            }
+
+            ParseAction::Reduce(reduce, lhs, n) => {
+                self.state = ParserState::Reducing(lhs, n);
+                let args = &self.item_stack[self.item_stack.len() - n..];
+                return Ok(ParseEvent::AboutToReduce(reduce, args));
+            }
+
+            ParseAction::Accept => {
+                self.state = ParserState::Accepting;
+                return Ok(ParseEvent::AboutToAccept(self.item_stack.last().unwrap()));
+            }
+
+            ParseAction::Fail { expected } => {
+                // FIXME: handle parse table errors
+                return Err(ParseError::Syntax {
+                    expected,
                     lookahead,
-                    ParseContext {
-                        _marker: PhantomData,
-                    },
-                )
-                .unwrap();
-
-            match action {
-                ParseAction::Shift(next) => {
-                    let lookahead = self.lookahead.take().unwrap();
-                    self.item_stack.push(StackItem::T(lookahead));
-                    self.state_stack.push(next);
-                    self.parser_state = ParserState::Reading;
-                    continue;
-                }
-
-                ParseAction::Reduce(reduce, lhs, n) => {
-                    args.resize_with(n, Default::default);
-                    for i in 0..n {
-                        self.state_stack.pop();
-                        let item = self.item_stack.pop().unwrap();
-                        args[n - i - 1] = match item {
-                            StackItem::N(symbol) => ParseItem::N(symbol),
-                            StackItem::T(Some(tok)) => ParseItem::T(tok),
-                            StackItem::T(None) => unreachable!(),
-                        };
-                    }
-                    self.parser_state = ParserState::PendingGoto(lhs);
-
-                    return Ok(ParseEvent::AboutToReduce(reduce));
-                }
-
-                ParseAction::Accept => {
-                    args.clear();
-                    let item = self.item_stack.pop().unwrap();
-                    args.push(match item {
-                        StackItem::N(symbol) => ParseItem::N(symbol),
-                        StackItem::T(..) => unreachable!(),
-                    });
-
-                    self.parser_state = ParserState::Accepted;
-                    return Ok(ParseEvent::Accepted);
-                }
-
-                ParseAction::Fail { expected } => {
-                    // FIXME: handle parse table errors
-                    return Err(ParseError::Syntax {
-                        expected,
-                        lookahead,
-                    });
-                }
+                });
             }
         }
     }
@@ -208,10 +199,10 @@ impl<TState: Copy, TToken: Copy, TSymbol: Copy, TReduce> crate::definition::Pars
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 #[non_exhaustive]
 pub enum ParseItem<TTok, TSym> {
-    T(TTok),
+    T(Option<TTok>),
     N(TSym),
 
     #[doc(hidden)]
@@ -224,22 +215,16 @@ impl<TTok, TSym> Default for ParseItem<TTok, TSym> {
     }
 }
 
-impl<TTok, TSym> ParseItem<TTok, TSym> {
-    pub fn take(&mut self) -> Option<Self> {
-        match mem::replace(self, Self::__Empty) {
-            Self::__Empty => None,
-            me => Some(me),
-        }
-    }
-}
-
 #[derive(Debug)]
-pub enum ParseEvent<TDef>
+pub enum ParseEvent<'p, TDef, TTok>
 where
     TDef: ParserDef,
+    TTok: Token<TDef::Token>,
 {
     InputNeeded,
-    AboutToReduce(TDef::Reduce),
+    Shifting,
+    AboutToReduce(TDef::Reduce, &'p [ParseItem<TTok, TDef::Symbol>]),
+    AboutToAccept(&'p ParseItem<TTok, TDef::Symbol>),
     Accepted,
 }
 

@@ -12,50 +12,58 @@ macro_rules! assert_matches {
 #[test]
 fn case1() {
     let mut parser = p::parser::<p::TokenID>();
-    let mut args = vec![];
 
-    assert_matches!(parser.next_event(&mut args), Ok(InputNeeded));
+    assert_matches!(parser.next_event(), Ok(InputNeeded));
     parser.offer_token(p::TokenID::NUM);
 
-    assert_matches!(parser.next_event(&mut args), Ok(InputNeeded));
+    assert_matches!(parser.next_event(), Ok(Shifting));
+
+    assert_matches!(parser.next_event(), Ok(InputNeeded));
     parser.offer_token(p::TokenID::EQUAL);
 
     assert_matches!(
-        (parser.next_event(&mut args), &args[..]),
-        (Ok(AboutToReduce(p::RuleID::T0)), [T(p::TokenID::NUM)])
+        parser.next_event(),
+        Ok(AboutToReduce(p::RuleID::T0, [T(Some(p::TokenID::NUM))]))
     );
 
     assert_matches!(
-        (parser.next_event(&mut args), &args[..]),
-        (Ok(AboutToReduce(p::RuleID::E1)), [N(p::SymbolID::T)])
+        parser.next_event(),
+        Ok(AboutToReduce(p::RuleID::E1, [N(p::SymbolID::T)]))
     );
 
-    assert_matches!(parser.next_event(&mut args), Ok(InputNeeded));
+    assert_matches!(parser.next_event(), Ok(Shifting));
+
+    assert_matches!(parser.next_event(), Ok(InputNeeded));
     parser.offer_token(p::TokenID::NUM);
 
-    assert_matches!(parser.next_event(&mut args), Ok(InputNeeded));
+    assert_matches!(parser.next_event(), Ok(Shifting));
+
+    assert_matches!(parser.next_event(), Ok(InputNeeded));
     parser.offer_eoi();
 
     assert_matches!(
-        (parser.next_event(&mut args), &args[..]),
-        (Ok(AboutToReduce(p::RuleID::T0)), [T(p::TokenID::NUM)])
+        parser.next_event(),
+        Ok(AboutToReduce(p::RuleID::T0, [T(Some(p::TokenID::NUM))]))
     );
 
     assert_matches!(
-        (parser.next_event(&mut args), &args[..]),
-        (Ok(AboutToReduce(p::RuleID::E1)), [N(p::SymbolID::T)])
+        parser.next_event(),
+        Ok(AboutToReduce(p::RuleID::E1, [N(p::SymbolID::T)]))
     );
 
     assert_matches!(
-        (parser.next_event(&mut args), &args[..]),
-        (
-            Ok(AboutToReduce(p::RuleID::A0)),
-            [N(p::SymbolID::E), T(p::TokenID::EQUAL), N(p::SymbolID::E)]
-        )
+        parser.next_event(),
+        Ok(AboutToReduce(
+            p::RuleID::A0,
+            [
+                N(p::SymbolID::E),
+                T(Some(p::TokenID::EQUAL)),
+                N(p::SymbolID::E)
+            ]
+        ))
     );
 
-    assert_matches!(
-        (parser.next_event(&mut args), &args[..]),
-        (Ok(Accepted), [N(p::SymbolID::A)])
-    );
+    assert_matches!(parser.next_event(), Ok(AboutToAccept(N(p::SymbolID::A))));
+
+    assert_matches!(parser.next_event(), Ok(Accepted));
 }

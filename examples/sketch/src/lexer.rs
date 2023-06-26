@@ -2,7 +2,7 @@ use crate::parser::TokenID;
 use logos::Logos;
 
 // 入力のトークン列
-#[derive(Debug, Logos, PartialEq)]
+#[derive(Debug, Copy, Clone, Logos, PartialEq)]
 #[logos(skip r"[ \t\n\f]+")]
 pub enum Token<'source> {
     #[token("(")]
