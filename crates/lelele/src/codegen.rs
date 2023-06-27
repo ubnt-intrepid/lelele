@@ -127,60 +127,13 @@ pub const {export_name}: Self = Self {{ __raw: {id} }};",
         Ok(())
     }
 
-    fn fmt_rule_id_def(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(
-            "\
-/// The type to identify the syntax rule that matched input sequence.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[repr(transparent)]
-pub struct RuleID { __raw: u64 }
-impl RuleID {\n",
-        )?;
-
-        'rules: for rule in self.grammar.rules() {
-            let export_name = match rule.export_name() {
-                Some(name) => name,
-                None => continue 'rules,
-            };
-
-            let comment_lhs = match rule.left().export_name() {
-                Some(name) => name,
-                None => continue 'rules,
-            };
-
-            let mut comment_rhs = String::new();
-            for (i, s) in rule.right().iter().enumerate() {
-                let name = match s.export_name() {
-                    Some(name) => name,
-                    None => continue 'rules,
-                };
-                if i > 0 {
-                    comment_rhs += " ";
-                }
-                comment_rhs += name;
-            }
-
-            writeln!(f, "    /// `{} : {}`", comment_lhs, comment_rhs)?;
-            writeln!(
-                f,
-                "    pub const {export_name}: Self = Self {{ __raw: {id} }};",
-                export_name = export_name,
-                id = rule.id().raw()
-            )?;
-        }
-
-        f.write_str("}\n")?;
-
-        Ok(())
-    }
-
     fn fmt_parser_def(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(
             "\
 #[allow(dead_code)]
 enum ParseAction {
     Shift(NodeID),
-    Reduce(RuleID, SymbolID, usize),
+    Reduce(SymbolID, usize),
     Accept,
     Fail,
 }
@@ -193,7 +146,6 @@ impl lelele::ParserDef for ParserDef {
     type State = NodeID;
     type Token = TokenID;
     type Symbol = SymbolID;
-    type Reduce = RuleID;
     #[inline]
     fn initial_state(&self) -> Self::State {
         NodeID::__START
@@ -210,14 +162,13 @@ impl lelele::ParserDef for ParserDef {
             State = Self::State,
             Token = Self::Token,
             Symbol = Self::Symbol,
-            Reduce = Self::Reduce,
         >,
     {
         let lookahead = lookahead.unwrap_or(TokenID::__EOI).__raw;
         let actions = &PARSE_TABLE[current.__raw];
         match actions.get(&lookahead) {
             Some(ParseAction::Shift(n)) => action.shift(*n),
-            Some(ParseAction::Reduce(r, s, i)) => action.reduce(*r, *s, *i),
+            Some(ParseAction::Reduce(s, i)) => action.reduce(*s, *i),
             Some(ParseAction::Accept) => action.accept(),
             _ => action.fail(actions.keys().map(|key| TokenID { __raw: *key })),
         }
@@ -241,8 +192,7 @@ const PARSE_TABLE: &[ lelele::phf::Map<u64, ParseAction> ] = &[\n",
                     }
                     Action::Reduce(rule) => {
                         format!(
-                            "ParseAction::Reduce(RuleID {{ __raw: {} }}, SymbolID {{ __raw: {} }}, {})",
-                            rule.id().raw(),
+                            "ParseAction::Reduce(SymbolID {{ __raw: {} }}, {})",
                             rule.left().id().raw(),
                             rule.right().len(),
                         )
@@ -288,7 +238,6 @@ impl<'g> fmt::Display for Codegen<'g> {
         self.fmt_node_id_def(f)?;
         self.fmt_token_id_def(f)?;
         self.fmt_symbol_id_def(f)?;
-        self.fmt_rule_id_def(f)?;
         self.fmt_parser_def(f)?;
         Ok(())
     }

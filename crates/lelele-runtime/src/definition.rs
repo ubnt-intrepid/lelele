@@ -8,7 +8,6 @@ pub trait ParserDef {
     type State: Copy;
     type Token: Copy;
     type Symbol: Copy;
-    type Reduce;
 
     /// Return the initial state number.
     fn initial_state(&self) -> Self::State;
@@ -22,12 +21,7 @@ pub trait ParserDef {
         action: TAction,
     ) -> Result<TAction::Ok, TAction::Error>
     where
-        TAction: ParseAction<
-            State = Self::State,
-            Token = Self::Token,
-            Symbol = Self::Symbol,
-            Reduce = Self::Reduce,
-        >;
+        TAction: ParseAction<State = Self::State, Token = Self::Token, Symbol = Self::Symbol>;
 
     fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Self::State;
 }
@@ -36,7 +30,6 @@ pub trait ParseAction {
     type State: Copy;
     type Token: Copy;
     type Symbol: Copy;
-    type Reduce;
 
     type Ok;
     type Error;
@@ -45,7 +38,7 @@ pub trait ParseAction {
     fn shift(self, next: Self::State) -> Result<Self::Ok, Self::Error>;
 
     ///
-    fn reduce(self, r: Self::Reduce, s: Self::Symbol, n: usize) -> Result<Self::Ok, Self::Error>;
+    fn reduce(self, s: Self::Symbol, n: usize) -> Result<Self::Ok, Self::Error>;
 
     ///
     fn accept(self) -> Result<Self::Ok, Self::Error>;
@@ -63,7 +56,6 @@ where
     type State = T::State;
     type Token = T::Token;
     type Symbol = T::Symbol;
-    type Reduce = T::Reduce;
 
     fn initial_state(&self) -> Self::State {
         (**self).initial_state()
@@ -77,12 +69,7 @@ where
         cx: TCtx,
     ) -> Result<TCtx::Ok, TCtx::Error>
     where
-        TCtx: ParseAction<
-            State = Self::State,
-            Token = Self::Token,
-            Symbol = Self::Symbol,
-            Reduce = Self::Reduce,
-        >,
+        TCtx: ParseAction<State = Self::State, Token = Self::Token, Symbol = Self::Symbol>,
     {
         (**self).action(current, lookahead, cx)
     }
@@ -100,7 +87,6 @@ where
     type State = T::State;
     type Token = T::Token;
     type Symbol = T::Symbol;
-    type Reduce = T::Reduce;
 
     fn initial_state(&self) -> Self::State {
         (**self).initial_state()
@@ -114,12 +100,7 @@ where
         cx: TCtx,
     ) -> Result<TCtx::Ok, TCtx::Error>
     where
-        TCtx: ParseAction<
-            State = Self::State,
-            Token = Self::Token,
-            Symbol = Self::Symbol,
-            Reduce = Self::Reduce,
-        >,
+        TCtx: ParseAction<State = Self::State, Token = Self::Token, Symbol = Self::Symbol>,
     {
         (**self).action(current, lookahead, cx)
     }
@@ -137,7 +118,6 @@ where
     type State = T::State;
     type Token = T::Token;
     type Symbol = T::Symbol;
-    type Reduce = T::Reduce;
 
     fn initial_state(&self) -> Self::State {
         (**self).initial_state()
@@ -151,12 +131,7 @@ where
         cx: TCtx,
     ) -> Result<TCtx::Ok, TCtx::Error>
     where
-        TCtx: ParseAction<
-            State = Self::State,
-            Token = Self::Token,
-            Symbol = Self::Symbol,
-            Reduce = Self::Reduce,
-        >,
+        TCtx: ParseAction<State = Self::State, Token = Self::Token, Symbol = Self::Symbol>,
     {
         (**self).action(current, lookahead, cx)
     }

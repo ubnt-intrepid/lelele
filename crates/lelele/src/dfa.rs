@@ -109,11 +109,7 @@ impl fmt::Display for DFA {
                         writeln!(f, "    - shift({:02})", n)?;
                     }
                     Action::Reduce(reduce) => {
-                        writeln!(
-                            f,
-                            "    - reduce({})",
-                            reduce.export_name().unwrap_or("<unnamed>")
-                        )?;
+                        writeln!(f, "    - reduce({})", reduce.id())?;
                     }
                     Action::Accept => {
                         writeln!(f, "    - accept")?;
@@ -822,12 +818,12 @@ mod tests {
 
             def.start_symbol(a)?;
 
-            def.rule(a, [e, equal, e], "A1", None)?;
-            def.rule(a, [ident], "A2", None)?;
-            def.rule(e, [e, plus, t], "E1", None)?;
-            def.rule(e, [t], "E2", None)?;
-            def.rule(t, [num], "T1", None)?;
-            def.rule(t, [ident], "T2", None)?;
+            def.rule(a, [e, equal, e], None)?;
+            def.rule(a, [ident], None)?;
+            def.rule(e, [e, plus, t], None)?;
+            def.rule(e, [t], None)?;
+            def.rule(t, [num], None)?;
+            def.rule(t, [ident], None)?;
 
             Ok(())
         })
@@ -858,16 +854,16 @@ mod tests {
             let _ = g.nonterminal("UNUSED_1")?;
 
             // declare syntax rules.
-            g.rule(expr, [expr, plus, factor], "EXPR1", None)?;
-            g.rule(expr, [expr, minus, factor], "EXPR2", None)?;
-            g.rule(expr, [factor], "EXPR3", None)?;
+            g.rule(expr, [expr, plus, factor], None)?;
+            g.rule(expr, [expr, minus, factor], None)?;
+            g.rule(expr, [factor], None)?;
 
-            g.rule(factor, [factor, star, term], "FACTOR1", None)?;
-            g.rule(factor, [factor, slash, term], "FACTOR2", None)?;
-            g.rule(factor, [term], "FACTOR3", None)?;
+            g.rule(factor, [factor, star, term], None)?;
+            g.rule(factor, [factor, slash, term], None)?;
+            g.rule(factor, [term], None)?;
 
-            g.rule(term, [num], "TERM1", None)?;
-            g.rule(term, [lparen, expr, rparen], "TERM2", None)?;
+            g.rule(term, [num], None)?;
+            g.rule(term, [lparen, expr, rparen], None)?;
 
             g.start_symbol(expr)?;
 

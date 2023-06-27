@@ -54,13 +54,13 @@ fn grammar_def(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {
     g.start_symbol(expr)?;
 
     // declare production rules.
-    g.rule(expr, [expr, plus, expr], "EXPR_ADD", None)?;
-    g.rule(expr, [expr, minus, expr], "EXPR_SUB", None)?;
-    g.rule(expr, [expr, star, expr], "EXPR_MUL", None)?;
-    g.rule(expr, [expr, slash, expr], "EXPR_DIV", None)?;
-    g.rule(expr, [num], "EXPR_NUM", None)?;
-    g.rule(expr, [lparen, expr, rparen], "EXPR_PAREN", None)?;
-    g.rule(expr, [minus, expr], "EXPR_NEG", Some(prec_neg))?;
+    g.rule(expr, [expr, plus, expr], None)?;
+    g.rule(expr, [expr, minus, expr], None)?;
+    g.rule(expr, [expr, star, expr], None)?;
+    g.rule(expr, [expr, slash, expr], None)?;
+    g.rule(expr, [num], None)?;
+    g.rule(expr, [lparen, expr, rparen], None)?;
+    g.rule(expr, [minus, expr], Some(prec_neg))?;
 
     Ok(())
 }

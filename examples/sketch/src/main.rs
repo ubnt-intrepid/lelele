@@ -1,7 +1,7 @@
 use anyhow::Context;
 use lelele_example_sketch::{
     lexer::{lexer, Token},
-    parser::{parser, RuleID},
+    parser::{parser, SymbolID},
     syntax::Expr,
 };
 use lelele_runtime::parser::{ParseEvent, ParseItem};
@@ -40,75 +40,66 @@ fn main() -> anyhow::Result<()> {
             },
 
             ParseEvent::Shifting(lookahead) => {
-                tracing::trace!("shifting: lookahead = {:?}", lookahead);
+                tracing::trace!("shift: lookahead = {:?}", lookahead);
             }
 
-            ParseEvent::AboutToReduce(RuleID::EXPR_ADD, args) => {
-                tracing::trace!("about to reduce: expr ::= expr `+' expr");
-                match (ast_stack.pop(), args[1], ast_stack.pop()) {
-                    (Some(rhs), T(Some(op)), Some(lhs)) => {
-                        ast_stack.push(Box::new(Expr::Add { lhs, op, rhs }))
-                    }
+            ParseEvent::AboutToReduce(
+                SymbolID::EXPR,
+                [N(SymbolID::EXPR), T(Some(op)), N(SymbolID::EXPR)],
+            ) => {
+                let (lhs, rhs) = match (ast_stack.pop(), ast_stack.pop()) {
+                    (Some(rhs), Some(lhs)) => (lhs, rhs),
                     _ => anyhow::bail!("unexpected stack/parse item"),
-                }
-            }
-            ParseEvent::AboutToReduce(RuleID::EXPR_SUB, args) => {
-                tracing::trace!("about to reduce: expr ::= expr `-' expr");
-                match (ast_stack.pop(), args[1], ast_stack.pop()) {
-                    (Some(rhs), T(Some(op)), Some(lhs)) => {
-                        ast_stack.push(Box::new(Expr::Sub { lhs, op, rhs }))
+                };
+                let expr = match op {
+                    Token::Plus => {
+                        tracing::trace!("reduce: expr -> expr `+' expr");
+                        Expr::Add { lhs, op: *op, rhs }
                     }
-                    _ => anyhow::bail!("unexpected stack/parse item"),
-                }
-            }
-            ParseEvent::AboutToReduce(RuleID::EXPR_MUL, args) => {
-                tracing::trace!("about to reduce: expr ::= expr `*' expr");
-                match (ast_stack.pop(), args[1], ast_stack.pop()) {
-                    (Some(rhs), T(Some(op)), Some(lhs)) => {
-                        ast_stack.push(Box::new(Expr::Mul { lhs, op, rhs }))
+                    Token::Minus => {
+                        tracing::trace!("reduce: expr -> expr `-' expr");
+                        Expr::Sub { lhs, op: *op, rhs }
                     }
-                    _ => anyhow::bail!("unexpected stack/parse item"),
-                }
-            }
-            ParseEvent::AboutToReduce(RuleID::EXPR_DIV, args) => {
-                tracing::trace!("about to reduce: expr ::= expr `/' expr");
-                match (ast_stack.pop(), args[1], ast_stack.pop()) {
-                    (Some(rhs), T(Some(op)), Some(lhs)) => {
-                        ast_stack.push(Box::new(Expr::Div { lhs, op, rhs }))
+                    Token::Star => {
+                        tracing::trace!("reduce: expr -> expr `*' expr");
+                        Expr::Mul { lhs, op: *op, rhs }
                     }
-                    _ => anyhow::bail!("unexpected stack/parse item"),
-                }
-            }
-            ParseEvent::AboutToReduce(RuleID::EXPR_NUM, args) => {
-                tracing::trace!("about to reduce: expr ::= NUM");
-                match args[0] {
-                    T(Some(Token::Num(num))) => {
-                        ast_stack.push(Box::new(Expr::Num(num)));
+                    Token::Slash => {
+                        tracing::trace!("reduce: expr -> expr `/' expr");
+                        Expr::Div { lhs, op: *op, rhs }
                     }
-                    _ => anyhow::bail!("unexpected parse item"),
-                }
+                    _ => unreachable!(),
+                };
+                ast_stack.push(Box::new(expr));
             }
-            ParseEvent::AboutToReduce(RuleID::EXPR_PAREN, args) => {
-                tracing::trace!("about to reduce: expr ::= `(' expr `)'");
-                match (args[0], ast_stack.pop(), args[2]) {
-                    (T(Some(l_paren)), Some(expr), T(Some(r_paren))) => {
-                        ast_stack.push(Box::new(Expr::Paren {
-                            l_paren,
-                            expr,
-                            r_paren,
-                        }));
-                    }
-                    _ => anyhow::bail!("unexpected parse/stack item"),
-                }
+
+            ParseEvent::AboutToReduce(SymbolID::EXPR, [T(Some(Token::Num(num)))]) => {
+                tracing::trace!("reduce: expr -> NUM");
+                ast_stack.push(Box::new(Expr::Num(num)));
             }
-            ParseEvent::AboutToReduce(RuleID::EXPR_NEG, args) => {
-                tracing::trace!("about to reduce: expr ::= `-' expr");
-                match (args[0], ast_stack.pop()) {
-                    (T(Some(minus)), Some(expr)) => {
-                        ast_stack.push(Box::new(Expr::Neg { minus, expr }));
-                    }
-                    _ => anyhow::bail!("unexpected parse/stack item"),
-                }
+
+            ParseEvent::AboutToReduce(
+                SymbolID::EXPR,
+                [T(Some(l_paren @ Token::LParen)), N(SymbolID::EXPR), T(Some(r_paren @ Token::RParen))],
+            ) => {
+                tracing::trace!("reduce: expr -> `(' expr `)'");
+                let expr = ast_stack.pop().context("unexpected stack item")?;
+                ast_stack.push(Box::new(Expr::Paren {
+                    l_paren: *l_paren,
+                    expr,
+                    r_paren: *r_paren,
+                }));
+            }
+            ParseEvent::AboutToReduce(
+                SymbolID::EXPR,
+                [T(Some(minus @ Token::Minus)), N(SymbolID::EXPR)],
+            ) => {
+                tracing::trace!("reduce: expr -> `-' expr");
+                let expr = ast_stack.pop().context("unexpected stack item")?;
+                ast_stack.push(Box::new(Expr::Neg {
+                    minus: *minus,
+                    expr,
+                }));
             }
 
             ParseEvent::AboutToReduce(..) => unreachable!(),

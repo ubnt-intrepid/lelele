@@ -99,104 +99,62 @@ fn min_caml(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {
 
     g.start_symbol(exp)?;
 
-    g.rule(
-        simple_exp,
-        [l_paren, exp, r_paren],
-        "SIMPLE_EXP_PAREN",
-        None,
-    )?;
-    g.rule(simple_exp, [l_paren, r_paren], "SIMPLE_EXP_UNIT", None)?;
-    g.rule(simple_exp, [t_true], "SIMPLE_EXP_TRUE", None)?;
-    g.rule(simple_exp, [t_false], "SIMPLE_EXP_FALSE", None)?;
-    g.rule(simple_exp, [integer], "SIMPLE_EXP_INT", None)?;
-    g.rule(simple_exp, [float], "SIMPLE_EXP_FLOAT", None)?;
-    g.rule(simple_exp, [ident], "SIMPLE_EXP_IDENT", None)?;
-    g.rule(
-        simple_exp,
-        [simple_exp, dot, l_paren, exp, r_paren],
-        "SIMPLE_EXP_ARRAY_GET",
-        None,
-    )?;
+    g.rule(simple_exp, [l_paren, exp, r_paren], None)?;
+    g.rule(simple_exp, [l_paren, r_paren], None)?;
+    g.rule(simple_exp, [t_true], None)?;
+    g.rule(simple_exp, [t_false], None)?;
+    g.rule(simple_exp, [integer], None)?;
+    g.rule(simple_exp, [float], None)?;
+    g.rule(simple_exp, [ident], None)?;
+    g.rule(simple_exp, [simple_exp, dot, l_paren, exp, r_paren], None)?;
 
-    g.rule(exp, [simple_exp], "EXP_REDIRECT", None)?;
-    g.rule(exp, [t_not, exp], "EXP_NOT", Some(prec_app))?;
-    g.rule(exp, [minus, exp], "EXP_NEG", Some(prec_neg))?;
-    g.rule(exp, [minus_dot, exp], "EXP_NEG_DOT", Some(prec_neg))?;
-    g.rule(exp, [exp, plus, exp], "EXP_ADD", None)?;
-    g.rule(exp, [exp, minus, exp], "EXP_SUB", None)?;
-    g.rule(exp, [exp, plus_dot, exp], "EXP_FADD", None)?;
-    g.rule(exp, [exp, minus_dot, exp], "EXP_FSUB", None)?;
-    g.rule(exp, [exp, star_dot, exp], "EXP_FMUL", None)?;
-    g.rule(exp, [exp, slash_dot, exp], "EXP_FDIV", None)?;
-    g.rule(exp, [exp, equal, exp], "EXP_EQUAL", None)?;
-    g.rule(exp, [exp, less_greater, exp], "EXP_LESS_GREATER", None)?;
-    g.rule(exp, [exp, less, exp], "EXP_LESS", None)?;
-    g.rule(exp, [exp, greater, exp], "EXP_GREATER", None)?;
-    g.rule(exp, [exp, less_equal, exp], "EXP_LESS_EQ", None)?;
-    g.rule(exp, [exp, greater_equal, exp], "EXP_GREATER_EQ", None)?;
-    g.rule(
-        exp,
-        [t_if, exp, t_then, exp, t_else, exp],
-        "EXP_IF",
-        Some(prec_if),
-    )?;
-    g.rule(
-        exp,
-        [t_let, ident, equal, exp, t_in, exp],
-        "EXP_LET",
-        Some(prec_let),
-    )?;
-    g.rule(
-        exp,
-        [t_let, t_rec, fundef, t_in, exp],
-        "EXP_LET_REC",
-        Some(prec_let),
-    )?;
+    g.rule(exp, [simple_exp], None)?;
+    g.rule(exp, [t_not, exp], Some(prec_app))?;
+    g.rule(exp, [minus, exp], Some(prec_neg))?;
+    g.rule(exp, [minus_dot, exp], Some(prec_neg))?;
+    g.rule(exp, [exp, plus, exp], None)?;
+    g.rule(exp, [exp, minus, exp], None)?;
+    g.rule(exp, [exp, plus_dot, exp], None)?;
+    g.rule(exp, [exp, minus_dot, exp], None)?;
+    g.rule(exp, [exp, star_dot, exp], None)?;
+    g.rule(exp, [exp, slash_dot, exp], None)?;
+    g.rule(exp, [exp, equal, exp], None)?;
+    g.rule(exp, [exp, less_greater, exp], None)?;
+    g.rule(exp, [exp, less, exp], None)?;
+    g.rule(exp, [exp, greater, exp], None)?;
+    g.rule(exp, [exp, less_equal, exp], None)?;
+    g.rule(exp, [exp, greater_equal, exp], None)?;
+    g.rule(exp, [t_if, exp, t_then, exp, t_else, exp], Some(prec_if))?;
+    g.rule(exp, [t_let, ident, equal, exp, t_in, exp], Some(prec_let))?;
+    g.rule(exp, [t_let, t_rec, fundef, t_in, exp], Some(prec_let))?;
     g.rule(
         exp,
         [t_let, l_paren, pat, r_paren, equal, exp, t_in, exp],
-        "EXP_LET_TUPLE",
         None,
     )?;
-    g.rule(exp, [simple_exp, actual_args], "EXP_APP", Some(prec_app))?;
-    g.rule(exp, [elems], "EXP_ELEMS", Some(prec_tuple))?;
+    g.rule(exp, [simple_exp, actual_args], Some(prec_app))?;
+    g.rule(exp, [elems], Some(prec_tuple))?;
     g.rule(
         exp,
         [simple_exp, dot, l_paren, exp, r_paren, less_minus, exp],
-        "EXP_ARRAY_PUT",
         None,
     )?;
-    g.rule(exp, [exp, semicolon, exp], "EXP_SEMICOLON", None)?;
-    g.rule(
-        exp,
-        [array_make, simple_exp, simple_exp],
-        "EXP_ARRAY_CREATE",
-        Some(prec_app),
-    )?;
+    g.rule(exp, [exp, semicolon, exp], None)?;
+    g.rule(exp, [array_make, simple_exp, simple_exp], Some(prec_app))?;
 
-    g.rule(fundef, [ident, formal_args, equal, exp], "FUNDEF", None)?;
+    g.rule(fundef, [ident, formal_args, equal, exp], None)?;
 
-    g.rule(formal_args, [ident, formal_args], "FORMAL_ARGS_LIST", None)?;
-    g.rule(formal_args, [ident], "FORMAL_ARGS_ELEM", None)?;
+    g.rule(formal_args, [ident, formal_args], None)?;
+    g.rule(formal_args, [ident], None)?;
 
-    g.rule(
-        actual_args,
-        [actual_args, simple_exp],
-        "ACTUAL_ARGS_LIST",
-        Some(prec_app),
-    )?;
-    g.rule(
-        actual_args,
-        [simple_exp],
-        "ACTUAL_ARGS_ELEM",
-        Some(prec_app),
-    )?;
+    g.rule(actual_args, [actual_args, simple_exp], Some(prec_app))?;
+    g.rule(actual_args, [simple_exp], Some(prec_app))?;
 
-    g.rule(elems, [elems, comma, exp], "ELEMS", None)?;
-    g.rule(elems, [exp, comma, exp], "ELEMS_TAIL", None)?;
+    g.rule(elems, [elems, comma, exp], None)?;
+    g.rule(elems, [exp, comma, exp], None)?;
 
-    g.rule(pat, [pat, comma, ident], "PAT_LIST", None)?;
-    g.rule(pat, [ident, comma, ident], "PAT_TAIL", None)?;
+    g.rule(pat, [pat, comma, ident], None)?;
+    g.rule(pat, [ident, comma, ident], None)?;
 
     Ok(())
 }

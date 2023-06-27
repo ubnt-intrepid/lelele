@@ -128,11 +128,6 @@ impl RuleID {
         assert!(raw < u64::MAX / 2, "too large RuleID");
         Self { raw }
     }
-
-    #[inline]
-    pub(crate) const fn raw(self) -> u64 {
-        self.raw
-    }
 }
 impl fmt::Display for RuleID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -154,7 +149,6 @@ struct RuleInner {
     id: RuleID,
     left: Symbol,
     right: Vec<Symbol>,
-    export_name: Option<Cow<'static, str>>,
     precedence: Option<Precedence>,
 }
 
@@ -171,10 +165,6 @@ impl Rule {
     /// Return the right-hand side of this production.
     pub fn right(&self) -> &[Symbol] {
         &self.inner.right[..]
-    }
-
-    pub fn export_name(&self) -> Option<&str> {
-        self.inner.export_name.as_deref()
     }
 
     pub fn precedence(&self) -> Option<&Precedence> {
@@ -289,9 +279,6 @@ impl fmt::Display for Grammar {
         writeln!(f, "\n## rules:")?;
         for rule in self.rules() {
             write!(f, "- ")?;
-            if let Some(name) = rule.export_name() {
-                write!(f, "[{}] ", name)?;
-            }
             write!(f, "{} : ", rule.left().export_name().unwrap_or("<bogus>"))?;
             for (i, symbol) in rule.right().iter().enumerate() {
                 if i > 0 {
@@ -464,7 +451,6 @@ impl GrammarDef<'_> {
         &mut self,
         left: SymbolID,
         right: I,
-        export_name: impl Into<Cow<'static, str>>,
         precedence: Option<Precedence>,
     ) -> Result<RuleID, GrammarDefError>
     where
@@ -489,10 +475,6 @@ impl GrammarDef<'_> {
             );
         }
 
-        let export_name = verify_ident(export_name.into()).ok_or_else(|| GrammarDefError {
-            msg: "incorrect rule name".into(),
-        })?;
-
         let id = RuleID::new(self.next_rule_id);
         self.next_rule_id += 1;
         self.rules.insert(Rule {
@@ -500,7 +482,6 @@ impl GrammarDef<'_> {
                 id,
                 left,
                 right: right_,
-                export_name: Some(export_name),
                 precedence,
             }),
         });
@@ -540,7 +521,6 @@ impl GrammarDef<'_> {
                 id: RuleID::ACCEPT,
                 left: self.nonterminals.get(&SymbolID::ACCEPT).cloned().unwrap(),
                 right: vec![start.clone()],
-                export_name: None,
                 precedence: None,
             }),
         };

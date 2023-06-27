@@ -10,7 +10,7 @@ macro_rules! assert_matches {
 #[test]
 fn simple_expr() {
     use lelele_runtime::parser::{ParseEvent::*, ParseItem::*};
-    use p::{RuleID, SymbolID, TokenID};
+    use p::{SymbolID, TokenID};
 
     let mut parser = p::parser();
 
@@ -41,19 +41,19 @@ fn simple_expr() {
     offer_input!(TokenID::PLUS);
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::ATOM_NUM, [T(Some(TokenID::NUM))]))
+        Ok(AboutToReduce(SymbolID::ATOM, [T(Some(TokenID::NUM))]))
     );
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::FACTOR_ATOM, [N(SymbolID::ATOM)]))
+        Ok(AboutToReduce(SymbolID::FACTOR, [N(SymbolID::ATOM)]))
     );
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::TERM_FACTOR, [N(SymbolID::FACTOR)]))
+        Ok(AboutToReduce(SymbolID::TERM, [N(SymbolID::FACTOR)]))
     );
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::EXPR_TERM, [N(SymbolID::TERM)]))
+        Ok(AboutToReduce(SymbolID::EXPR, [N(SymbolID::TERM)]))
     );
     assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::PLUS))));
 
@@ -63,15 +63,15 @@ fn simple_expr() {
     offer_input!(TokenID::STAR);
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::ATOM_NUM, [T(Some(TokenID::NUM))]))
+        Ok(AboutToReduce(SymbolID::ATOM, [T(Some(TokenID::NUM))]))
     );
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::FACTOR_ATOM, [N(SymbolID::ATOM)]))
+        Ok(AboutToReduce(SymbolID::FACTOR, [N(SymbolID::ATOM)]))
     );
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::TERM_FACTOR, [N(SymbolID::FACTOR)]))
+        Ok(AboutToReduce(SymbolID::TERM, [N(SymbolID::FACTOR)]))
     );
     assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::STAR))));
 
@@ -81,16 +81,16 @@ fn simple_expr() {
     offer_input!();
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::ATOM_NUM, [T(Some(TokenID::NUM))]))
+        Ok(AboutToReduce(SymbolID::ATOM, [T(Some(TokenID::NUM))]))
     );
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::FACTOR_ATOM, [N(SymbolID::ATOM)]))
+        Ok(AboutToReduce(SymbolID::FACTOR, [N(SymbolID::ATOM)]))
     );
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
-            RuleID::TERM_MUL,
+            SymbolID::TERM,
             [
                 N(SymbolID::TERM),
                 T(Some(TokenID::STAR)),
@@ -101,7 +101,7 @@ fn simple_expr() {
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
-            RuleID::EXPR_ADD,
+            SymbolID::EXPR,
             [N(SymbolID::EXPR), T(Some(TokenID::PLUS)), N(SymbolID::TERM)]
         ))
     );
@@ -113,7 +113,7 @@ fn simple_expr() {
 #[test]
 fn with_unary_minus() {
     use lelele_runtime::parser::{ParseEvent::*, ParseItem::*};
-    use p::{RuleID, SymbolID, TokenID};
+    use p::{SymbolID, TokenID};
 
     let mut parser = p::parser();
 
@@ -144,19 +144,19 @@ fn with_unary_minus() {
     offer_input!(TokenID::PLUS);
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::ATOM_NUM, [T(Some(TokenID::NUM))]))
+        Ok(AboutToReduce(SymbolID::ATOM, [T(Some(TokenID::NUM))]))
     );
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::FACTOR_ATOM, [N(SymbolID::ATOM)]))
+        Ok(AboutToReduce(SymbolID::FACTOR, [N(SymbolID::ATOM)]))
     );
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::TERM_FACTOR, [N(SymbolID::FACTOR)]))
+        Ok(AboutToReduce(SymbolID::TERM, [N(SymbolID::FACTOR)]))
     );
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::EXPR_TERM, [N(SymbolID::TERM)]))
+        Ok(AboutToReduce(SymbolID::EXPR, [N(SymbolID::TERM)]))
     );
     assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::PLUS))));
 
@@ -166,15 +166,15 @@ fn with_unary_minus() {
     offer_input!(TokenID::STAR);
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::ATOM_NUM, [T(Some(TokenID::NUM))]))
+        Ok(AboutToReduce(SymbolID::ATOM, [T(Some(TokenID::NUM))]))
     );
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::FACTOR_ATOM, [N(SymbolID::ATOM)]))
+        Ok(AboutToReduce(SymbolID::FACTOR, [N(SymbolID::ATOM)]))
     );
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::TERM_FACTOR, [N(SymbolID::FACTOR)]))
+        Ok(AboutToReduce(SymbolID::TERM, [N(SymbolID::FACTOR)]))
     );
     assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::STAR))));
 
@@ -187,23 +187,23 @@ fn with_unary_minus() {
     offer_input!();
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::ATOM_NUM, [T(Some(TokenID::NUM))]))
+        Ok(AboutToReduce(SymbolID::ATOM, [T(Some(TokenID::NUM))]))
     );
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(RuleID::FACTOR_ATOM, [N(SymbolID::ATOM)]))
+        Ok(AboutToReduce(SymbolID::FACTOR, [N(SymbolID::ATOM)]))
     );
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
-            RuleID::FACTOR_NEG,
+            SymbolID::FACTOR,
             [T(Some(TokenID::MINUS)), N(SymbolID::FACTOR)]
         ))
     );
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
-            RuleID::TERM_MUL,
+            SymbolID::TERM,
             [
                 N(SymbolID::TERM),
                 T(Some(TokenID::STAR)),
@@ -214,7 +214,7 @@ fn with_unary_minus() {
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
-            RuleID::EXPR_ADD,
+            SymbolID::EXPR,
             [N(SymbolID::EXPR), T(Some(TokenID::PLUS)), N(SymbolID::TERM)]
         ))
     );

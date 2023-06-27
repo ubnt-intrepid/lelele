@@ -32,7 +32,6 @@ where
     TDef::State: fmt::Debug,
     TDef::Token: fmt::Debug,
     TDef::Symbol: fmt::Debug,
-    TDef::Reduce: fmt::Debug,
     TTok: Token<TDef::Token> + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -63,7 +62,6 @@ where
     TDef::State: fmt::Debug,
     TDef::Token: fmt::Debug,
     TDef::Symbol: fmt::Debug,
-    TDef::Reduce: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -159,10 +157,10 @@ where
                 return Ok(ParseEvent::Shifting(lookahead.as_ref()));
             }
 
-            ParseAction::Reduce(reduce, lhs, n) => {
+            ParseAction::Reduce(lhs, n) => {
                 self.state = ParserState::Reducing(lhs, n);
                 let args = &self.item_stack[self.item_stack.len() - n..];
-                return Ok(ParseEvent::AboutToReduce(reduce, args));
+                return Ok(ParseEvent::AboutToReduce(lhs, args));
             }
 
             ParseAction::Accept => {
@@ -192,7 +190,7 @@ where
 {
     InputNeeded(SinkInput<'p, TTok>),
     Shifting(Option<&'p TTok>),
-    AboutToReduce(TDef::Reduce, &'p [ParseItem<TTok, TDef::Symbol>]),
+    AboutToReduce(TDef::Symbol, &'p [ParseItem<TTok, TDef::Symbol>]),
     AboutToAccept(&'p ParseItem<TTok, TDef::Symbol>),
     HandlingError {
         lr_state: &'p TDef::State,
@@ -259,34 +257,33 @@ pub enum ParseError {
 
 // ---- ParseAction ----
 
-enum ParseAction<TState, TToken, TSymbol, TReduce> {
+enum ParseAction<TState, TToken, TSymbol> {
     Shift(TState),
-    Reduce(TReduce, TSymbol, usize),
+    Reduce(TSymbol, usize),
     Accept,
     Fail { expected: Vec<TToken> },
 }
 
-struct ParseContext<TState, TToken, TSymbol, TReduce> {
-    _marker: PhantomData<(TState, TToken, TSymbol, TReduce)>,
+struct ParseContext<TState, TToken, TSymbol> {
+    _marker: PhantomData<(TState, TToken, TSymbol)>,
 }
 
-impl<TState: Copy, TToken: Copy, TSymbol: Copy, TReduce> crate::definition::ParseAction
-    for ParseContext<TState, TToken, TSymbol, TReduce>
+impl<TState: Copy, TToken: Copy, TSymbol: Copy> crate::definition::ParseAction
+    for ParseContext<TState, TToken, TSymbol>
 {
     type State = TState;
     type Token = TToken;
     type Symbol = TSymbol;
-    type Reduce = TReduce;
 
-    type Ok = ParseAction<TState, TToken, TSymbol, TReduce>;
+    type Ok = ParseAction<TState, TToken, TSymbol>;
     type Error = std::convert::Infallible;
 
     fn shift(self, next: Self::State) -> Result<Self::Ok, Self::Error> {
         Ok(ParseAction::Shift(next))
     }
 
-    fn reduce(self, r: Self::Reduce, s: Self::Symbol, n: usize) -> Result<Self::Ok, Self::Error> {
-        Ok(ParseAction::Reduce(r, s, n))
+    fn reduce(self, s: Self::Symbol, n: usize) -> Result<Self::Ok, Self::Error> {
+        Ok(ParseAction::Reduce(s, n))
     }
 
     fn accept(self) -> Result<Self::Ok, Self::Error> {
