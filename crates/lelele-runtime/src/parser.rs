@@ -1,20 +1,22 @@
-//! Parser.
+//! The implementation of LR(1) parser engine.
 
 use crate::definition::ParserDef;
 use std::{fmt, marker::PhantomData};
 
 /// A trait for abstracting token symbols.
-pub trait Token<TTok> {
-    fn as_symbol(&self) -> TTok;
+pub trait Token<TIdx> {
+    /// Return the index value corresponding to this token.
+    fn to_index(&self) -> TIdx;
 }
 
-impl<TTok: Copy> Token<TTok> for TTok {
-    fn as_symbol(&self) -> TTok {
+impl<TIdx: Copy> Token<TIdx> for TIdx {
+    #[inline]
+    fn to_index(&self) -> TIdx {
         *self
     }
 }
 
-/// The parser driven based on the generated parse table.
+/// The parser using the generated parser definition based on specified grammar.
 pub struct Parser<TDef, TTok>
 where
     TDef: ParserDef,
@@ -80,7 +82,7 @@ where
     TDef: ParserDef,
     TTok: Token<TDef::Token>,
 {
-    /// Create an instance of `Parser` using the specified parse table.
+    /// Create an instance of `Parser` using the specified parser definition.
     pub fn new(definition: TDef) -> Self {
         let initial_state = definition.initial_state();
         Self {
@@ -92,7 +94,7 @@ where
         }
     }
 
-    /// Consume some tokens and drive the state machine until it matches a certain production rule.
+    /// Drives the internal LR automaton to the point where the user of this parser needs to do something.
     pub fn resume(&mut self) -> Result<ParseEvent<'_, TDef, TTok>, ParseError> {
         match self.state {
             ParserState::Shifting(next) => {
@@ -136,7 +138,7 @@ where
 
         let current = self.state_stack.last().copied().unwrap();
         let lookahead = match self.lookahead {
-            Some(ref lookahead) => lookahead.as_ref().map(|t| t.as_symbol()),
+            Some(ref lookahead) => lookahead.as_ref().map(|t| t.to_index()),
             None => {
                 return Ok(ParseEvent::InputNeeded(SinkInput {
                     lookahead: &mut self.lookahead,

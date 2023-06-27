@@ -100,7 +100,7 @@ pub enum Token<'source> {
 }
 
 impl lelele_runtime::parser::Token<TokenID> for Token<'_> {
-    fn as_symbol(&self) -> TokenID {
+    fn to_index(&self) -> TokenID {
         match self {
             Self::LParen => TokenID::LPAREN,
             Self::RParen => TokenID::RPAREN,
