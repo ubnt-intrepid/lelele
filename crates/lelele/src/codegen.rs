@@ -65,7 +65,7 @@ impl NodeID {\n",
         f.write_str(
             "\
 /// The type to identify terminal or nonterminal symbols used in generated DFA.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct TokenID { __raw: u64 }
 impl TokenID {\n",
@@ -92,7 +92,36 @@ pub const {export_name}: Self = Self {{ __raw: {id} }};",
             )?;
         }
 
-        f.write_str("}\n")?;
+        f.write_str(
+            "}
+impl ::std::fmt::Debug for TokenID {
+    #[inline]
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::std::fmt::Display::fmt(self, f)
+    }
+}
+impl ::std::fmt::Display for TokenID {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self.__raw {\n",
+        )?;
+
+        for symbol in self.grammar.terminals() {
+            writeln!(
+                f,
+                "\
+            {} => f.write_str(stringify!({})),",
+                symbol.id().raw(),
+                symbol,
+            )?;
+        }
+
+        f.write_str(
+            "\
+            _ => f.write_str(\"<unknown>\"),
+        }
+    }
+}",
+        )?;
 
         Ok(())
     }
@@ -101,7 +130,7 @@ pub const {export_name}: Self = Self {{ __raw: {id} }};",
         f.write_str(
             "\
 /// The type to identify nonterminal symbols used in generated DFA.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct SymbolID { __raw: u64 }
 impl SymbolID {\n",
@@ -122,7 +151,36 @@ pub const {export_name}: Self = Self {{ __raw: {id} }};",
             )?;
         }
 
-        f.write_str("}\n")?;
+        f.write_str(
+            "}
+impl ::std::fmt::Debug for SymbolID {
+    #[inline]
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::std::fmt::Display::fmt(self, f)
+    }
+}
+impl ::std::fmt::Display for SymbolID {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self.__raw {\n",
+        )?;
+
+        for symbol in self.grammar.nonterminals() {
+            writeln!(
+                f,
+                "\
+            {} => f.write_str(stringify!({})),",
+                symbol.id().raw(),
+                symbol,
+            )?;
+        }
+
+        f.write_str(
+            "\
+            _ => f.write_str(\"<unknown>\"),
+        }
+    }
+}",
+        )?;
 
         Ok(())
     }
