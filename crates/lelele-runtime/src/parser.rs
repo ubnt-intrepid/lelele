@@ -96,7 +96,11 @@ where
     pub fn resume(&mut self) -> Result<ParseEvent<'_, TDef, TTok>, ParseError> {
         match self.state {
             ParserState::Shifting(next) => {
-                let lookahead = self.lookahead.take().unwrap();
+                let lookahead = self
+                    .lookahead
+                    .take()
+                    .ok_or_else(|| ParseError::TokenNotOffered)?;
+                let lookahead = lookahead.expect("shiting token must not be EOI");
                 self.item_stack.push(ParseItem::T(lookahead));
                 self.state_stack.push(next);
                 self.state = ParserState::Pending;
@@ -152,9 +156,13 @@ where
 
         match action {
             ParseAction::Shift(next) => {
-                let lookahead = self.lookahead.as_ref().unwrap();
+                let lookahead = self
+                    .lookahead
+                    .as_ref()
+                    .ok_or_else(|| ParseError::TokenNotOffered)?;
+                let lookahead = lookahead.as_ref().expect("shiting token must not be EOI");
                 self.state = ParserState::Shifting(next);
-                return Ok(ParseEvent::Shifting(lookahead.as_ref()));
+                return Ok(ParseEvent::Shifting(lookahead));
             }
 
             ParseAction::Reduce(lhs, n) => {
@@ -189,7 +197,7 @@ where
     TTok: Token<TDef::Token>,
 {
     InputNeeded(SinkInput<'p, TTok>),
-    Shifting(Option<&'p TTok>),
+    Shifting(&'p TTok),
     AboutToReduce(TDef::Symbol, &'p [ParseItem<TTok, TDef::Symbol>]),
     AboutToAccept(&'p ParseItem<TTok, TDef::Symbol>),
     HandlingError {
@@ -230,7 +238,7 @@ impl<'p, TTok> SinkInput<'p, TTok> {
 #[derive(Debug, Copy, Clone)]
 #[non_exhaustive]
 pub enum ParseItem<TTok, TSym> {
-    T(Option<TTok>),
+    T(TTok),
     N(TSym),
 
     #[doc(hidden)]
@@ -247,6 +255,9 @@ impl<TTok, TSym> Default for ParseItem<TTok, TSym> {
 pub enum ParseError {
     #[error("from parser definition: {}", _0)]
     ParserDef(String),
+
+    #[error("token is not offered")]
+    TokenNotOffered,
 
     #[error("unexpected EOI")]
     UnexpectedEOI,

@@ -45,7 +45,7 @@ fn main() -> anyhow::Result<()> {
 
             ParseEvent::AboutToReduce(
                 SymbolID::EXPR,
-                [N(SymbolID::EXPR), T(Some(op)), N(SymbolID::EXPR)],
+                [N(SymbolID::EXPR), T(op), N(SymbolID::EXPR)],
             ) => {
                 let (lhs, rhs) = match (ast_stack.pop(), ast_stack.pop()) {
                     (Some(rhs), Some(lhs)) => (lhs, rhs),
@@ -73,14 +73,14 @@ fn main() -> anyhow::Result<()> {
                 ast_stack.push(Box::new(expr));
             }
 
-            ParseEvent::AboutToReduce(SymbolID::EXPR, [T(Some(Token::Num(num)))]) => {
+            ParseEvent::AboutToReduce(SymbolID::EXPR, [T(Token::Num(num))]) => {
                 tracing::trace!("reduce: expr -> NUM");
                 ast_stack.push(Box::new(Expr::Num(num)));
             }
 
             ParseEvent::AboutToReduce(
                 SymbolID::EXPR,
-                [T(Some(l_paren @ Token::LParen)), N(SymbolID::EXPR), T(Some(r_paren @ Token::RParen))],
+                [T(l_paren @ Token::LParen), N(SymbolID::EXPR), T(r_paren @ Token::RParen)],
             ) => {
                 tracing::trace!("reduce: expr -> `(' expr `)'");
                 let expr = ast_stack.pop().context("unexpected stack item")?;
@@ -92,7 +92,7 @@ fn main() -> anyhow::Result<()> {
             }
             ParseEvent::AboutToReduce(
                 SymbolID::EXPR,
-                [T(Some(minus @ Token::Minus)), N(SymbolID::EXPR)],
+                [T(minus @ Token::Minus), N(SymbolID::EXPR)],
             ) => {
                 tracing::trace!("reduce: expr -> `-' expr");
                 let expr = ast_stack.pop().context("unexpected stack item")?;

@@ -36,12 +36,12 @@ fn simple_expr() {
     // tokens: NUM PLUS NUM STAR NUM $eoi
 
     offer_input!(TokenID::NUM);
-    assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::NUM))));
+    assert_matches!(parser.resume(), Ok(Shifting(&TokenID::NUM)));
 
     offer_input!(TokenID::PLUS);
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(SymbolID::ATOM, [T(Some(TokenID::NUM))]))
+        Ok(AboutToReduce(SymbolID::ATOM, [T(TokenID::NUM)]))
     );
     assert_matches!(
         parser.resume(),
@@ -55,15 +55,15 @@ fn simple_expr() {
         parser.resume(),
         Ok(AboutToReduce(SymbolID::EXPR, [N(SymbolID::TERM)]))
     );
-    assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::PLUS))));
+    assert_matches!(parser.resume(), Ok(Shifting(&TokenID::PLUS)));
 
     offer_input!(TokenID::NUM);
-    assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::NUM))));
+    assert_matches!(parser.resume(), Ok(Shifting(&TokenID::NUM)));
 
     offer_input!(TokenID::STAR);
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(SymbolID::ATOM, [T(Some(TokenID::NUM))]))
+        Ok(AboutToReduce(SymbolID::ATOM, [T(TokenID::NUM)]))
     );
     assert_matches!(
         parser.resume(),
@@ -73,15 +73,15 @@ fn simple_expr() {
         parser.resume(),
         Ok(AboutToReduce(SymbolID::TERM, [N(SymbolID::FACTOR)]))
     );
-    assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::STAR))));
+    assert_matches!(parser.resume(), Ok(Shifting(&TokenID::STAR)));
 
     offer_input!(TokenID::NUM);
-    assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::NUM))));
+    assert_matches!(parser.resume(), Ok(Shifting(&TokenID::NUM)));
 
     offer_input!();
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(SymbolID::ATOM, [T(Some(TokenID::NUM))]))
+        Ok(AboutToReduce(SymbolID::ATOM, [T(TokenID::NUM)]))
     );
     assert_matches!(
         parser.resume(),
@@ -91,18 +91,14 @@ fn simple_expr() {
         parser.resume(),
         Ok(AboutToReduce(
             SymbolID::TERM,
-            [
-                N(SymbolID::TERM),
-                T(Some(TokenID::STAR)),
-                N(SymbolID::FACTOR)
-            ]
+            [N(SymbolID::TERM), T(TokenID::STAR), N(SymbolID::FACTOR)]
         ))
     );
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
             SymbolID::EXPR,
-            [N(SymbolID::EXPR), T(Some(TokenID::PLUS)), N(SymbolID::TERM)]
+            [N(SymbolID::EXPR), T(TokenID::PLUS), N(SymbolID::TERM)]
         ))
     );
 
@@ -139,12 +135,12 @@ fn with_unary_minus() {
     // tokens: NUM PLUS NUM STAR MINUS NUM $eoi
 
     offer_input!(TokenID::NUM);
-    assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::NUM))));
+    assert_matches!(parser.resume(), Ok(Shifting(&TokenID::NUM)));
 
     offer_input!(TokenID::PLUS);
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(SymbolID::ATOM, [T(Some(TokenID::NUM))]))
+        Ok(AboutToReduce(SymbolID::ATOM, [T(TokenID::NUM)]))
     );
     assert_matches!(
         parser.resume(),
@@ -158,15 +154,15 @@ fn with_unary_minus() {
         parser.resume(),
         Ok(AboutToReduce(SymbolID::EXPR, [N(SymbolID::TERM)]))
     );
-    assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::PLUS))));
+    assert_matches!(parser.resume(), Ok(Shifting(&TokenID::PLUS)));
 
     offer_input!(TokenID::NUM);
-    assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::NUM))));
+    assert_matches!(parser.resume(), Ok(Shifting(&TokenID::NUM)));
 
     offer_input!(TokenID::STAR);
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(SymbolID::ATOM, [T(Some(TokenID::NUM))]))
+        Ok(AboutToReduce(SymbolID::ATOM, [T(TokenID::NUM)]))
     );
     assert_matches!(
         parser.resume(),
@@ -176,18 +172,18 @@ fn with_unary_minus() {
         parser.resume(),
         Ok(AboutToReduce(SymbolID::TERM, [N(SymbolID::FACTOR)]))
     );
-    assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::STAR))));
+    assert_matches!(parser.resume(), Ok(Shifting(&TokenID::STAR)));
 
     offer_input!(TokenID::MINUS);
-    assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::MINUS))));
+    assert_matches!(parser.resume(), Ok(Shifting(&TokenID::MINUS)));
 
     offer_input!(TokenID::NUM);
-    assert_matches!(parser.resume(), Ok(Shifting(Some(&TokenID::NUM))));
+    assert_matches!(parser.resume(), Ok(Shifting(&TokenID::NUM)));
 
     offer_input!();
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(SymbolID::ATOM, [T(Some(TokenID::NUM))]))
+        Ok(AboutToReduce(SymbolID::ATOM, [T(TokenID::NUM)]))
     );
     assert_matches!(
         parser.resume(),
@@ -197,25 +193,21 @@ fn with_unary_minus() {
         parser.resume(),
         Ok(AboutToReduce(
             SymbolID::FACTOR,
-            [T(Some(TokenID::MINUS)), N(SymbolID::FACTOR)]
+            [T(TokenID::MINUS), N(SymbolID::FACTOR)]
         ))
     );
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
             SymbolID::TERM,
-            [
-                N(SymbolID::TERM),
-                T(Some(TokenID::STAR)),
-                N(SymbolID::FACTOR)
-            ]
+            [N(SymbolID::TERM), T(TokenID::STAR), N(SymbolID::FACTOR)]
         ))
     );
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
             SymbolID::EXPR,
-            [N(SymbolID::EXPR), T(Some(TokenID::PLUS)), N(SymbolID::TERM)]
+            [N(SymbolID::EXPR), T(TokenID::PLUS), N(SymbolID::TERM)]
         ))
     );
 
