@@ -18,6 +18,7 @@ pub fn g_arithmetic(g: &mut GrammarDef<'_>) -> Result {
     let expr = g.nonterminal("EXPR")?;
     let term = g.nonterminal("TERM")?;
     let factor = g.nonterminal("FACTOR")?;
+    let atom = g.nonterminal("ATOM")?;
 
     g.start_symbol(expr)?;
 
@@ -30,8 +31,11 @@ pub fn g_arithmetic(g: &mut GrammarDef<'_>) -> Result {
     g.rule(term, [term, slash, factor], "TERM_DIV", None)?;
     g.rule(term, [factor], "TERM_FACTOR", None)?;
 
-    g.rule(factor, [num], "FACTOR_NUM", None)?;
-    g.rule(factor, [lparen, expr, rparen], "FACTOR_PAREN", None)?;
+    g.rule(factor, [minus, factor], "FACTOR_NEG", None)?;
+    g.rule(factor, [atom], "FACTOR_ATOM", None)?;
+
+    g.rule(atom, [num], "ATOM_NUM", None)?;
+    g.rule(atom, [lparen, expr, rparen], "ATOM_PAREN", None)?;
 
     Ok(())
 }
