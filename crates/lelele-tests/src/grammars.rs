@@ -4,32 +4,8 @@ use lelele::grammar::{Assoc, GrammarDef, Precedence};
 
 type Result<T = (), E = lelele::grammar::GrammarDefError> = std::result::Result<T, E>;
 
-pub fn g_simple1(g: &mut GrammarDef<'_>) -> Result {
-    let equal = g.terminal("EQUAL", None)?;
-    let plus = g.terminal("PLUS", None)?;
-    let ident = g.terminal("ID", None)?;
-    let num = g.terminal("NUM", None)?;
-
-    let a = g.nonterminal("A")?;
-    let e = g.nonterminal("E")?;
-    let t = g.nonterminal("T")?;
-
-    g.start_symbol(a)?;
-
-    g.rule(a, [e, equal, e], "A0", None)?;
-    g.rule(a, [ident], "A1", None)?;
-
-    g.rule(e, [e, plus, t], "E0", None)?;
-    g.rule(e, [t], "E1", None)?;
-
-    g.rule(t, [num], "T0", None)?;
-    g.rule(t, [ident], "T1", None)?;
-
-    Ok(())
-}
-
-pub fn g_simple2(g: &mut GrammarDef<'_>) -> Result {
-    // declare terminal symbols.
+pub fn g_arithmetic(g: &mut GrammarDef<'_>) -> Result {
+    // terminals.
     let lparen = g.terminal("LPAREN", None)?;
     let rparen = g.terminal("RPAREN", None)?;
     let plus = g.terminal("PLUS", None)?;
@@ -38,23 +14,56 @@ pub fn g_simple2(g: &mut GrammarDef<'_>) -> Result {
     let slash = g.terminal("SLASH", None)?;
     let num = g.terminal("NUM", None)?;
 
-    // declare nonterminal symbols.
+    // nonterminals.
     let expr = g.nonterminal("EXPR")?;
     let term = g.nonterminal("TERM")?;
     let factor = g.nonterminal("FACTOR")?;
 
-    g.rule(expr, [expr, plus, term], "EXPR1", None)?;
-    g.rule(expr, [expr, minus, term], "EXPR2", None)?;
-    g.rule(expr, [term], "EXPR3", None)?;
+    g.start_symbol(expr)?;
 
-    g.rule(term, [term, star, factor], "TERM1", None)?;
-    g.rule(term, [term, slash, factor], "TERM2", None)?;
-    g.rule(term, [factor], "TERM3", None)?;
+    // production rules.
+    g.rule(expr, [expr, plus, term], "EXPR_ADD", None)?;
+    g.rule(expr, [expr, minus, term], "EXPR_SUB", None)?;
+    g.rule(expr, [term], "EXPR_TERM", None)?;
 
-    g.rule(factor, [num], "FACTOR1", None)?;
-    g.rule(factor, [lparen, expr, rparen], "FACTOR2", None)?;
+    g.rule(term, [term, star, factor], "TERM_MUL", None)?;
+    g.rule(term, [term, slash, factor], "TERM_DIV", None)?;
+    g.rule(term, [factor], "TERM_FACTOR", None)?;
+
+    g.rule(factor, [num], "FACTOR_NUM", None)?;
+    g.rule(factor, [lparen, expr, rparen], "FACTOR_PAREN", None)?;
+
+    Ok(())
+}
+
+pub fn g_arithmetic_prec(g: &mut GrammarDef<'_>) -> Result {
+    // precedences.
+    let prec_add = Precedence::new(0, Assoc::Left);
+    let prec_mul = Precedence::new(1, Assoc::Left);
+    let prec_neg = Precedence::new(2, Assoc::Right);
+
+    // terminal symbols.
+    let lparen = g.terminal("LPAREN", None)?;
+    let rparen = g.terminal("RPAREN", None)?;
+    let plus = g.terminal("PLUS", Some(prec_add))?;
+    let minus = g.terminal("MINUS", Some(prec_add))?;
+    let star = g.terminal("STAR", Some(prec_mul))?;
+    let slash = g.terminal("SLASH", Some(prec_mul))?;
+    let num = g.terminal("NUM", None)?;
+
+    // nonterminal symbols.
+    let expr = g.nonterminal("EXPR")?;
 
     g.start_symbol(expr)?;
+
+    // production rules.
+    g.rule(expr, [expr, plus, expr], "EXPR_ADD", None)?;
+    g.rule(expr, [expr, minus, expr], "EXPR_SUB", None)?;
+    g.rule(expr, [expr, star, expr], "EXPR_MUL", None)?;
+    g.rule(expr, [expr, slash, expr], "EXPR_DIV", None)?;
+    g.rule(expr, [num], "EXPR_NUM", None)?;
+    g.rule(expr, [lparen, expr, rparen], "EXPR_PAREN", None)?;
+    g.rule(expr, [minus, expr], "EXPR_NEG", Some(prec_neg))?;
 
     Ok(())
 }

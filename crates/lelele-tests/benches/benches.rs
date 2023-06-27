@@ -6,11 +6,11 @@ use lelele::{
 use lelele_tests::grammars;
 
 criterion_main!(benches);
-criterion_group!(benches, bench_simple_1, bench_simple_2);
+criterion_group!(benches, bench_arithmetic, bench_simple_2);
 
-fn bench_simple_1(c: &mut Criterion) {
-    bench_dfa_gen(c, "g_simple1", grammars::g_simple1);
-    bench_dfa_gen(c, "g_simple2", grammars::g_simple2);
+fn bench_arithmetic(c: &mut Criterion) {
+    bench_dfa_gen(c, "g_arithmetic", grammars::g_arithmetic);
+    bench_dfa_gen(c, "g_arithmetic_prec", grammars::g_arithmetic_prec);
 }
 
 fn bench_simple_2(c: &mut Criterion) {

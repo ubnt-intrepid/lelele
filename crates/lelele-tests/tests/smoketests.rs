@@ -28,13 +28,13 @@ fn smoketest_grammar(f: impl FnOnce(&mut GrammarDef<'_>) -> Result<(), GrammarDe
 }
 
 #[test]
-fn smoketest_g_simple1() {
-    smoketest_grammar(grammars::g_simple1);
+fn smoketest_g_arithmetic() {
+    smoketest_grammar(grammars::g_arithmetic);
 }
 
 #[test]
-fn smoketest_g_simple2() {
-    smoketest_grammar(grammars::g_simple2);
+fn smoketest_g_arithmetic_prec() {
+    smoketest_grammar(grammars::g_arithmetic_prec);
 }
 
 #[test]

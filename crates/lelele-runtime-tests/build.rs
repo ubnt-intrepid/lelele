@@ -10,7 +10,9 @@ use std::{env, fs, path::PathBuf};
 fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
 
-    generate_parser("g_simple1", grammars::g_simple1).context("generating g_simple1")?;
+    generate_parser("g_arithmetic", grammars::g_arithmetic).context("generating g_arithmetic")?;
+    generate_parser("g_arithmetic_prec", grammars::g_arithmetic_prec)
+        .context("generating g_arithmetic")?;
 
     Ok(())
 }
