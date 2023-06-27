@@ -81,8 +81,3 @@ fn smoketest_g9() {
 fn smoketest_g10() {
     smoketest_grammar(grammars::g10);
 }
-
-#[test]
-fn smoketest_min_caml() {
-    smoketest_grammar(grammars::min_caml);
-}

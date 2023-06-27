@@ -6,7 +6,7 @@ use lelele::{
 use lelele_tests::grammars;
 
 criterion_main!(benches);
-criterion_group!(benches, bench_simple_1, bench_simple_2, bench_min_caml);
+criterion_group!(benches, bench_simple_1, bench_simple_2);
 
 fn bench_simple_1(c: &mut Criterion) {
     bench_dfa_gen(c, "g_simple1", grammars::g_simple1);
@@ -23,10 +23,6 @@ fn bench_simple_2(c: &mut Criterion) {
     bench_dfa_gen(c, "g8", grammars::g8);
     bench_dfa_gen(c, "g9", grammars::g9);
     bench_dfa_gen(c, "g10", grammars::g10);
-}
-
-fn bench_min_caml(c: &mut Criterion) {
-    bench_dfa_gen(c, "MinCaml", grammars::min_caml);
 }
 
 fn bench_dfa_gen(

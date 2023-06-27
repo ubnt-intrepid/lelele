@@ -1,0 +1,15 @@
+[package]
+name = "lelele-example-min-caml"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+lelele = { path = "../../crates/lelele" }
+
+[dependencies]
+anyhow = "1.0.71"
+lelele-runtime = { path = "../../crates/lelele-runtime" }
+logos = "0.13.0"
+tracing = "0.1.37"
+tracing-subscriber = "0.3.17"
