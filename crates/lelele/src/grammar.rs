@@ -12,7 +12,7 @@ use std::{
 const SYMBOL_ID_OFFSET: u64 = 0x4;
 const RULE_ID_OFFSET: u64 = 0x4;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct SymbolID {
     raw: u64,
@@ -33,22 +33,6 @@ impl SymbolID {
     #[inline]
     pub(crate) const fn raw(self) -> u64 {
         self.raw
-    }
-}
-
-impl fmt::Debug for SymbolID {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self, f)
-    }
-}
-
-impl fmt::Display for SymbolID {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            &Self::EOI => write!(f, "$end"),
-            &Self::ACCEPT => write!(f, "$accept"),
-            Self { raw } => write!(f, "SymbolID({})", raw),
-        }
     }
 }
 
@@ -86,6 +70,16 @@ impl Symbol {
 
     pub fn precedence(&self) -> Option<&Precedence> {
         self.inner.precedence.as_ref()
+    }
+}
+
+impl fmt::Display for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.inner.id {
+            SymbolID::EOI => f.write_str("$eoi"),
+            SymbolID::ACCEPT => f.write_str("$accept"),
+            _ => f.write_str(self.export_name().unwrap_or("<unknown>")),
+        }
     }
 }
 
@@ -258,19 +252,18 @@ pub struct Grammar {
 impl fmt::Display for Grammar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "## terminals:")?;
-        for sym in self.terminals() {
-            let name = sym.export_name().unwrap_or("<bogus>");
-            write!(f, "- {}", name)?;
-            if let Some(prec) = sym.precedence() {
+        for token in self.terminals() {
+            write!(f, "{}", token)?;
+            if let Some(prec) = token.precedence() {
                 write!(f, " (priority={}, assoc={})", prec.priority, prec.assoc)?;
             }
             writeln!(f)?;
         }
 
         writeln!(f, "\n## nonterminals:")?;
-        for sym in self.nonterminals() {
-            write!(f, "- {}", sym.export_name().unwrap_or("<bogus>"))?;
-            if sym.id() == self.start_symbol.id() {
+        for symbol in self.nonterminals() {
+            write!(f, "{}", symbol)?;
+            if symbol.id() == self.start_symbol.id() {
                 write!(f, " (start)")?;
             }
             writeln!(f)?;
@@ -278,13 +271,12 @@ impl fmt::Display for Grammar {
 
         writeln!(f, "\n## rules:")?;
         for rule in self.rules() {
-            write!(f, "- ")?;
-            write!(f, "{} : ", rule.left().export_name().unwrap_or("<bogus>"))?;
+            write!(f, "{} := ", rule.left())?;
             for (i, symbol) in rule.right().iter().enumerate() {
                 if i > 0 {
                     write!(f, " ")?;
                 }
-                write!(f, "{}", symbol.export_name().unwrap_or("<bogus>"))?;
+                write!(f, "{}", symbol)?;
             }
             writeln!(f)?;
         }

@@ -72,53 +72,75 @@ impl DFA {
 
 impl fmt::Display for DFA {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (id, node) in self.nodes() {
-            writeln!(f, "- id: {:02}", id)?;
-            writeln!(f, "  item_sets:")?;
+        for (i, (id, node)) in self.nodes().enumerate() {
+            if i > 0 {
+                writeln!(f)?;
+            }
+
+            writeln!(f, "#### State {:02}", id)?;
+            writeln!(f, "## item_sets")?;
             for (core_item, lookaheads) in &node.item_set {
                 let LRCoreItem { rule, marker } = core_item;
-                write!(
-                    f,
-                    "  - {} :",
-                    rule.left().export_name().unwrap_or("<bogus>")
-                )?;
+                write!(f, "- {} :=", rule.left())?;
                 for (i, prod) in rule.right().iter().enumerate() {
                     if i == *marker {
-                        f.write_str(" @")?;
+                        f.write_str(" .")?;
                     }
-                    write!(f, " {}", prod.export_name().unwrap_or("<bogus>"))?;
+                    write!(f, " {}", prod)?;
                 }
                 if *marker == rule.right().len() {
-                    f.write_str(" @")?;
+                    f.write_str(" .")?;
                 }
-                write!(f, " [")?;
+                write!(f, "  [")?;
                 for (i, lookahead) in lookaheads.iter().enumerate() {
                     if i > 0 {
-                        f.write_str("/")?;
+                        f.write_str(" ")?;
                     }
-                    f.write_str(lookahead.export_name().unwrap_or("<bogus>"))?;
+                    write!(f, "{}", lookahead)?;
                 }
                 writeln!(f, "]")?;
             }
-            writeln!(f, "  actions:")?;
+
+            writeln!(f, "## actions")?;
             for (token, action) in &node.actions {
-                let token = token.export_name().unwrap_or("<bogus>");
-                writeln!(f, "  - On {}:", token)?;
                 match action {
                     Action::Shift(n) => {
-                        writeln!(f, "    - shift({:02})", n)?;
+                        writeln!(f, "- {} => shift({:02})", token, n)?;
                     }
                     Action::Reduce(reduce) => {
-                        writeln!(f, "    - reduce({})", reduce.id())?;
+                        write!(f, "- {} => reduce({} :=", token, reduce.left())?;
+                        for r in reduce.right() {
+                            write!(f, " {}", r)?;
+                        }
+                        writeln!(f, ")")?;
                     }
                     Action::Accept => {
-                        writeln!(f, "    - accept")?;
+                        writeln!(f, "- {} => accept", token)?;
                     }
                     Action::Fail => {
-                        writeln!(f, "    - fail")?;
+                        writeln!(f, "- {} => fail", token)?;
                     }
-                    Action::Inconsistent { .. } => {
-                        writeln!(f, "    - conflict")?;
+                    Action::Inconsistent {
+                        reason,
+                        shift,
+                        reduces,
+                        accepted,
+                    } => {
+                        writeln!(f, "- {} => inconsistent(reason = {:?})", token, reason)?;
+                        writeln!(f, "## conflicted actions")?;
+                        if let Some(n) = shift {
+                            writeln!(f, "  - shift({:02})", n)?;
+                        }
+                        for reduce in reduces {
+                            write!(f, "  - reduce({} :=", reduce.left())?;
+                            for r in reduce.right() {
+                                write!(f, " {}", r)?;
+                            }
+                            writeln!(f, ")")?;
+                        }
+                        if *accepted {
+                            writeln!(f, "  - accept")?;
+                        }
                     }
                 }
             }
