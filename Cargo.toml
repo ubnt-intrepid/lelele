@@ -7,3 +7,10 @@ members = [
 exclude = [
     # "crates/lelele-runtime-tests",
 ]
+
+# Enable build script optimization.
+# See also https://doc.rust-lang.org/cargo/reference/profiles.html#build-dependencies
+[profile.dev.build-override]
+opt-level = 3
+[profile.release.build-override]
+opt-level = 3
