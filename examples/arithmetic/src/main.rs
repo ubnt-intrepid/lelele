@@ -1,5 +1,5 @@
 use anyhow::Context;
-use lelele_example_sketch::{
+use lelele_example_arithmetic::{
     lexer::{lexer, Token},
     parser::{ParserDef, SymbolID},
     syntax::Expr,

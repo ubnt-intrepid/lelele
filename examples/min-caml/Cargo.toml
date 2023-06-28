@@ -8,8 +8,8 @@ publish = false
 lelele = { path = "../../crates/lelele" }
 
 [dependencies]
-anyhow = "1.0.71"
 lelele-runtime = { path = "../../crates/lelele-runtime" }
-logos = "0.13.0"
-tracing = "0.1.37"
-tracing-subscriber = "0.3.17"
+anyhow = { workspace = true }
+logos = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

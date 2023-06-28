@@ -1,12 +1,13 @@
 [package]
 name = "lelele"
-version = "0.0.0"
-edition = "2021"
+version = "0.0.0-dev"
+authors = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
 publish = false
 
 [dependencies]
-indexmap = "1.9.3"
-lelele-runtime = { path = "../lelele-runtime" }
-phf_codegen = "0.11.1"
-rustc-hash = "1.1.0"
-unicode-ident = "1.0.9"
+indexmap = { workspace = true }
+phf_codegen = { workspace = true }
+rustc-hash = { workspace = true }
+unicode-ident = { workspace = true }

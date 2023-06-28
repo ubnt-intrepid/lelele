@@ -15,11 +15,11 @@ fn main() {
 
     // 文法定義から構文解析表を導出する
     let grammar = Grammar::define(grammar_def).unwrap();
-    fs::write(project_root.join("sketch.grammar"), grammar.to_string()).unwrap();
+    fs::write(project_root.join("arithmetic.grammar"), grammar.to_string()).unwrap();
 
     let dfa = DFA::generate(&grammar);
     fs::write(
-        project_root.join("sketch.automaton"),
+        project_root.join("arithmetic.automaton"),
         dfa.display(&grammar).to_string(),
     )
     .unwrap();
