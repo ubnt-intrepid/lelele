@@ -18,7 +18,11 @@ fn main() {
     fs::write(project_root.join("sketch.grammar"), grammar.to_string()).unwrap();
 
     let dfa = DFA::generate(&grammar);
-    fs::write(project_root.join("sketch.automaton"), dfa.to_string()).unwrap();
+    fs::write(
+        project_root.join("sketch.automaton"),
+        dfa.display(&grammar).to_string(),
+    )
+    .unwrap();
 
     // 生成された構文解析表をコードに出力
     let codegen = Codegen::new(&grammar, &dfa);

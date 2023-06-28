@@ -1,7 +1,7 @@
 //! Definition and generation of LR(1) automata.
 
 use crate::{
-    grammar::{Assoc, Grammar, Nonterminal, Precedence, Rule, RuleID, Symbol, Terminal},
+    grammar::{Assoc, Grammar, NonterminalID, Precedence, RuleID, Symbol, TerminalID},
     IndexMap, IndexSet,
 };
 use std::{
@@ -68,11 +68,24 @@ impl DFA {
     pub fn node(&self, id: NodeID) -> &DFANode {
         &self.nodes[&id]
     }
+
+    pub fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
+        DFADisplay {
+            grammar: g,
+            dfa: self,
+        }
+    }
 }
 
-impl fmt::Display for DFA {
+struct DFADisplay<'g> {
+    grammar: &'g Grammar,
+    dfa: &'g DFA,
+}
+impl fmt::Display for DFADisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (i, (id, node)) in self.nodes().enumerate() {
+        let Self { grammar, dfa, .. } = self;
+
+        for (i, (id, node)) in dfa.nodes().enumerate() {
             if i > 0 {
                 writeln!(f)?;
             }
@@ -81,12 +94,16 @@ impl fmt::Display for DFA {
             writeln!(f, "## item_sets")?;
             for (core_item, lookaheads) in &node.item_set {
                 let LRCoreItem { rule, marker } = core_item;
-                write!(f, "- {} :=", rule.left())?;
+                let rule = grammar.rule(rule);
+                write!(f, "- {} :=", grammar.nonterminal(&rule.left()))?;
                 for (i, prod) in rule.right().iter().enumerate() {
                     if i == *marker {
                         f.write_str(" .")?;
                     }
-                    write!(f, " {}", prod)?;
+                    match prod {
+                        Symbol::T(t) => write!(f, " {}", grammar.terminal(t))?,
+                        Symbol::N(n) => write!(f, " {}", grammar.nonterminal(n))?,
+                    }
                 }
                 if *marker == rule.right().len() {
                     f.write_str(" .")?;
@@ -96,7 +113,7 @@ impl fmt::Display for DFA {
                     if i > 0 {
                         f.write_str(" ")?;
                     }
-                    write!(f, "{}", lookahead)?;
+                    write!(f, "{}", grammar.terminal(lookahead))?;
                 }
                 writeln!(f, "]")?;
             }
@@ -105,20 +122,29 @@ impl fmt::Display for DFA {
             for (token, action) in &node.actions {
                 match action {
                     Action::Shift(n) => {
-                        writeln!(f, "- {} => shift({:02})", token, n)?;
+                        writeln!(f, "- {} => shift({:02})", grammar.terminal(token), n)?;
                     }
                     Action::Reduce(reduce) => {
-                        write!(f, "- {} => reduce({} :=", token, reduce.left())?;
+                        let reduce = grammar.rule(reduce);
+                        write!(
+                            f,
+                            "- {} => reduce({} :=",
+                            grammar.terminal(token),
+                            grammar.nonterminal(&reduce.left())
+                        )?;
                         for r in reduce.right() {
-                            write!(f, " {}", r)?;
+                            match r {
+                                Symbol::T(t) => write!(f, " {}", grammar.terminal(t))?,
+                                Symbol::N(n) => write!(f, " {}", grammar.nonterminal(n))?,
+                            }
                         }
                         writeln!(f, ")")?;
                     }
                     Action::Accept => {
-                        writeln!(f, "- {} => accept", token)?;
+                        writeln!(f, "- {} => accept", grammar.terminal(token))?;
                     }
                     Action::Fail => {
-                        writeln!(f, "- {} => fail", token)?;
+                        writeln!(f, "- {} => fail", grammar.terminal(token))?;
                     }
                     Action::Inconsistent {
                         reason,
@@ -126,15 +152,24 @@ impl fmt::Display for DFA {
                         reduces,
                         accepted,
                     } => {
-                        writeln!(f, "- {} => inconsistent(reason = {:?})", token, reason)?;
+                        writeln!(
+                            f,
+                            "- {} => inconsistent(reason = {:?})",
+                            grammar.terminal(token),
+                            reason
+                        )?;
                         writeln!(f, "## conflicted actions")?;
                         if let Some(n) = shift {
                             writeln!(f, "  - shift({:02})", n)?;
                         }
                         for reduce in reduces {
-                            write!(f, "  - reduce({} :=", reduce.left())?;
+                            let reduce = grammar.rule(reduce);
+                            write!(f, "  - reduce({} :=", grammar.nonterminal(&reduce.left()))?;
                             for r in reduce.right() {
-                                write!(f, " {}", r)?;
+                                match r {
+                                    Symbol::T(t) => write!(f, " {}", grammar.terminal(t))?,
+                                    Symbol::N(n) => write!(f, " {}", grammar.nonterminal(n))?,
+                                }
                             }
                             writeln!(f, ")")?;
                         }
@@ -173,32 +208,32 @@ impl fmt::Display for NodeID {
 #[derive(Debug)]
 pub struct DFANode {
     item_set: LRItemSet,
-    actions: IndexMap<Terminal, Action>,
-    gotos: IndexMap<Nonterminal, NodeID>,
+    actions: IndexMap<TerminalID, Action>,
+    gotos: IndexMap<NonterminalID, NodeID>,
 }
 
 // LR(1) item
 // X: Y1 Y2 ... Yn という構文規則があったとき、それにマーカ位置を付与したもの
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 struct LRCoreItem {
     // grammer内におけるruleの識別子
-    rule: Rule,
+    rule: RuleID,
     // marker位置
     marker: usize,
 }
 
 //  - key: core item
 //  - value: 紐付けられた先読み記号 (Eq,Hashを実装できないので別に持つ)
-type LRItemSet = BTreeMap<LRCoreItem, IndexSet<Terminal>>;
+type LRItemSet = BTreeMap<LRCoreItem, IndexSet<TerminalID>>;
 type LRCoreItems = BTreeSet<LRCoreItem>;
 
 impl DFANode {
-    pub fn actions(&self) -> impl Iterator<Item = (&Terminal, &Action)> + '_ {
-        self.actions.iter()
+    pub fn actions(&self) -> impl Iterator<Item = (TerminalID, &Action)> + '_ {
+        self.actions.iter().map(|(token, action)| (*token, action))
     }
 
-    pub fn gotos(&self) -> impl Iterator<Item = (&Nonterminal, NodeID)> {
-        self.gotos.iter().map(|(symbol, goto)| (symbol, *goto))
+    pub fn gotos(&self) -> impl Iterator<Item = (NonterminalID, NodeID)> + '_ {
+        self.gotos.iter().map(|(symbol, goto)| (*symbol, *goto))
     }
 }
 
@@ -211,7 +246,7 @@ pub enum Action {
     Shift(NodeID),
 
     /// Reduce to the specified production rule.
-    Reduce(Rule),
+    Reduce(RuleID),
 
     /// Reduce to the top-level production rule and accept symbols.
     Accept,
@@ -226,7 +261,7 @@ pub enum Action {
     /// There are multiple conflicting actions for the lookahead symbol.
     Inconsistent {
         shift: Option<NodeID>,
-        reduces: Vec<Rule>,
+        reduces: Vec<RuleID>,
         accepted: bool,
         reason: ConflictReason,
     },
@@ -303,9 +338,9 @@ impl NodeExtractor<'_> {
             changed = false;
 
             // 候補の抽出
-            let mut added: IndexMap<LRCoreItem, IndexSet<Terminal>> = IndexMap::default();
+            let mut added: IndexMap<LRCoreItem, IndexSet<TerminalID>> = IndexMap::default();
             for (core, lookaheads) in &mut *items {
-                let rule = &core.rule;
+                let rule = self.grammar.rule(&core.rule);
 
                 // [X -> ... @ Y beta]
                 //  Y: one nonterminal symbol
@@ -320,17 +355,17 @@ impl NodeExtractor<'_> {
                 let x = self.first_sets.get(beta, lookaheads.iter().cloned());
                 for rule in self.grammar.rules() {
                     // Y: ... という形式の構文規則のみを対象にする
-                    if rule.left().id() != y_symbol.id() {
+                    if rule.left() != *y_symbol {
                         continue;
                     }
 
                     added
                         .entry(LRCoreItem {
-                            rule: rule.clone(),
+                            rule: rule.id(),
                             marker: 0,
                         })
                         .or_default()
-                        .extend(x.iter().cloned());
+                        .extend(x.iter().copied());
                 }
             }
 
@@ -350,7 +385,7 @@ impl NodeExtractor<'_> {
     fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<Symbol, LRItemSet> {
         let mut item_sets: IndexMap<Symbol, LRItemSet> = IndexMap::default();
         for (core, lookaheads) in items {
-            let rule = &core.rule;
+            let rule = self.grammar.rule(&core.rule);
 
             // markerが終わりまで到達していれば無視する
             if core.marker >= rule.right().len() {
@@ -389,10 +424,10 @@ impl<'g> DFAGenerator<'g> {
         let mut item_set = BTreeMap::new();
         item_set.insert(
             LRCoreItem {
-                rule: grammar.accept_rule().clone(),
+                rule: RuleID::ACCEPT,
                 marker: 0,
             },
-            Some(grammar.eoi().clone()).into_iter().collect(),
+            Some(TerminalID::EOI).into_iter().collect(),
         );
         pending_nodes
             .queue
@@ -499,8 +534,8 @@ impl<'g> DFAGenerator<'g> {
         for (orig_id, (item_set, edges)) in self.nodes {
             let id = new_node_ids[&orig_id];
 
-            let mut pending_actions: IndexMap<Terminal, PendingAction> = IndexMap::default();
-            let mut gotos: IndexMap<Nonterminal, NodeID> = IndexMap::default();
+            let mut pending_actions: IndexMap<TerminalID, PendingAction> = IndexMap::default();
+            let mut gotos: IndexMap<NonterminalID, NodeID> = IndexMap::default();
             for (symbol, target) in edges {
                 // shift, goto
                 let target = new_node_ids[&target];
@@ -515,13 +550,14 @@ impl<'g> DFAGenerator<'g> {
                 }
             }
             for (core_item, lookaheads) in &item_set {
+                let rule = self.extractor.grammar.rule(&core_item.rule);
                 // reduce, accept
-                if core_item.marker < core_item.rule.right().len() {
+                if core_item.marker < rule.right().len() {
                     continue;
                 }
                 for lookahead in lookaheads {
                     let action = pending_actions.entry(lookahead.clone()).or_default();
-                    if core_item.rule.id() == RuleID::ACCEPT {
+                    if core_item.rule == RuleID::ACCEPT {
                         action.accepted = true;
                     } else {
                         action.reduces.push(core_item.rule.clone());
@@ -529,9 +565,9 @@ impl<'g> DFAGenerator<'g> {
                 }
             }
 
-            let mut actions: IndexMap<Terminal, Action> = IndexMap::default();
+            let mut actions: IndexMap<TerminalID, Action> = IndexMap::default();
             for (symbol, action) in pending_actions {
-                let resolved = match resolve_conflict(&symbol, &action) {
+                let resolved = match resolve_conflict(self.extractor.grammar, symbol, &action) {
                     Ok(resolved) => resolved,
                     Err(reason) => Action::Inconsistent {
                         reason,
@@ -617,8 +653,8 @@ fn is_pgm_weakly_compatible_c2(items: &LRItemSet) -> bool {
 
 #[derive(Debug)]
 struct FirstSets {
-    nulls: IndexSet<Nonterminal>,
-    map: IndexMap<Symbol, IndexSet<Terminal>>,
+    nulls: IndexSet<NonterminalID>,
+    map: IndexMap<Symbol, IndexSet<TerminalID>>,
 }
 
 impl FirstSets {
@@ -626,15 +662,15 @@ impl FirstSets {
         let nulls = nulls_set(grammar);
 
         // First(T) = {} と初期化する
-        let mut map: IndexMap<Symbol, IndexSet<Terminal>> = IndexMap::default();
+        let mut map: IndexMap<Symbol, IndexSet<TerminalID>> = IndexMap::default();
         for terminal in grammar.terminals() {
             map.insert(
-                Symbol::T(terminal.clone()),
-                Some(terminal.clone()).into_iter().collect(),
+                Symbol::T(terminal.id()),
+                Some(terminal.id()).into_iter().collect(),
             );
         }
         for symbol in grammar.nonterminals() {
-            map.insert(Symbol::N(symbol.clone()), IndexSet::default());
+            map.insert(Symbol::N(symbol.id()), IndexSet::default());
         }
 
         // 制約条件の抽出
@@ -650,7 +686,7 @@ impl FirstSets {
         let mut constraints = vec![];
         for rule in grammar.rules().filter(|rule| rule.id() != RuleID::ACCEPT) {
             for symbol in rule.right() {
-                if !matches!(symbol, Symbol::N(n) if rule.left().id() == n.id()) {
+                if !matches!(symbol, Symbol::N(n) if rule.left() == *n) {
                     constraints.push(Constraint {
                         sup: Cow::Owned(Symbol::N(rule.left().clone())),
                         sub: symbol,
@@ -686,9 +722,9 @@ impl FirstSets {
     }
 
     /// `First(prefix lookaheads)`
-    pub fn get<L>(&self, prefix: &[Symbol], lookaheads: L) -> IndexSet<Terminal>
+    pub fn get<L>(&self, prefix: &[Symbol], lookaheads: L) -> IndexSet<TerminalID>
     where
-        L: IntoIterator<Item = Terminal>,
+        L: IntoIterator<Item = TerminalID>,
     {
         let mut res = IndexSet::default();
 
@@ -710,11 +746,11 @@ impl FirstSets {
 }
 
 /// Calculate the set of nullable symbols in this grammar.
-fn nulls_set(grammar: &Grammar) -> IndexSet<Nonterminal> {
+fn nulls_set(grammar: &Grammar) -> IndexSet<NonterminalID> {
     // ruleからnullableであることが分かっている場合は追加する
-    let mut nulls: IndexSet<Nonterminal> = grammar
+    let mut nulls: IndexSet<NonterminalID> = grammar
         .rules()
-        .filter_map(|rule| rule.right().is_empty().then(|| rule.left().clone()))
+        .filter_map(|rule| rule.right().is_empty().then(|| rule.left()))
         .collect();
 
     // 値が更新されなくなるまで繰り返す
@@ -722,7 +758,7 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<Nonterminal> {
     while changed {
         changed = false;
         for rule in grammar.rules() {
-            if nulls.contains(rule.left()) {
+            if nulls.contains(&rule.left()) {
                 continue;
             }
             // 右辺のsymbolsがすべてnullableかどうか
@@ -732,7 +768,7 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<Nonterminal> {
                 .all(|symbol| matches!(symbol, Symbol::N(n) if nulls.contains(n)));
             if is_rhs_nullable {
                 changed = true;
-                nulls.insert(rule.left().clone());
+                nulls.insert(rule.left());
                 continue;
             }
         }
@@ -744,12 +780,16 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<Nonterminal> {
 #[derive(Debug, Default)]
 struct PendingAction {
     shift: Option<NodeID>,
-    reduces: Vec<Rule>,
+    reduces: Vec<RuleID>,
     accepted: bool,
 }
 
 /// Attempts to resolve shift/reduce conflicts based on precedence/associativity.
-fn resolve_conflict(symbol: &Terminal, action: &PendingAction) -> Result<Action, ConflictReason> {
+fn resolve_conflict(
+    g: &Grammar,
+    symbol: TerminalID,
+    action: &PendingAction,
+) -> Result<Action, ConflictReason> {
     use Action::*;
 
     if action.accepted {
@@ -763,9 +803,9 @@ fn resolve_conflict(symbol: &Terminal, action: &PendingAction) -> Result<Action,
         (None, [reduce]) => Ok(Reduce(reduce.clone())),
 
         (Some(next), [reduce, remains @ ..]) => {
-            let shift_prec = symbol.precedence();
+            let shift_prec = g.terminal(&symbol).precedence();
 
-            let reduce_prec = reduce.precedence();
+            let reduce_prec = g.rule(reduce).precedence(g);
             let resolved = resolve_shift_reduce_conflict(shift_prec, reduce_prec)?;
 
             if matches!(resolved, Some(false)) && !remains.is_empty() {
@@ -773,7 +813,7 @@ fn resolve_conflict(symbol: &Terminal, action: &PendingAction) -> Result<Action,
             }
 
             for reduce in remains {
-                let reduce_prec = reduce.precedence();
+                let reduce_prec = g.rule(reduce).precedence(g);
                 let new_resolved = resolve_shift_reduce_conflict(shift_prec, reduce_prec)?;
                 if resolved != new_resolved {
                     return Err(ConflictReason::InconsistentShiftResolution);
@@ -842,7 +882,7 @@ mod tests {
         eprintln!("{}", grammar);
 
         let dfa = DFA::generate(&grammar);
-        eprintln!("DFA Nodes:\n---\n{}", dfa);
+        eprintln!("DFA Nodes:\n---\n{}", dfa.display(&grammar));
     }
 
     #[test]
@@ -884,6 +924,6 @@ mod tests {
         eprintln!("{}", grammar);
 
         let dfa = DFA::generate(&grammar);
-        eprintln!("DFA Nodes:\n---\n{}", dfa);
+        eprintln!("DFA Nodes:\n---\n{}", dfa.display(&grammar));
     }
 }

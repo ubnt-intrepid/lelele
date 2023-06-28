@@ -32,7 +32,7 @@ fn generate_parser(
     let dfa = DFA::generate(&grammar);
     fs::write(
         project_root.join(format!("{}.automaton", name)),
-        dfa.to_string(),
+        dfa.display(&grammar).to_string(),
     )?;
 
     let codegen = Codegen::new(&grammar, &dfa);

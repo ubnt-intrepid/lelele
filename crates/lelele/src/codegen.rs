@@ -235,9 +235,10 @@ const PARSE_TABLE: &[ lelele::phf::Map<u64, ParseAction> ] = &[\n",
                         format!("ParseAction::Shift(NodeID {{ __raw: {} }})", n)
                     }
                     Action::Reduce(rule) => {
+                        let rule = self.grammar.rule(rule);
                         format!(
                             "ParseAction::Reduce(SymbolID {{ __raw: {} }}, {})",
-                            rule.left().id().raw(),
+                            rule.left().raw(),
                             rule.right().len(),
                         )
                     }
@@ -245,7 +246,7 @@ const PARSE_TABLE: &[ lelele::phf::Map<u64, ParseAction> ] = &[\n",
                     Action::Fail => "ParseAction::Fail".into(),
                     Action::Inconsistent { .. } => "ParseAction::Fail".into(),
                 };
-                actions_g.entry(symbol.id().raw(), &action_g);
+                actions_g.entry(symbol.raw(), &action_g);
             }
 
             writeln!(f, "{},", actions_g.build())?;
@@ -261,10 +262,7 @@ const GOTO_TABLE: &[ lelele::phf::Map<u64, NodeID> ] = &[\n",
             actions_g.phf_path("lelele::phf");
 
             for (symbol, target) in node.gotos() {
-                actions_g.entry(
-                    symbol.id().raw(),
-                    &format!("NodeID {{ __raw: {} }}", target),
-                );
+                actions_g.entry(symbol.raw(), &format!("NodeID {{ __raw: {} }}", target));
             }
 
             writeln!(f, "{},", actions_g.build())?;
