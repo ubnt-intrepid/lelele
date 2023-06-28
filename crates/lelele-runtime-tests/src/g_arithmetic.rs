@@ -1,6 +1,10 @@
-pub mod p {
+mod p {
     include!(concat!(env!("OUT_DIR"), "/g_arithmetic/parser.rs"));
 }
+pub use p::*;
+
+#[allow(unused_imports)]
+use lelele_runtime::parser::{ParseEvent::*, ParseItem::*, Parser};
 
 #[allow(unused_macros)]
 macro_rules! assert_matches {
@@ -9,10 +13,7 @@ macro_rules! assert_matches {
 
 #[test]
 fn simple_expr() {
-    use lelele_runtime::parser::{ParseEvent::*, ParseItem::*};
-    use p::{SymbolID, TokenID};
-
-    let mut parser = p::parser();
+    let mut parser = Parser::new(ParserDef::default());
 
     macro_rules! offer_input {
         ($tok:path) => {
@@ -108,10 +109,7 @@ fn simple_expr() {
 
 #[test]
 fn with_unary_minus() {
-    use lelele_runtime::parser::{ParseEvent::*, ParseItem::*};
-    use p::{SymbolID, TokenID};
-
-    let mut parser = p::parser();
+    let mut parser = Parser::new(ParserDef::default());
 
     macro_rules! offer_input {
         ($tok:path) => {

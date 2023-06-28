@@ -1,10 +1,10 @@
 use anyhow::Context;
 use lelele_example_sketch::{
     lexer::{lexer, Token},
-    parser::{parser, SymbolID},
+    parser::{ParserDef, SymbolID},
     syntax::Expr,
 };
-use lelele_runtime::parser::{ParseEvent, ParseItem};
+use lelele_runtime::parser::{ParseEvent, ParseItem, Parser};
 use std::env;
 use ParseItem::*;
 
@@ -16,7 +16,7 @@ fn main() -> anyhow::Result<()> {
 
     let input = env::args().nth(1).context("missing input")?;
     let mut tokens = lexer(&input);
-    let mut parser = parser();
+    let mut parser = Parser::new(ParserDef::default());
     let mut ast_stack = vec![];
     let parsed = loop {
         let span = tracing::trace_span!("resume");

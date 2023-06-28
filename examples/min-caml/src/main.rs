@@ -1,6 +1,6 @@
 use anyhow::Context;
-use lelele_example_min_caml::{lexer::lexer, parser::parser};
-use lelele_runtime::parser::ParseEvent;
+use lelele_example_min_caml::{lexer::lexer, parser::ParserDef};
+use lelele_runtime::parser::{ParseEvent, Parser};
 use std::env;
 
 fn main() -> anyhow::Result<()> {
@@ -11,7 +11,7 @@ fn main() -> anyhow::Result<()> {
 
     let input = env::args().nth(1).context("missing input")?;
     let mut tokens = lexer(&input);
-    let mut parser = parser();
+    let mut parser = Parser::new(ParserDef::default());
 
     loop {
         let event = parser.resume().map_err(|e| {
