@@ -52,6 +52,7 @@ where
     TDef: ParserDef,
 {
     Pending,
+    WaitingInput,
     Shifting(TDef::State),
     Reducing(TDef::Symbol, usize),
     Accepting,
@@ -68,6 +69,7 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Pending => f.debug_struct("Pending").finish(),
+            Self::WaitingInput => f.debug_struct("WaitingInput").finish(),
             Self::Shifting(next) => f.debug_tuple("Shifting").field(next).finish(),
             Self::Reducing(symbol, n) => f.debug_tuple("Reducing").field(symbol).field(n).finish(),
             Self::Accepting => f.debug_struct("Accepting").finish(),
@@ -94,9 +96,41 @@ where
         }
     }
 
+    pub fn offer_token(&mut self, token: TTok) -> Result<Option<TTok>, ParseError> {
+        if !matches!(self.state, ParserState::WaitingInput) {
+            return Err(ParseError::AlreadyOfferredInput);
+        }
+        self.state = ParserState::Pending;
+        match self.lookahead {
+            Some(..) => Ok(Some(token)),
+            None => {
+                self.lookahead.replace(Some(token));
+                Ok(None)
+            }
+        }
+    }
+
+    pub fn offer_eoi(&mut self) -> Result<bool, ParseError> {
+        if !matches!(self.state, ParserState::WaitingInput) {
+            return Err(ParseError::AlreadyOfferredInput);
+        }
+        self.state = ParserState::Pending;
+        match self.lookahead {
+            Some(..) => Ok(false),
+            None => {
+                self.lookahead.replace(None);
+                Ok(true)
+            }
+        }
+    }
+
     /// Drives the internal LR automaton to the point where the user of this parser needs to do something.
     pub fn resume(&mut self) -> Result<ParseEvent<'_, TDef, TTok>, ParseError> {
         match self.state {
+            ParserState::WaitingInput => {
+                return Err(ParseError::TokenNotOffered);
+            }
+
             ParserState::Shifting(next) => {
                 let lookahead = self
                     .lookahead
@@ -140,9 +174,8 @@ where
         let lookahead = match self.lookahead {
             Some(ref lookahead) => lookahead.as_ref().map(|t| t.to_index()),
             None => {
-                return Ok(ParseEvent::InputNeeded(SinkInput {
-                    lookahead: &mut self.lookahead,
-                }))
+                self.state = ParserState::WaitingInput;
+                return Ok(ParseEvent::InputNeeded);
             }
         };
         let action = self
@@ -198,7 +231,7 @@ where
     TDef: ParserDef,
     TTok: Token<TDef::Token>,
 {
-    InputNeeded(SinkInput<'p, TTok>),
+    InputNeeded,
     Shifting(&'p TTok),
     AboutToReduce(TDef::Symbol, &'p [ParseItem<TTok, TDef::Symbol>]),
     AboutToAccept(&'p ParseItem<TTok, TDef::Symbol>),
@@ -209,32 +242,6 @@ where
     },
     Accepted,
     Rejected,
-}
-
-#[derive(Debug)]
-pub struct SinkInput<'p, TTok> {
-    lookahead: &'p mut Option<Option<TTok>>,
-}
-impl<'p, TTok> SinkInput<'p, TTok> {
-    pub fn offer_token(self, token: TTok) -> Option<TTok> {
-        match self.lookahead {
-            Some(..) => Some(token),
-            None => {
-                self.lookahead.replace(Some(token));
-                None
-            }
-        }
-    }
-
-    pub fn offer_eoi(self) -> bool {
-        match self.lookahead {
-            Some(..) => false,
-            None => {
-                self.lookahead.replace(None);
-                true
-            }
-        }
-    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -260,6 +267,9 @@ pub enum ParseError {
 
     #[error("token is not offered")]
     TokenNotOffered,
+
+    #[error("token has already been offerred")]
+    AlreadyOfferredInput,
 
     #[error("unexpected EOI")]
     UnexpectedEOI,

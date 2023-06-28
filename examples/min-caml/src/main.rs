@@ -19,15 +19,15 @@ fn main() -> anyhow::Result<()> {
             e
         })?;
         match event {
-            ParseEvent::InputNeeded(sink) => match tokens.next() {
+            ParseEvent::InputNeeded => match tokens.next() {
                 Some(tok) => {
                     let tok = tok?;
                     tracing::trace!("offer token {:?}", tok);
-                    sink.offer_token(tok);
+                    parser.offer_token(tok)?;
                 }
                 None => {
                     tracing::trace!("offer end of input");
-                    sink.offer_eoi();
+                    parser.offer_eoi()?;
                 }
             },
 

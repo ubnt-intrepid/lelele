@@ -18,16 +18,16 @@ fn simple_expr() {
     macro_rules! offer_input {
         ($tok:path) => {
             match parser.resume() {
-                Ok(InputNeeded(sink)) => {
-                    sink.offer_token($tok);
+                Ok(InputNeeded) => {
+                    parser.offer_token($tok).unwrap();
                 }
                 _ => panic!("mismatched"),
             }
         };
         () => {
             match parser.resume() {
-                Ok(InputNeeded(sink)) => {
-                    sink.offer_eoi();
+                Ok(InputNeeded) => {
+                    parser.offer_eoi().unwrap();
                 }
                 _ => panic!("mismatched"),
             }
@@ -89,16 +89,16 @@ fn with_unary_minus() {
     macro_rules! offer_input {
         ($tok:path) => {
             match parser.resume() {
-                Ok(InputNeeded(sink)) => {
-                    sink.offer_token($tok);
+                Ok(InputNeeded) => {
+                    parser.offer_token($tok).unwrap();
                 }
                 _ => panic!("mismatched"),
             }
         };
         () => {
             match parser.resume() {
-                Ok(InputNeeded(sink)) => {
-                    sink.offer_eoi();
+                Ok(InputNeeded) => {
+                    parser.offer_eoi().unwrap();
                 }
                 _ => panic!("mismatched"),
             }
