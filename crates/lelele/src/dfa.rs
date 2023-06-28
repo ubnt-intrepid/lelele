@@ -1,11 +1,11 @@
 //! Definition and generation of LR(1) automata.
 
 use crate::{
-    grammar::{Assoc, Grammar, Precedence, Rule, RuleID, Symbol},
+    grammar::{Assoc, Grammar, Nonterminal, Precedence, Rule, RuleID, Symbol, Terminal},
     IndexMap, IndexSet,
 };
 use std::{
-    borrow::Borrow,
+    borrow::{Borrow, Cow},
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet, VecDeque},
     fmt,
@@ -173,8 +173,8 @@ impl fmt::Display for NodeID {
 #[derive(Debug)]
 pub struct DFANode {
     item_set: LRItemSet,
-    actions: IndexMap<Symbol, Action>,
-    gotos: IndexMap<Symbol, NodeID>,
+    actions: IndexMap<Terminal, Action>,
+    gotos: IndexMap<Nonterminal, NodeID>,
 }
 
 // LR(1) item
@@ -189,15 +189,15 @@ struct LRCoreItem {
 
 //  - key: core item
 //  - value: 紐付けられた先読み記号 (Eq,Hashを実装できないので別に持つ)
-type LRItemSet = BTreeMap<LRCoreItem, IndexSet<Symbol>>;
+type LRItemSet = BTreeMap<LRCoreItem, IndexSet<Terminal>>;
 type LRCoreItems = BTreeSet<LRCoreItem>;
 
 impl DFANode {
-    pub fn actions(&self) -> impl Iterator<Item = (&Symbol, &Action)> + '_ {
+    pub fn actions(&self) -> impl Iterator<Item = (&Terminal, &Action)> + '_ {
         self.actions.iter()
     }
 
-    pub fn gotos(&self) -> impl Iterator<Item = (&Symbol, NodeID)> {
+    pub fn gotos(&self) -> impl Iterator<Item = (&Nonterminal, NodeID)> {
         self.gotos.iter().map(|(symbol, goto)| (symbol, *goto))
     }
 }
@@ -303,21 +303,21 @@ impl NodeExtractor<'_> {
             changed = false;
 
             // 候補の抽出
-            let mut added: IndexMap<LRCoreItem, IndexSet<Symbol>> = IndexMap::default();
+            let mut added: IndexMap<LRCoreItem, IndexSet<Terminal>> = IndexMap::default();
             for (core, lookaheads) in &mut *items {
                 let rule = &core.rule;
 
                 // [X -> ... @ Y beta]
                 //  Y: one nonterminal symbol
                 let (y_symbol, beta) = match &rule.right()[core.marker..] {
-                    [y_symbol, beta @ ..] if !y_symbol.is_terminal() => (y_symbol, beta),
+                    [Symbol::N(y_symbol), beta @ ..] => (y_symbol, beta),
                     _ => continue,
                 };
 
                 // lookaheads = {x1,x2,...,xk} としたとき、
                 //   x \in First(beta x1) \cup ... \cup First(beta xk)
                 // を満たすすべての終端記号を考える
-                let x = self.first_sets.get(beta.into_iter(), lookaheads.iter());
+                let x = self.first_sets.get(beta, lookaheads.iter().cloned());
                 for rule in self.grammar.rules() {
                     // Y: ... という形式の構文規則のみを対象にする
                     if rule.left().id() != y_symbol.id() {
@@ -499,16 +499,19 @@ impl<'g> DFAGenerator<'g> {
         for (orig_id, (item_set, edges)) in self.nodes {
             let id = new_node_ids[&orig_id];
 
-            let mut pending_actions: IndexMap<Symbol, PendingAction> = IndexMap::default();
-            let mut gotos: IndexMap<Symbol, NodeID> = IndexMap::default();
+            let mut pending_actions: IndexMap<Terminal, PendingAction> = IndexMap::default();
+            let mut gotos: IndexMap<Nonterminal, NodeID> = IndexMap::default();
             for (symbol, target) in edges {
                 // shift, goto
                 let target = new_node_ids[&target];
-                if symbol.is_terminal() {
-                    let action = pending_actions.entry(symbol).or_default();
-                    action.shift.replace(target);
-                } else {
-                    gotos.insert(symbol, target);
+                match symbol {
+                    Symbol::T(t) => {
+                        let action = pending_actions.entry(t).or_default();
+                        action.shift.replace(target);
+                    }
+                    Symbol::N(n) => {
+                        gotos.insert(n, target);
+                    }
                 }
             }
             for (core_item, lookaheads) in &item_set {
@@ -526,7 +529,7 @@ impl<'g> DFAGenerator<'g> {
                 }
             }
 
-            let mut actions: IndexMap<Symbol, Action> = IndexMap::default();
+            let mut actions: IndexMap<Terminal, Action> = IndexMap::default();
             for (symbol, action) in pending_actions {
                 let resolved = match resolve_conflict(&symbol, &action) {
                     Ok(resolved) => resolved,
@@ -614,42 +617,92 @@ fn is_pgm_weakly_compatible_c2(items: &LRItemSet) -> bool {
 
 #[derive(Debug)]
 struct FirstSets {
-    nulls: IndexSet<Symbol>,
-    first_sets: IndexMap<Symbol, IndexSet<Symbol>>,
+    nulls: IndexSet<Nonterminal>,
+    map: IndexMap<Symbol, IndexSet<Terminal>>,
 }
 
 impl FirstSets {
     fn new(grammar: &Grammar) -> Self {
         let nulls = nulls_set(grammar);
-        let first_sets = first_set(grammar, &nulls);
-        Self { nulls, first_sets }
+
+        // First(T) = {} と初期化する
+        let mut map: IndexMap<Symbol, IndexSet<Terminal>> = IndexMap::default();
+        for terminal in grammar.terminals() {
+            map.insert(
+                Symbol::T(terminal.clone()),
+                Some(terminal.clone()).into_iter().collect(),
+            );
+        }
+        for symbol in grammar.nonterminals() {
+            map.insert(Symbol::N(symbol.clone()), IndexSet::default());
+        }
+
+        // 制約条件の抽出
+        // X -> Y1 Y2 ... Yn という構文規則に対し、
+        //  1. Y1,Y2,...と検索していき、最初に来る非nullableな記号を Yk とする
+        //    - Y1 Y2 ... Y(k-1) が nullable で Yk が non-nullable となる
+        //  2. Yi (i=1,2,..,k) それぞれに対し First(X) \supseteq First(Yi) という制約を追加する
+        #[derive(Debug)]
+        struct Constraint<'g> {
+            sup: Cow<'g, Symbol>,
+            sub: &'g Symbol,
+        }
+        let mut constraints = vec![];
+        for rule in grammar.rules().filter(|rule| rule.id() != RuleID::ACCEPT) {
+            for symbol in rule.right() {
+                if !matches!(symbol, Symbol::N(n) if rule.left().id() == n.id()) {
+                    constraints.push(Constraint {
+                        sup: Cow::Owned(Symbol::N(rule.left().clone())),
+                        sub: symbol,
+                    });
+                }
+                if !matches!(symbol, Symbol::N(n) if nulls.contains(n)) {
+                    break;
+                }
+            }
+        }
+
+        // 制約条件の解消
+        // First(A) \subseteq First(B) が満たされるよう First(A) の要素を First(B) に追加するだけ。
+        // これをすべての制約条件に対して繰り返す
+        let mut changed = true;
+        while changed {
+            changed = false;
+
+            for Constraint { sup, sub } in &constraints {
+                let mut superset = map.remove((**sup).borrow()).unwrap();
+                let subset = map.get(*sub).unwrap();
+                for tok in subset {
+                    if !superset.contains(tok) {
+                        superset.insert(tok.clone());
+                        changed = true;
+                    }
+                }
+                map.insert((**sup).to_owned(), superset);
+            }
+        }
+
+        Self { nulls, map }
     }
 
     /// `First(prefix lookaheads)`
-    pub fn get<P, L>(&self, prefix: P, lookaheads: L) -> IndexSet<Symbol>
+    pub fn get<L>(&self, prefix: &[Symbol], lookaheads: L) -> IndexSet<Terminal>
     where
-        P: IntoIterator,
-        P::Item: Borrow<Symbol>,
-        L: IntoIterator,
-        L::Item: Borrow<Symbol>,
+        L: IntoIterator<Item = Terminal>,
     {
         let mut res = IndexSet::default();
 
         let mut is_end = false;
-        for token in prefix {
-            res.extend(self.first_sets[token.borrow()].iter().cloned());
-            if !self.nulls.contains(token.borrow()) {
+        for symbol in prefix {
+            res.extend(self.map[symbol].iter().cloned());
+            if !matches!(symbol, Symbol::N(n) if self.nulls.contains(n)) {
                 is_end = true;
                 break;
             }
         }
 
         if !is_end {
-            res.extend(
-                lookaheads
-                    .into_iter()
-                    .flat_map(|x| self.first_sets[x.borrow()].clone()),
-            );
+            res.extend(lookaheads);
         }
 
         res
@@ -657,9 +710,9 @@ impl FirstSets {
 }
 
 /// Calculate the set of nullable symbols in this grammar.
-fn nulls_set(grammar: &Grammar) -> IndexSet<Symbol> {
+fn nulls_set(grammar: &Grammar) -> IndexSet<Nonterminal> {
     // ruleからnullableであることが分かっている場合は追加する
-    let mut nulls: IndexSet<Symbol> = grammar
+    let mut nulls: IndexSet<Nonterminal> = grammar
         .rules()
         .filter_map(|rule| rule.right().is_empty().then(|| rule.left().clone()))
         .collect();
@@ -669,11 +722,14 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<Symbol> {
     while changed {
         changed = false;
         for rule in grammar.rules() {
-            if nulls.contains(&rule.left().id()) {
+            if nulls.contains(rule.left()) {
                 continue;
             }
             // 右辺のsymbolsがすべてnullableかどうか
-            let is_rhs_nullable = rule.right().iter().all(|t| nulls.contains(&t.id()));
+            let is_rhs_nullable = rule
+                .right()
+                .iter()
+                .all(|symbol| matches!(symbol, Symbol::N(n) if nulls.contains(n)));
             if is_rhs_nullable {
                 changed = true;
                 nulls.insert(rule.left().clone());
@@ -685,73 +741,6 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<Symbol> {
     nulls
 }
 
-/// Constructs the instance for calculating first sets in this grammar.
-fn first_set(grammar: &Grammar, nulls: &IndexSet<Symbol>) -> IndexMap<Symbol, IndexSet<Symbol>> {
-    let mut map: IndexMap<Symbol, IndexSet<Symbol>> = IndexMap::default();
-
-    // terminal symbols については First(T) = {T} になる
-    for token in grammar.terminals() {
-        map.insert(token.clone(), Some(token.clone()).into_iter().collect());
-    }
-
-    // nonterminal symbols は First(T) = {} と初期化する
-    for symbol in grammar.nonterminals() {
-        map.insert(symbol.clone(), IndexSet::default());
-    }
-
-    // 制約条件の抽出
-    // X -> Y1 Y2 ... Yn という構文規則に対し、
-    //  1. Y1,Y2,...と検索していき、最初に来る非nullableな記号を Yk とする
-    //    - Y1 Y2 ... Y(k-1) が nullable で Yk が non-nullable となる
-    //  2. Yi (i=1,2,..,k) それぞれに対し First(X) \supseteq First(Yi) という制約を追加する
-    #[derive(Debug)]
-    struct Constraint<'g> {
-        sup: &'g Symbol,
-        sub: &'g Symbol,
-    }
-    let mut constraints = vec![];
-    for rule in grammar
-        .rules()
-        .flat_map(|rule| (rule.id() != RuleID::ACCEPT).then_some(rule))
-    {
-        for symbol in rule.right() {
-            if rule.left().id() != symbol.id() {
-                constraints.push(Constraint {
-                    sup: rule.left(),
-                    sub: symbol,
-                });
-            }
-            if !nulls.contains(&symbol.id()) {
-                break;
-            }
-        }
-    }
-
-    // 制約条件の解消
-    // First(A) \subseteq First(B) が満たされるよう First(A) の要素を First(B) に追加するだけ。
-    // これをすべての制約条件に対して繰り返す
-    let mut changed = true;
-    while changed {
-        changed = false;
-
-        for Constraint { sup, sub } in &constraints {
-            let mut superset = map.remove(*sup).unwrap();
-            let subset = map.get(*sub).unwrap();
-
-            for tok in subset {
-                if !superset.contains(tok) {
-                    superset.insert(tok.clone());
-                    changed = true;
-                }
-            }
-
-            map.insert((*sup).clone(), superset);
-        }
-    }
-
-    map
-}
-
 #[derive(Debug, Default)]
 struct PendingAction {
     shift: Option<NodeID>,
@@ -760,7 +749,7 @@ struct PendingAction {
 }
 
 /// Attempts to resolve shift/reduce conflicts based on precedence/associativity.
-fn resolve_conflict(symbol: &Symbol, action: &PendingAction) -> Result<Action, ConflictReason> {
+fn resolve_conflict(symbol: &Terminal, action: &PendingAction) -> Result<Action, ConflictReason> {
     use Action::*;
 
     if action.accepted {

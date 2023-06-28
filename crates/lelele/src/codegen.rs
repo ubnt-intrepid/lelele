@@ -2,7 +2,7 @@
 
 use crate::{
     dfa::{Action, NodeID, DFA},
-    grammar::{Grammar, SymbolID},
+    grammar::{Grammar, TerminalID},
 };
 use std::fmt;
 
@@ -60,7 +60,7 @@ impl TokenID {\n",
         writeln!(
             f,
             "const __EOI: Self = Self {{ __raw: {} }};",
-            SymbolID::EOI.raw(),
+            TerminalID::EOI.raw(),
         )?;
 
         for terminal in self.grammar.terminals() {
