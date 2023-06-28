@@ -1,29 +1,25 @@
 use anyhow::Context;
-use lelele::{
-    codegen::Codegen,
-    dfa::DFA,
-    grammar::{Grammar, GrammarDef, GrammarDefError},
-};
-use lelele_tests::grammars;
+use lelele::{codegen::Codegen, dfa::DFA};
 use std::{env, fs, path::PathBuf};
 
 fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
 
-    generate_parser("g_arithmetic", grammars::g_arithmetic).context("generating g_arithmetic")?;
-    generate_parser("g_arithmetic_prec", grammars::g_arithmetic_prec)
-        .context("generating g_arithmetic")?;
+    generate_parser("arithmetic").context("generating g_arithmetic")?;
+    generate_parser("arithmetic_prec").context("generating g_arithmetic")?;
 
     Ok(())
 }
 
-fn generate_parser(
-    name: &str,
-    grammar_def: impl FnOnce(&mut GrammarDef<'_>) -> Result<(), GrammarDefError>,
-) -> anyhow::Result<()> {
+fn generate_parser(name: &str) -> anyhow::Result<()> {
     let project_root = env::var("CARGO_MANIFEST_DIR").map(PathBuf::from).unwrap();
+    let test_grammars_root = project_root
+        .join("../lelele-syntax/tests")
+        .canonicalize()
+        .context("could not obtain test grammar file directory")?;
 
-    let grammar = Grammar::define(grammar_def).unwrap();
+    let grammar =
+        lelele_syntax::grammar_from_file(&test_grammars_root.join(format!("{}.lll", name)))?;
     fs::write(
         project_root.join(format!("{}.grammar", name)),
         grammar.to_string(),

@@ -1,0 +1,38 @@
+{
+  "name": "lelele-vscode",
+  "displayName": "lelele-vscode",
+  "version": "0.0.1",
+  "description": "Language support for Lelele grammar files",
+  "author": {
+    "name": "Yusuke Sasaki",
+    "email": "yusuke.sasaki.nuem@gmail.com"
+  },
+  "repository": {
+    "url": "https://github.com/ubnt-intrepid/lelele.git",
+    "type": "git",
+    "directory": "lelele-vscode"
+  },
+  "engines": {
+    "vscode": "^1.79.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "lelele",
+        "aliases": ["Lelele", "lll"],
+        "extensions": [".lll"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lelele",
+        "scopeName": "source.lelele",
+        "path": "./syntaxes/lelele.tmLanguage.json"
+      }
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+// An arithmetic grammar (cascading style)
+
+@terminal LPAREN, RPAREN, PLUS, MINUS, STAR, SLASH, NUM;
+
+@nonterminal Expr, Term, Factor, Atom;
+@start Expr;
+
+@rule Expr :=
+    | Expr PLUS Term
+    | Expr MINUS Term
+    | Term
+    ;
+    
+@rule Term :=
+    | Term STAR Factor
+    | Term SLASH Factor
+    | Factor 
+    ;
+
+@rule Factor :=
+    | MINUS Factor
+    | Atom
+    ;
+
+@rule Atom :=
+    | NUM
+    | LPAREN Expr RPAREN
+    ;

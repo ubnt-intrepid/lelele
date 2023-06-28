@@ -1,0 +1,26 @@
+/// imported from <todo>
+
+@terminal COMMA, COLON, ID;
+
+@nonterminal Def, ParamSpec, ReturnSpec, Type, Name, NameList;
+@start Def;
+
+@rule Def := ParamSpec ReturnSpec COMMA;
+
+@rule ParamSpec :=
+    | Type 
+    | NameList COLON Type
+    ;
+
+@rule ReturnSpec :=
+    | Type 
+    | Name COLON Type
+    ;
+
+@rule Type := ID;
+@rule Name := ID;
+
+@rule NameList :=
+    | Name
+    | Name COMMA NameList
+    ;

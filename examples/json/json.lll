@@ -1,0 +1,39 @@
+/// imported from https://json.org/
+
+@terminal LBRACKET, RBRACKET, LBRACE, RBRACE, COMMA, COLON,
+          NULL, TRUE, FALSE, NUMBER, STRING;
+
+@nonterminal Value, Array, Object, Member, Members, Elements;
+@start Value;
+
+@rule Value :=
+    | Object
+    | Array
+    | STRING
+    | NUMBER
+    | TRUE
+    | FALSE
+    | NULL
+    ;
+
+@rule Object :=
+    | LBRACKET RBRACKET
+    | LBRACKET Members RBRACKET
+    ;
+
+@rule Members :=
+    | Member
+    | Member COMMA Members
+    ;
+
+@rule Member := STRING COLON Value;
+
+@rule Array :=
+    | LBRACE RBRACE
+    | LBRACE Elements RBRACE
+    ;
+
+@rule Elements :=
+    | Value
+    | Value COMMA Elements
+    ;

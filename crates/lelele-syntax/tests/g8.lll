@@ -1,0 +1,10 @@
+// imported from <todo>
+
+@terminal X, Y, S, PLUS;
+@nonterminal a, b, c, d, e;
+
+@rule a := a b | b ;
+@rule b := c ;
+@rule c := d | X Y ;
+@rule d := S e ;
+@rule e := e PLUS Y | Y | @empty ;

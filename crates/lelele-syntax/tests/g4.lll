@@ -1,0 +1,14 @@
+// imported from <todo>
+
+@terminal PLUS, LPAREN, RPAREN, NUM;
+@nonterminal E, T;
+
+@rule E :=
+    | E PLUS T
+    | T
+    ;
+
+@rule T :=
+    | LPAREN E RPAREN
+    | NUM
+    ;

@@ -323,6 +323,7 @@ version = "0.0.0-dev"
 dependencies = [
  "indexmap",
  "rustc-hash",
+ "thiserror",
  "unicode-ident",
 ]
 
@@ -333,6 +334,7 @@ dependencies = [
  "anyhow",
  "lelele",
  "lelele-runtime",
+ "lelele-syntax",
  "logos",
  "tracing",
  "tracing-subscriber",
@@ -346,6 +348,7 @@ dependencies = [
  "indexmap",
  "lelele",
  "lelele-runtime",
+ "lelele-syntax",
  "logos",
  "tracing",
  "tracing-subscriber",
@@ -358,6 +361,7 @@ dependencies = [
  "anyhow",
  "lelele",
  "lelele-runtime",
+ "lelele-syntax",
  "logos",
  "tracing",
  "tracing-subscriber",
@@ -377,14 +381,27 @@ dependencies = [
  "anyhow",
  "lelele",
  "lelele-runtime",
- "lelele-tests",
+ "lelele-syntax",
 ]
 
 [[package]]
-name = "lelele-tests"
+name = "lelele-syntax"
+version = "0.0.0-dev"
+dependencies = [
+ "anyhow",
+ "criterion",
+ "lelele",
+ "lelele-runtime",
+ "logos",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "lelele-syntax-codegen"
 version = "0.0.0"
 dependencies = [
- "criterion",
+ "anyhow",
  "lelele",
 ]
 

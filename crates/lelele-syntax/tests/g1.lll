@@ -1,0 +1,16 @@
+/// imported from <todo>
+
+@terminal PLUS, STAR, A;
+
+@nonterminal E, T;
+@start E;
+
+@rule E :=
+    | E PLUS T
+    | T
+    ;
+
+@rule T :=
+    | T STAR A 
+    | A
+    ;

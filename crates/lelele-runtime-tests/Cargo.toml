@@ -7,7 +7,7 @@ publish = false
 [build-dependencies]
 anyhow = { workspace = true }
 lelele = { path = "../lelele" }
-lelele-tests = { path = "../lelele-tests" }
+lelele-syntax = { path = "../lelele-syntax" }
 
 [dependencies]
 lelele-runtime = { path = "../lelele-runtime" }

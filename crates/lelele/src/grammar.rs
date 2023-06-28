@@ -271,6 +271,9 @@ impl fmt::Display for Grammar {
                     Symbol::N(n) => write!(f, "{}", self.nonterminal(n))?,
                 }
             }
+            if let Some(prec) = &rule.precedence {
+                write!(f, " (priority={}, assoc={})", prec.priority, prec.assoc)?;
+            }
             writeln!(f)?;
         }
 
@@ -371,12 +374,14 @@ impl<'def> GrammarDef<'def> {
     /// Declare a terminal symbol used in this grammar.
     pub fn terminal(
         &mut self,
-        export_name: impl Into<Cow<'static, str>>,
+        export_name: &str,
         precedence: Option<Precedence>,
-    ) -> Result<SymbolRef<'def>, GrammarDefError> {
-        let export_name = verify_ident(export_name.into()).ok_or_else(|| GrammarDefError {
-            msg: "incorrect token name".into(),
-        })?;
+    ) -> Result<SymbolRef, GrammarDefError> {
+        if !verify_ident(export_name) {
+            return Err(GrammarDefError {
+                msg: "incorrect token name".into(),
+            });
+        }
 
         for terminal in &self.terminals {
             if matches!(terminal.export_name(), Some(name) if name == export_name) {
@@ -394,27 +399,25 @@ impl<'def> GrammarDef<'def> {
 
         self.terminals.insert(Terminal {
             id,
-            export_name: Some(export_name),
+            export_name: Some(export_name.to_owned().into()),
             precedence,
         });
 
         Ok(SymbolRef {
             inner: SymbolRefInner::T(id),
-            _marker: PhantomData,
         })
     }
 
     /// Declare a nonterminal symbol used in this grammar.
-    pub fn nonterminal(
-        &mut self,
-        export_name: impl Into<Cow<'static, str>>,
-    ) -> Result<SymbolRef<'def>, GrammarDefError> {
-        let export_name = verify_ident(export_name.into()).ok_or_else(|| GrammarDefError {
-            msg: "incorrect symbol name".into(),
-        })?;
+    pub fn nonterminal(&mut self, export_name: &str) -> Result<SymbolRef, GrammarDefError> {
+        if !verify_ident(export_name) {
+            return Err(GrammarDefError {
+                msg: "incorrect symbol name".into(),
+            });
+        }
 
         for nonterminal in &self.nonterminals {
-            if matches!(nonterminal.export_name(), Some(name) if *name == export_name) {
+            if matches!(nonterminal.export_name(), Some(name) if name == export_name) {
                 return Err(GrammarDefError {
                     msg: format!(
                         "The nonterminal export `{}' has already been used",
@@ -429,12 +432,11 @@ impl<'def> GrammarDef<'def> {
 
         self.nonterminals.insert(Nonterminal {
             id,
-            export_name: Some(export_name),
+            export_name: Some(export_name.to_owned().into()),
         });
 
         Ok(SymbolRef {
             inner: SymbolRefInner::N(id),
-            _marker: PhantomData,
         })
     }
 
@@ -446,7 +448,7 @@ impl<'def> GrammarDef<'def> {
         precedence: Option<Precedence>,
     ) -> Result<(), GrammarDefError>
     where
-        I: IntoIterator<Item = SymbolRef<'def>>,
+        I: IntoIterator<Item = SymbolRef>,
     {
         let left = match left.inner {
             SymbolRefInner::T(..) => {
@@ -526,9 +528,8 @@ impl<'def> GrammarDef<'def> {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct SymbolRef<'def> {
+pub struct SymbolRef {
     inner: SymbolRefInner,
-    _marker: PhantomData<&'def mut ()>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -537,48 +538,56 @@ enum SymbolRefInner {
     N(NonterminalID),
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("Grammar define error: {}", msg)]
 pub struct GrammarDefError {
-    #[allow(dead_code)]
     msg: String,
 }
+impl From<&str> for GrammarDefError {
+    fn from(msg: &str) -> Self {
+        Self { msg: msg.into() }
+    }
+}
+impl From<String> for GrammarDefError {
+    fn from(msg: String) -> Self {
+        Self { msg }
+    }
+}
 
-fn verify_ident<T: AsRef<str>>(t: T) -> Option<T> {
-    let mut s = t.as_ref();
-
+fn verify_ident(mut s: &str) -> bool {
     if s.is_empty() {
         // The identifier must not be empty.
-        return None;
+        return false;
     }
 
     if s.bytes().all(|b| b >= b'0' && b <= b'9') {
         // The number must not be identifer.
-        return None;
+        return false;
     }
 
     if s.starts_with("r#") {
         s = &s[2..];
         if matches!(s, "crate" | "self" | "super" | "Self") {
             // unexpected raw identifier
-            return None;
+            return false;
         }
     } else if is_strict_keyword(s) || is_reserved(s) {
         // Reserved keyword specified.
-        return None;
+        return false;
     }
 
     let mut chars = s.chars();
     let first = chars.next().unwrap();
     if !is_ident_start(first) {
         // The identifier must be started with XID-Start.
-        return None;
+        return false;
     }
     if chars.any(|ch| !is_ident_continue(ch)) {
         // The idenfier must be continued with XID-Continue.
-        return None;
+        return false;
     }
 
-    Some(t)
+    true
 }
 
 fn is_ident_start(ch: char) -> bool {

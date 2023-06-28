@@ -1,0 +1,22 @@
+// A simple arithmetic grammar.
+
+@prec { assoc = left } add;
+@prec { assoc = left } mul;
+@prec { assoc = right } neg;
+
+@terminal LPAREN, RPAREN, NUM;
+@terminal { prec = add } PLUS, MINUS;
+@terminal { prec = mul } STAR, SLASH;
+
+@nonterminal Expr;
+@start Expr;
+ 
+@rule Expr :=
+    | Expr PLUS Expr
+    | Expr MINUS Expr
+    | Expr STAR Expr
+    | Expr SLASH Expr
+    | @{ prec = neg } MINUS Expr 
+    | NUM
+    | LPAREN Expr RPAREN
+    ;

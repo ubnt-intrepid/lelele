@@ -1,0 +1,16 @@
+// imported from <todo>
+
+@terminal A, X, LPAREN, RPAREN;
+@nonterminal E, T, O;
+
+@rule E :=
+    | E O T
+    | T
+    ;
+
+@rule T :=
+    | A
+    | LPAREN E RPAREN
+    ;
+    
+@rule O := X | @empty ;

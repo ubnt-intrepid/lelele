@@ -1,0 +1,67 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "scopeName": "source.lelele",
+    "name": "lelele",
+    "fileTypes": [".lll"],
+    "patterns": [
+        { "include": "#comments" },
+        { "include": "#keywords" },
+        { "include": "#operators" },
+        { "include": "#identifiers" },
+        { "include": "#strings" }
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.lelele",
+                    "contentName": "comment.line.content.lelele",
+                    "begin": "//",
+                    "end": "\\r?\\n|\\r"
+                },
+                {
+                    "name": "comment.block.lelele",
+                    "contentName": "comment.block.content.lelele",
+                    "begin": "/\\*",
+                    "end": "\\*/"
+                }
+            ]
+        },
+        "keywords": {
+            "patterns": [
+                {
+                    "name": "keyword.control.lelele",
+                    "match": "@(terminal|nonterminal|start|rule|prec|left|right|nonassoc)\\b"
+                }
+            ]
+        },
+        "operators": {
+            "patterns": [
+                {
+                    "name": "keyword.control.lelele",
+                    "match": "=|:=|;|,|\\||@{"
+                }
+                
+            ]
+        },
+        "identifiers": {
+            "patterns": [
+                {
+                    "name": "variable.name.lelele",
+                    "match": "[a-zA-Z_][a-zA-Z0-9_]*"
+                }
+            ]
+        },
+        "strings": {
+            "name": "string.quoted.double.lelele",
+            "begin": "\"",
+            "end": "\"",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.lelele",
+                    "match": "\\\\."
+                }
+            ]
+        }
+    }
+}

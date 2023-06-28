@@ -1,0 +1,26 @@
+// An arithmetic grammar (using precedences)
+
+// Define the precedences used in this grammar, descending order of priority level.
+@prec { assoc = left } add;
+@prec { assoc = left } mul;
+@prec { assoc = right } neg;
+
+// Define the terminal symbols.
+@terminal LPAREN, RPAREN, NUM;
+@terminal { prec = add } PLUS, MINUS;
+@terminal { prec = mul } STAR, SLASH;
+
+// Define the nonterminal symbols.
+@nonterminal Expr;
+@start Expr;
+
+// Define the production rule for `expr`.
+@rule Expr :=
+    | Expr PLUS Expr
+    | Expr MINUS Expr
+    | Expr STAR Expr 
+    | Expr SLASH Expr 
+    | @{ prec = neg } MINUS Expr // override the precedence
+    | LPAREN Expr RPAREN
+    | NUM
+    ;
