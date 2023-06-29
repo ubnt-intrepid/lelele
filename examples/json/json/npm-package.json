@@ -1,0 +1,18 @@
+{
+    "name": "my-awesome-package",
+    "version": "1.0.0",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/{your GitHub username here}/my-awesome-package}.git"
+    },
+    "keywords": ["awesome", "package"],
+    "author": "{your name here} <email@example.com>",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/{your GitHub username here}/my-awesome-package}/issues"
+    },
+    "homepage": "https://github.com/{your GitHub username here}/my-awesome-package}"
+}

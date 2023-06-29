@@ -1,0 +1,16 @@
+[package]
+name = "lelele-example-json"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+lelele = { path = "../../crates/lelele" }
+
+[dependencies]
+lelele-runtime = { path = "../../crates/lelele-runtime" }
+anyhow = { workspace = true }
+indexmap = { workspace = true }
+logos = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

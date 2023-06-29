@@ -340,6 +340,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "lelele-example-json"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "indexmap",
+ "lelele",
+ "lelele-runtime",
+ "logos",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "lelele-example-min-caml"
 version = "0.0.0"
 dependencies = [
