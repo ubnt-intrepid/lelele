@@ -140,9 +140,6 @@ impl fmt::Display for DFADisplay<'_> {
                         }
                         writeln!(f, ")")?;
                     }
-                    Action::Accept => {
-                        writeln!(f, "- {} => accept", grammar.terminal(token))?;
-                    }
                     Action::Fail => {
                         writeln!(f, "- {} => fail", grammar.terminal(token))?;
                     }
@@ -150,7 +147,6 @@ impl fmt::Display for DFADisplay<'_> {
                         reason,
                         shift,
                         reduces,
-                        accepted,
                     } => {
                         writeln!(
                             f,
@@ -172,9 +168,6 @@ impl fmt::Display for DFADisplay<'_> {
                                 }
                             }
                             writeln!(f, ")")?;
-                        }
-                        if *accepted {
-                            writeln!(f, "  - accept")?;
                         }
                     }
                 }
@@ -253,9 +246,6 @@ pub enum Action {
     /// Reduce to the specified production rule.
     Reduce(RuleID),
 
-    /// Reduce to the top-level production rule and accept symbols.
-    Accept,
-
     /// Reject the specified lookahead symbol.
     ///
     /// The behavior of this action is the same as if no action exists
@@ -267,7 +257,6 @@ pub enum Action {
     Inconsistent {
         shift: Option<NodeID>,
         reduces: Vec<RuleID>,
-        accepted: bool,
         reason: ConflictReason,
     },
 }
@@ -427,13 +416,15 @@ impl<'g> DFAGenerator<'g> {
             queue: VecDeque::new(),
         };
         let mut item_set = BTreeMap::new();
-        item_set.insert(
-            LRCoreItem {
-                rule: RuleID::ACCEPT,
-                marker: 0,
-            },
-            Some(TerminalID::EOI).into_iter().collect(),
-        );
+        for rule in grammar.rules().filter(|r| r.left() == grammar.start()) {
+            item_set.insert(
+                LRCoreItem {
+                    rule: rule.id(),
+                    marker: 0,
+                },
+                Some(TerminalID::EOI).into_iter().collect(),
+            );
+        }
         pending_nodes
             .queue
             .push_back((NodeID::START, item_set, None));
@@ -562,11 +553,7 @@ impl<'g> DFAGenerator<'g> {
                 }
                 for lookahead in lookaheads {
                     let action = pending_actions.entry(lookahead.clone()).or_default();
-                    if core_item.rule == RuleID::ACCEPT {
-                        action.accepted = true;
-                    } else {
-                        action.reduces.push(core_item.rule.clone());
-                    }
+                    action.reduces.push(core_item.rule.clone());
                 }
             }
 
@@ -578,7 +565,6 @@ impl<'g> DFAGenerator<'g> {
                         reason,
                         shift: action.shift,
                         reduces: action.reduces,
-                        accepted: action.accepted,
                     },
                 };
                 actions.insert(symbol, resolved);
@@ -689,7 +675,7 @@ impl FirstSets {
             sub: &'g Symbol,
         }
         let mut constraints = vec![];
-        for rule in grammar.rules().filter(|rule| rule.id() != RuleID::ACCEPT) {
+        for rule in grammar.rules() {
             for symbol in rule.right() {
                 if !matches!(symbol, Symbol::N(n) if rule.left() == *n) {
                     constraints.push(Constraint {
@@ -786,7 +772,6 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<NonterminalID> {
 struct PendingAction {
     shift: Option<NodeID>,
     reduces: Vec<RuleID>,
-    accepted: bool,
 }
 
 /// Attempts to resolve shift/reduce conflicts based on precedence/associativity.
@@ -796,12 +781,6 @@ fn resolve_conflict(
     action: &PendingAction,
 ) -> Result<Action, ConflictReason> {
     use Action::*;
-
-    if action.accepted {
-        debug_assert!(action.shift.is_none(), "detect shift/accept conflict");
-        debug_assert!(action.reduces.is_empty(), "detect reduce/accept conflict");
-        return Ok(Accept);
-    }
 
     match (action.shift, &action.reduces[..]) {
         (Some(next), []) => Ok(Shift(next)),

@@ -178,7 +178,6 @@ impl ::std::fmt::Display for SymbolID {
 enum ParseAction {
     Shift(NodeID),
     Reduce(SymbolID, usize),
-    Accept,
     Fail,
 }
 /// The generated LR(1) parse table.
@@ -213,13 +212,12 @@ impl lelele::ParserDef for ParserDef {
         match actions.get(&lookahead) {
             Some(ParseAction::Shift(n)) => action.shift(*n),
             Some(ParseAction::Reduce(s, i)) => action.reduce(*s, *i),
-            Some(ParseAction::Accept) => action.accept(),
             _ => action.fail(actions.keys().map(|key| TokenID { __raw: *key })),
         }
     }
     #[inline]
-    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Self::State {
-        *GOTO_TABLE[current.__raw].get(&symbol.__raw).unwrap()
+    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Option<Self::State> {
+        GOTO_TABLE[current.__raw].get(&symbol.__raw).copied()
     }
 }
 const PARSE_TABLE: &[ lelele::phf::Map<u64, ParseAction> ] = &[\n",
@@ -242,7 +240,6 @@ const PARSE_TABLE: &[ lelele::phf::Map<u64, ParseAction> ] = &[\n",
                             rule.right().len(),
                         )
                     }
-                    Action::Accept => "ParseAction::Accept".into(),
                     Action::Fail => "ParseAction::Fail".into(),
                     Action::Inconsistent { .. } => "ParseAction::Fail".into(),
                 };

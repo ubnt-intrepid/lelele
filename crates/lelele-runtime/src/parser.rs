@@ -55,7 +55,6 @@ where
     WaitingInput,
     Shifting(TDef::State),
     Reducing(TDef::Symbol, usize),
-    Accepting,
     HandlingError,
     Accepted,
 }
@@ -72,7 +71,6 @@ where
             Self::WaitingInput => f.debug_struct("WaitingInput").finish(),
             Self::Shifting(next) => f.debug_tuple("Shifting").field(next).finish(),
             Self::Reducing(symbol, n) => f.debug_tuple("Reducing").field(symbol).field(n).finish(),
-            Self::Accepting => f.debug_struct("Accepting").finish(),
             Self::HandlingError => f.debug_struct("HandlingError").finish(),
             Self::Accepted => f.debug_struct("Accepted").finish(),
         }
@@ -147,16 +145,14 @@ where
                 self.item_stack.truncate(self.item_stack.len() - n);
 
                 let current = self.state_stack.last().copied().unwrap();
-                let next = self.definition.goto(current, lhs);
-                self.state_stack.push(next);
                 self.item_stack.push(ParseItem::N(lhs));
-                self.state = ParserState::Pending;
-            }
-
-            ParserState::Accepting => {
-                self.item_stack.pop().unwrap();
-                self.state = ParserState::Accepted;
-                return Ok(ParseEvent::Accepted);
+                if let Some(next) = self.definition.goto(current, lhs) {
+                    self.state_stack.push(next);
+                    self.state = ParserState::Pending;
+                } else {
+                    self.state = ParserState::Accepted;
+                    return Ok(ParseEvent::Accepted);
+                }
             }
 
             ParserState::HandlingError => {
@@ -195,20 +191,21 @@ where
                     .lookahead
                     .as_ref()
                     .ok_or_else(|| ParseError::TokenNotOffered)?;
-                let lookahead = lookahead.as_ref().expect("shiting token must not be EOI");
-                self.state = ParserState::Shifting(next);
-                return Ok(ParseEvent::Shifting(lookahead));
+                match &lookahead {
+                    Some(lookahead) => {
+                        self.state = ParserState::Shifting(next);
+                        return Ok(ParseEvent::Shifting(lookahead));
+                    }
+                    None => {
+                        todo!()
+                    }
+                }
             }
 
             ParseAction::Reduce(lhs, n) => {
                 self.state = ParserState::Reducing(lhs, n);
                 let args = &self.item_stack[self.item_stack.len() - n..];
                 return Ok(ParseEvent::AboutToReduce(lhs, args));
-            }
-
-            ParseAction::Accept => {
-                self.state = ParserState::Accepting;
-                return Ok(ParseEvent::AboutToAccept(self.item_stack.last().unwrap()));
             }
 
             ParseAction::Fail { expected } => {
@@ -283,7 +280,6 @@ pub enum ParseError {
 enum ParseAction<TState, TToken, TSymbol> {
     Shift(TState),
     Reduce(TSymbol, usize),
-    Accept,
     Fail { expected: Vec<TToken> },
 }
 
@@ -307,10 +303,6 @@ impl<TState: Copy, TToken: Copy, TSymbol: Copy> crate::definition::ParseAction
 
     fn reduce(self, s: Self::Symbol, n: usize) -> Result<Self::Ok, Self::Error> {
         Ok(ParseAction::Reduce(s, n))
-    }
-
-    fn accept(self) -> Result<Self::Ok, Self::Error> {
-        Ok(ParseAction::Accept)
     }
 
     fn fail<I>(self, expected_tokens: I) -> Result<Self::Ok, Self::Error>

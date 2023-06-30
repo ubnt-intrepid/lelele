@@ -81,8 +81,6 @@ pub struct NonterminalID {
     raw: u64,
 }
 impl NonterminalID {
-    /// Reserved symbol used as a nonterminal symbol to match when the parsing is complete.
-    pub(crate) const ACCEPT: Self = Self::new(1);
     #[inline]
     const fn new(raw: u64) -> Self {
         assert!(raw < u64::MAX / 2, "too large NonterminalID");
@@ -108,10 +106,7 @@ impl Nonterminal {
 }
 impl fmt::Display for Nonterminal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.id {
-            NonterminalID::ACCEPT => f.write_str("$accept"),
-            _ => f.write_str(self.export_name().unwrap_or("<unknown>")),
-        }
+        f.write_str(self.export_name().unwrap_or("<unknown>"))
     }
 }
 impl PartialEq for Nonterminal {
@@ -143,10 +138,6 @@ pub struct RuleID {
     raw: u64,
 }
 impl RuleID {
-    /// Reserved ID that represents the top-level production rule:
-    /// `$accept : <start-symbol> $eoi`.
-    pub(crate) const ACCEPT: Self = Self::new(0);
-
     #[inline]
     const fn new(raw: u64) -> Self {
         assert!(raw < u64::MAX / 2, "too large RuleID");
@@ -246,7 +237,6 @@ pub struct Grammar {
     nonterminals: IndexSet<Nonterminal>,
     rules: IndexSet<Rule>,
     start_symbol: NonterminalID,
-    accept_rule: Rule,
 }
 
 impl fmt::Display for Grammar {
@@ -310,10 +300,6 @@ impl Grammar {
             export_name: None,
             precedence: None,
         });
-        def.nonterminals.insert(Nonterminal {
-            id: NonterminalID::ACCEPT,
-            export_name: None,
-        });
 
         f(&mut def)?;
 
@@ -344,18 +330,19 @@ impl Grammar {
         self.nonterminals.get(key.borrow()).unwrap()
     }
 
+    pub fn start(&self) -> NonterminalID {
+        self.start_symbol
+    }
+
     pub fn rules(&self) -> impl Iterator<Item = &Rule> + '_ {
-        Some(&self.accept_rule).into_iter().chain(&self.rules)
+        self.rules.iter()
     }
 
     pub fn rule<Q: ?Sized>(&self, key: &Q) -> &Rule
     where
         Q: Borrow<RuleID>,
     {
-        match key.borrow() {
-            &RuleID::ACCEPT => &self.accept_rule,
-            key => self.rules.get(key).unwrap(),
-        }
+        self.rules.get(key.borrow()).unwrap()
     }
 }
 
@@ -518,12 +505,6 @@ impl<'def> GrammarDef<'def> {
             nonterminals: self.nonterminals,
             rules: self.rules,
             start_symbol: start,
-            accept_rule: Rule {
-                id: RuleID::ACCEPT,
-                left: NonterminalID::ACCEPT,
-                right: vec![Symbol::N(start)],
-                precedence: None,
-            },
         })
     }
 }
