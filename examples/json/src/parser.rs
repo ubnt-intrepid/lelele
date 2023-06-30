@@ -1,34 +1,26 @@
-use anyhow::Context;
-use lelele_example_json::{
-    lexer::{lexer, Token},
-    parser::{ParserDef, SymbolID},
+mod gen {
+    include!(concat!(env!("OUT_DIR"), "/parser.rs"));
+}
+pub use gen::*;
+
+use crate::{
+    lexer::Token,
     syntax::{Array, EscapedStr, Object, Value},
 };
-use lelele_runtime::parser::ParseItem::*;
-use lelele_runtime::parser::{ParseEvent, Parser};
-use std::{env, fs};
-use tracing_subscriber::EnvFilter;
+use lelele_runtime::parser::{ParseEvent, ParseItem::*, Parser};
 
-fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_ansi(true)
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+enum StackItem<'source> {
+    Value(Value<'source>),
+    Object(Object<'source>),
+    Array(Array<'source>),
+    Member((&'source EscapedStr, Box<Value<'source>>)),
+    Members(Vec<(&'source EscapedStr, Box<Value<'source>>)>),
+    Elements(Vec<Box<Value<'source>>>),
+}
 
-    let input_path = env::args().nth(1).context("missing input name")?;
-    let input = fs::read_to_string(&input_path).context("read JSON file")?;
-    let mut tokens = lexer(&input);
-
+pub fn parse(input: &str) -> anyhow::Result<Value<'_>> {
+    let mut lexer = crate::lexer::lexer(&input);
     let mut parser = Parser::new(ParserDef::default());
-
-    enum StackItem<'source> {
-        Value(Value<'source>),
-        Object(Object<'source>),
-        Array(Array<'source>),
-        Member((&'source EscapedStr, Box<Value<'source>>)),
-        Members(Vec<(&'source EscapedStr, Box<Value<'source>>)>),
-        Elements(Vec<Box<Value<'source>>>),
-    }
     let mut stack = vec![];
     macro_rules! pop_stack_item {
         ($variant:ident) => {{
@@ -39,7 +31,7 @@ fn main() -> anyhow::Result<()> {
         }};
     }
 
-    let parsed = loop {
+    loop {
         let span = tracing::trace_span!("resume");
         let _entered = span.enter();
 
@@ -48,7 +40,7 @@ fn main() -> anyhow::Result<()> {
             e
         })?;
         match event {
-            ParseEvent::InputNeeded => match tokens.next() {
+            ParseEvent::InputNeeded => match lexer.next() {
                 Some(tok) => {
                     let tok = tok?;
                     tracing::trace!("offer token {:?}", tok);
@@ -187,7 +179,7 @@ fn main() -> anyhow::Result<()> {
             ParseEvent::Accepted => {
                 tracing::trace!("accepted");
                 match stack.pop() {
-                    Some(StackItem::Value(value)) => break value,
+                    Some(StackItem::Value(value)) => break Ok(value),
                     _ => anyhow::bail!("invalid stack item"),
                 }
             }
@@ -197,9 +189,5 @@ fn main() -> anyhow::Result<()> {
                 anyhow::bail!("rejected");
             }
         }
-    };
-
-    println!("parsed: {}", parsed);
-
-    Ok(())
+    }
 }
