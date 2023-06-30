@@ -284,14 +284,6 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                 }
             }
 
-            ParseEvent::AboutToAccept(arg) => {
-                tracing::trace!("accept: {:?}", arg);
-                ensure!(
-                    matches!(stack.last(), Some(Expr(..))),
-                    "unexpected stack item (expected: Expr)"
-                );
-            }
-
             ParseEvent::HandlingError {
                 lr_state,
                 lookahead,

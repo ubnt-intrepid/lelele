@@ -231,7 +231,6 @@ where
     InputNeeded,
     Shifting(&'p TTok),
     AboutToReduce(TDef::Symbol, &'p [ParseItem<TTok, TDef::Symbol>]),
-    AboutToAccept(&'p ParseItem<TTok, TDef::Symbol>),
     HandlingError {
         lr_state: &'p TDef::State,
         lookahead: Option<&'p TTok>,

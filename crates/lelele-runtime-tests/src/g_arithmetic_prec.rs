@@ -78,7 +78,6 @@ fn simple_expr() {
             [N(SymbolID::EXPR), T(TokenID::PLUS), N(SymbolID::EXPR)]
         ))
     );
-    assert_matches!(parser.resume(), Ok(AboutToAccept(N(SymbolID::EXPR))));
     assert_matches!(parser.resume(), Ok(Accepted));
 }
 
@@ -161,6 +160,5 @@ fn with_unary_minus() {
         ))
     );
 
-    assert_matches!(parser.resume(), Ok(AboutToAccept(N(SymbolID::EXPR))));
     assert_matches!(parser.resume(), Ok(Accepted));
 }

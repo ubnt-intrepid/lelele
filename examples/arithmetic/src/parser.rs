@@ -98,16 +98,6 @@ pub fn parse(input: &str) -> anyhow::Result<Box<Expr<'_>>> {
 
             ParseEvent::AboutToReduce(..) => unreachable!(),
 
-            ParseEvent::AboutToAccept(..) => {
-                tracing::trace!("about to accept");
-                match ast_stack.pop() {
-                    Some(expr) => {
-                        ast_stack.push(expr);
-                    }
-                    _ => anyhow::bail!("unexpected stack item"),
-                }
-            }
-
             ParseEvent::HandlingError {
                 lr_state,
                 lookahead,

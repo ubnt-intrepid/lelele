@@ -103,7 +103,6 @@ fn simple_expr() {
         ))
     );
 
-    assert_matches!(parser.resume(), Ok(AboutToAccept(N(SymbolID::EXPR))));
     assert_matches!(parser.resume(), Ok(Accepted));
 }
 
@@ -209,6 +208,5 @@ fn with_unary_minus() {
         ))
     );
 
-    assert_matches!(parser.resume(), Ok(AboutToAccept(N(SymbolID::EXPR))));
     assert_matches!(parser.resume(), Ok(Accepted));
 }

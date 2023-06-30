@@ -157,10 +157,6 @@ pub fn parse(input: &str) -> anyhow::Result<Value<'_>> {
                 }
             }
 
-            ParseEvent::AboutToAccept(..) => {
-                tracing::trace!("about to accept");
-            }
-
             ParseEvent::HandlingError {
                 lr_state,
                 lookahead,
