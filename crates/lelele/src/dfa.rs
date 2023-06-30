@@ -179,6 +179,11 @@ impl fmt::Display for DFADisplay<'_> {
                     }
                 }
             }
+
+            writeln!(f, "## gotos")?;
+            for (symbol, goto) in &node.gotos {
+                writeln!(f, "- {} => goto({:02})", grammar.nonterminal(symbol), goto)?;
+            }
         }
         Ok(())
     }
