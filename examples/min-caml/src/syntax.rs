@@ -1,52 +1,49 @@
-//! Syntax definition.
-
-use crate::lexer::Token;
-use std::fmt;
-
 #[derive(Debug)]
 pub enum Expr<'source> {
-    Add {
-        lhs: Box<Expr<'source>>,
-        op: Token<'source>,
-        rhs: Box<Expr<'source>>,
-    },
-    Sub {
-        lhs: Box<Expr<'source>>,
-        op: Token<'source>,
-        rhs: Box<Expr<'source>>,
-    },
-    Mul {
-        lhs: Box<Expr<'source>>,
-        op: Token<'source>,
-        rhs: Box<Expr<'source>>,
-    },
-    Div {
-        lhs: Box<Expr<'source>>,
-        op: Token<'source>,
-        rhs: Box<Expr<'source>>,
-    },
-    Num(&'source str),
-    Paren {
-        l_paren: Token<'source>,
-        expr: Box<Expr<'source>>,
-        r_paren: Token<'source>,
-    },
-    Neg {
-        minus: Token<'source>,
-        expr: Box<Expr<'source>>,
-    },
+    Unit,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Ident(&'source str),
+    Tuple(Vec<Self>),
+    App(Box<Self>, Vec<Self>),
+    Unary(UnOp, Box<Self>),
+    Binary(BinOp, Box<Self>, Box<Self>),
+    If(Box<Self>, Box<Self>, Box<Self>),
+    Let(Vec<&'source str>, Box<Self>, Box<Self>),
+    LetRec(FunDef<'source>, Box<Self>),
+
+    ArrayMake(Box<Self>, Box<Self>),
+    ArrayGet(Box<Self>, Box<Self>),
+    ArrayPut(Box<Self>, Box<Self>, Box<Self>),
 }
 
-impl fmt::Display for Expr<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Add { lhs, rhs, .. } => write!(f, "(+ {} {})", lhs, rhs),
-            Self::Sub { lhs, rhs, .. } => write!(f, "(- {} {})", lhs, rhs),
-            Self::Mul { lhs, rhs, .. } => write!(f, "(* {} {})", lhs, rhs),
-            Self::Div { lhs, rhs, .. } => write!(f, "(/ {} {})", lhs, rhs),
-            Self::Num(n) => write!(f, "{}", n),
-            Self::Paren { expr, .. } => write!(f, "({})", expr),
-            Self::Neg { expr, .. } => write!(f, "(neg {})", expr),
-        }
-    }
+#[derive(Debug, Copy, Clone)]
+pub enum UnOp {
+    Not,
+    Neg,
+    FNeg,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum BinOp {
+    Add,
+    Sub,
+    FAdd,
+    FSub,
+    FMul,
+    FDiv,
+    Equal,
+    LessGreater,
+    Less,
+    Greater,
+    LessEqual,
+    GreaterEqual,
+}
+
+#[derive(Debug)]
+pub struct FunDef<'source> {
+    pub name: &'source str,
+    pub args: Vec<&'source str>,
+    pub body: Box<Expr<'source>>,
 }
