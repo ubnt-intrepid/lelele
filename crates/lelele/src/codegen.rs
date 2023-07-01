@@ -2,7 +2,7 @@
 
 use crate::{
     dfa::{Action, NodeID, DFA},
-    grammar::{Grammar, RuleID, TerminalID},
+    grammar::{Grammar, RuleID},
 };
 use std::fmt;
 
@@ -51,16 +51,9 @@ impl NodeID {\n",
         f.write_str(
             "\
 /// The type to identify terminal or nonterminal symbols used in generated DFA.
-#[derive(Copy, Clone, PartialEq, Eq)]
-#[repr(transparent)]
-pub struct TokenID { __raw: u64 }
-impl TokenID {\n",
-        )?;
-
-        writeln!(
-            f,
-            "const __EOI: Self = Self {{ __raw: {} }};",
-            TerminalID::EOI.raw(),
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[allow(non_camel_case_types)]
+pub enum TokenID {\n",
         )?;
 
         for terminal in self.grammar.terminals() {
@@ -70,44 +63,12 @@ impl TokenID {\n",
             };
             writeln!(
                 f,
-                "\
-/// Terminal `{export_name}`
-pub const {export_name}: Self = Self {{ __raw: {id} }};",
+                "#[doc = \"Terminal `{export_name}`\"] {export_name},",
                 export_name = export_name,
-                id = terminal.id().raw(),
             )?;
         }
 
-        f.write_str(
-            "}
-impl ::std::fmt::Debug for TokenID {
-    #[inline]
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        ::std::fmt::Display::fmt(self, f)
-    }
-}
-impl ::std::fmt::Display for TokenID {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match self.__raw {\n",
-        )?;
-
-        for symbol in self.grammar.terminals() {
-            writeln!(
-                f,
-                "\
-            {} => f.write_str(stringify!({})),",
-                symbol.id().raw(),
-                symbol,
-            )?;
-        }
-
-        f.write_str(
-            "\
-            _ => f.write_str(\"<unknown>\"),
-        }
-    }
-}",
-        )?;
+        f.write_str("}\n")?;
 
         Ok(())
     }
@@ -169,7 +130,7 @@ impl lelele::ParserDef for ParserDef {
             Symbol = Self::Symbol,
         >,
     {
-        __action(current, lookahead.unwrap_or(TokenID::__EOI), action)
+        __action(current, lookahead, action)
     }
     #[inline]
     fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Self::State {
@@ -183,7 +144,7 @@ impl lelele::ParserDef for ParserDef {
 #[inline]
 fn __action<TAction>(
     current: NodeID,
-    lookahead: TokenID,
+    lookahead: Option<TokenID>,
     action: TAction,
 ) -> ::std::result::Result<TAction::Ok, TAction::Error>
 where
@@ -197,8 +158,12 @@ where
         )?;
 
         for (id, node) in self.dfa.nodes() {
-            writeln!(f, "{} => match lookahead.__raw {{", id)?;
+            writeln!(f, "{} => match lookahead {{", id)?;
             for (lookahead, action) in node.actions() {
+                let variant = match self.grammar.terminal(&lookahead).export_name() {
+                    Some(name) => format!("Some(TokenID::{})", name),
+                    None => "None".into(),
+                };
                 let action_g = match action {
                     Action::Shift(n) => {
                         format!("action.shift(NodeID {{ __raw: {} }}),", n)
@@ -221,29 +186,19 @@ where
                     }
                     _ => continue,
                 };
-                writeln!(f, "  {} => {}", lookahead.raw(), action_g)?;
+                writeln!(f, "  {} => {}", variant, action_g)?;
             }
 
-            let available_lookaheads: String =
-                node.actions()
-                    .enumerate()
-                    .fold(String::new(), |mut buf, (i, (t, _))| {
-                        if i > 0 {
-                            buf += ", ";
-                        }
-                        buf += &format!("TokenID {{ __raw: {} }}", t.raw());
-                        buf
-                    });
-            writeln!(
-                f,
-                "\
-#[allow(unreachable_patterns)] _ => {{
-    action.fail([{}])
-}},
-}}",
-                available_lookaheads
-            )?;
+            writeln!(f, "  #[allow(unreachable_patterns)] _ => action.fail([")?;
+            for name in node
+                .actions()
+                .filter_map(|(t, _)| self.grammar.terminal(&t).export_name())
+            {
+                writeln!(f, "    TokenID::{},", name)?;
+            }
+            write!(f, "  ]),\n}},\n")?;
         }
+
         f.write_str(
             "\
 #[allow(unreachable_patterns)]
