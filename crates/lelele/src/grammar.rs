@@ -81,6 +81,8 @@ pub struct NonterminalID {
     raw: u64,
 }
 impl NonterminalID {
+    pub const START: Self = Self::new(0);
+
     #[inline]
     const fn new(raw: u64) -> Self {
         assert!(raw < u64::MAX / 2, "too large NonterminalID");
@@ -102,7 +104,10 @@ impl Nonterminal {
 }
 impl fmt::Display for Nonterminal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.export_name().unwrap_or("<unknown>"))
+        match self.id {
+            NonterminalID::START => f.write_str("$start"),
+            _ => f.write_str(self.export_name().unwrap_or("<unknown>")),
+        }
     }
 }
 impl PartialEq for Nonterminal {
@@ -134,6 +139,8 @@ pub struct RuleID {
     raw: u64,
 }
 impl RuleID {
+    pub const ACCEPT: Self = Self::new(0);
+
     #[inline]
     const fn new(raw: u64) -> Self {
         assert!(raw < u64::MAX / 2, "too large RuleID");
@@ -233,6 +240,7 @@ pub struct Grammar {
     nonterminals: IndexSet<Nonterminal>,
     rules: IndexSet<Rule>,
     start_symbol: NonterminalID,
+    accept_rule: Rule,
 }
 
 impl fmt::Display for Grammar {
@@ -297,6 +305,11 @@ impl Grammar {
             precedence: None,
         });
 
+        def.nonterminals.insert(Nonterminal {
+            id: NonterminalID::START,
+            export_name: None,
+        });
+
         f(&mut def)?;
 
         def.end()
@@ -331,14 +344,17 @@ impl Grammar {
     }
 
     pub fn rules(&self) -> impl Iterator<Item = &Rule> + '_ {
-        self.rules.iter()
+        Some(&self.accept_rule).into_iter().chain(&self.rules)
     }
 
     pub fn rule<Q: ?Sized>(&self, key: &Q) -> &Rule
     where
         Q: Borrow<RuleID>,
     {
-        self.rules.get(key.borrow()).unwrap()
+        match key.borrow() {
+            &RuleID::ACCEPT => &self.accept_rule,
+            key => self.rules.get(key).unwrap(),
+        }
     }
 }
 
@@ -496,11 +512,19 @@ impl<'def> GrammarDef<'def> {
                 })?,
         };
 
+        let accept_rule = Rule {
+            id: RuleID::ACCEPT,
+            left: NonterminalID::START,
+            right: vec![Symbol::N(start)],
+            precedence: None,
+        };
+
         Ok(Grammar {
             terminals: self.terminals,
             nonterminals: self.nonterminals,
             rules: self.rules,
             start_symbol: start,
+            accept_rule,
         })
     }
 }

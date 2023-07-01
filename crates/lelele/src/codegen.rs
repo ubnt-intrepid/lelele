@@ -2,7 +2,7 @@
 
 use crate::{
     dfa::{Action, NodeID, DFA},
-    grammar::{Grammar, TerminalID},
+    grammar::{Grammar, RuleID, TerminalID},
 };
 use std::fmt;
 
@@ -172,7 +172,7 @@ impl lelele::ParserDef for ParserDef {
         __action(current, lookahead.unwrap_or(TokenID::__EOI), action)
     }
     #[inline]
-    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Option<Self::State> {
+    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Self::State {
         __goto(current, symbol)
     }
 }\n",
@@ -202,6 +202,9 @@ where
                 let action_g = match action {
                     Action::Shift(n) => {
                         format!("action.shift(NodeID {{ __raw: {} }}),", n)
+                    }
+                    Action::Reduce(rule) if *rule == RuleID::ACCEPT => {
+                        format!("action.accept(),")
                     }
                     Action::Reduce(rule) => {
                         let rule = self.grammar.rule(rule);
@@ -252,7 +255,7 @@ _ => unreachable!(),
         f.write_str(
             "\
 #[inline]
-fn __goto(current: NodeID, symbol: Symbol) -> Option<NodeID> {
+fn __goto(current: NodeID, symbol: Symbol) -> NodeID {
     match current.__raw {\n",
         )?;
 
@@ -263,17 +266,13 @@ fn __goto(current: NodeID, symbol: Symbol) -> Option<NodeID> {
             writeln!(f, "{} => match symbol {{", id)?;
             for (symbol, target) in node.gotos() {
                 let symbol = self.grammar.nonterminal(&symbol).export_name().unwrap();
-                writeln!(
-                    f,
-                    "  Symbol::{} => Some(NodeID {{ __raw: {} }}),",
-                    symbol, target
-                )?;
+                writeln!(f, "  Symbol::{} => NodeID {{ __raw: {} }},", symbol, target)?;
             }
-            writeln!(f, "  #[allow(unreachable_patterns)] _ => None,")?;
+            writeln!(f, "  #[allow(unreachable_patterns)] _ => unreachable!(),")?;
             writeln!(f, "}},")?;
         }
 
-        f.write_str("#[allow(unreachable_patterns)] _ => None,\n}\n}\n")?;
+        f.write_str("#[allow(unreachable_patterns)] _ => unreachable!(),\n}\n}\n")?;
 
         Ok(())
     }

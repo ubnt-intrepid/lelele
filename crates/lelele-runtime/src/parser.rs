@@ -146,13 +146,9 @@ where
 
                 let current = self.state_stack.last().copied().unwrap();
                 self.item_stack.push(ParseItem::N(lhs));
-                if let Some(next) = self.definition.goto(current, lhs) {
-                    self.state_stack.push(next);
-                    self.state = ParserState::Pending;
-                } else {
-                    self.state = ParserState::Accepted;
-                    return Ok(ParseEvent::Accepted);
-                }
+                let next = self.definition.goto(current, lhs);
+                self.state_stack.push(next);
+                self.state = ParserState::Pending;
             }
 
             ParserState::HandlingError => {
@@ -206,6 +202,11 @@ where
                 self.state = ParserState::Reducing(lhs, n);
                 let args = &self.item_stack[self.item_stack.len() - n..];
                 return Ok(ParseEvent::AboutToReduce(lhs, args));
+            }
+
+            ParseAction::Accept => {
+                self.state = ParserState::Accepted;
+                return Ok(ParseEvent::Accepted);
             }
 
             ParseAction::Fail { expected } => {
@@ -279,6 +280,7 @@ pub enum ParseError {
 enum ParseAction<TState, TToken, TSymbol> {
     Shift(TState),
     Reduce(TSymbol, usize),
+    Accept,
     Fail { expected: Vec<TToken> },
 }
 
@@ -302,6 +304,10 @@ impl<TState: Copy, TToken: Copy, TSymbol: Copy> crate::definition::ParseAction
 
     fn reduce(self, s: Self::Symbol, n: usize) -> Result<Self::Ok, Self::Error> {
         Ok(ParseAction::Reduce(s, n))
+    }
+
+    fn accept(self) -> Result<Self::Ok, Self::Error> {
+        Ok(ParseAction::Accept)
     }
 
     fn fail<I>(self, expected_tokens: I) -> Result<Self::Ok, Self::Error>

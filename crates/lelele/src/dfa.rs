@@ -416,15 +416,13 @@ impl<'g> DFAGenerator<'g> {
             queue: VecDeque::new(),
         };
         let mut item_set = BTreeMap::new();
-        for rule in grammar.rules().filter(|r| r.left() == grammar.start()) {
-            item_set.insert(
-                LRCoreItem {
-                    rule: rule.id(),
-                    marker: 0,
-                },
-                Some(TerminalID::EOI).into_iter().collect(),
-            );
-        }
+        item_set.insert(
+            LRCoreItem {
+                rule: RuleID::ACCEPT,
+                marker: 0,
+            },
+            Some(TerminalID::EOI).into_iter().collect(),
+        );
         pending_nodes
             .queue
             .push_back((NodeID::START, item_set, None));

@@ -23,7 +23,7 @@ pub trait ParserDef {
     where
         TAction: ParseAction<State = Self::State, Token = Self::Token, Symbol = Self::Symbol>;
 
-    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Option<Self::State>;
+    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Self::State;
 }
 
 pub trait ParseAction {
@@ -39,6 +39,9 @@ pub trait ParseAction {
 
     ///
     fn reduce(self, s: Self::Symbol, n: usize) -> Result<Self::Ok, Self::Error>;
+
+    ///
+    fn accept(self) -> Result<Self::Ok, Self::Error>;
 
     ///
     fn fail<I>(self, expected_tokens: I) -> Result<Self::Ok, Self::Error>
@@ -72,7 +75,7 @@ where
     }
 
     #[inline]
-    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Option<Self::State> {
+    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Self::State {
         (**self).goto(current, symbol)
     }
 }
@@ -103,7 +106,7 @@ where
     }
 
     #[inline]
-    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Option<Self::State> {
+    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Self::State {
         (**self).goto(current, symbol)
     }
 }
@@ -134,7 +137,7 @@ where
     }
 
     #[inline]
-    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Option<Self::State> {
+    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Self::State {
         (**self).goto(current, symbol)
     }
 }
