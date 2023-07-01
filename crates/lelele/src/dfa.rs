@@ -206,8 +206,8 @@ impl fmt::Display for NodeID {
 #[derive(Debug)]
 pub struct DFANode {
     item_set: LRItemSet,
-    actions: IndexMap<TerminalID, Action>,
-    gotos: IndexMap<NonterminalID, NodeID>,
+    pub(crate) actions: IndexMap<TerminalID, Action>,
+    pub(crate) gotos: IndexMap<NonterminalID, NodeID>,
 }
 
 // LR(1) item
