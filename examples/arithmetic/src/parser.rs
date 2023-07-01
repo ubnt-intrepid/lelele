@@ -37,10 +37,7 @@ pub fn parse(input: &str) -> anyhow::Result<Box<Expr<'_>>> {
                 tracing::trace!("shift: lookahead = {:?}", lookahead);
             }
 
-            ParseEvent::AboutToReduce(
-                SymbolID::EXPR,
-                [N(SymbolID::EXPR), T(op), N(SymbolID::EXPR)],
-            ) => {
+            ParseEvent::AboutToReduce(Symbol::Expr, [N(Symbol::Expr), T(op), N(Symbol::Expr)]) => {
                 let (lhs, rhs) = match (ast_stack.pop(), ast_stack.pop()) {
                     (Some(rhs), Some(lhs)) => (lhs, rhs),
                     _ => anyhow::bail!("unexpected stack/parse item"),
@@ -67,14 +64,14 @@ pub fn parse(input: &str) -> anyhow::Result<Box<Expr<'_>>> {
                 ast_stack.push(Box::new(expr));
             }
 
-            ParseEvent::AboutToReduce(SymbolID::EXPR, [T(Token::Num(num))]) => {
+            ParseEvent::AboutToReduce(Symbol::Expr, [T(Token::Num(num))]) => {
                 tracing::trace!("reduce: expr -> NUM");
                 ast_stack.push(Box::new(Expr::Num(num)));
             }
 
             ParseEvent::AboutToReduce(
-                SymbolID::EXPR,
-                [T(l_paren @ Token::LParen), N(SymbolID::EXPR), T(r_paren @ Token::RParen)],
+                Symbol::Expr,
+                [T(l_paren @ Token::LParen), N(Symbol::Expr), T(r_paren @ Token::RParen)],
             ) => {
                 tracing::trace!("reduce: expr -> `(' expr `)'");
                 let expr = ast_stack.pop().context("unexpected stack item")?;
@@ -84,10 +81,7 @@ pub fn parse(input: &str) -> anyhow::Result<Box<Expr<'_>>> {
                     r_paren: *r_paren,
                 }));
             }
-            ParseEvent::AboutToReduce(
-                SymbolID::EXPR,
-                [T(minus @ Token::Minus), N(SymbolID::EXPR)],
-            ) => {
+            ParseEvent::AboutToReduce(Symbol::Expr, [T(minus @ Token::Minus), N(Symbol::Expr)]) => {
                 tracing::trace!("reduce: expr -> `-' expr");
                 let expr = ast_stack.pop().context("unexpected stack item")?;
                 ast_stack.push(Box::new(Expr::Neg {

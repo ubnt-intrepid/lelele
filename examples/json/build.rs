@@ -49,12 +49,12 @@ fn grammar_def(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {
     let number = g.terminal("NUMBER", None)?;
     let string = g.terminal("STRING", None)?;
 
-    let value = g.nonterminal("VALUE")?;
-    let array = g.nonterminal("ARRAY")?;
-    let object = g.nonterminal("OBJECT")?;
-    let member = g.nonterminal("MEMBER")?;
-    let members = g.nonterminal("MEMBERS")?;
-    let elements = g.nonterminal("ELEMENTS")?;
+    let value = g.nonterminal("Value")?;
+    let array = g.nonterminal("Array")?;
+    let object = g.nonterminal("Object")?;
+    let member = g.nonterminal("Member")?;
+    let members = g.nonterminal("Members")?;
+    let elements = g.nonterminal("Elements")?;
 
     g.start_symbol(value)?;
 

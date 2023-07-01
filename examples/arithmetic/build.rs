@@ -53,7 +53,7 @@ fn grammar_def(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {
     let _unused = g.terminal("UNUSED", None)?;
 
     // declare nonterminal symbols.
-    let expr = g.nonterminal("EXPR")?;
+    let expr = g.nonterminal("Expr")?;
 
     g.start_symbol(expr)?;
 

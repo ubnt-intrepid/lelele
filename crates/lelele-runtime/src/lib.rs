@@ -10,5 +10,4 @@ pub mod _private {
         definition::{ParseAction, ParserDef},
         parser::{Parser, Token},
     };
-    pub use ::phf;
 }

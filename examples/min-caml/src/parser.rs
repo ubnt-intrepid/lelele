@@ -59,51 +59,48 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
             ParseEvent::AboutToReduce(symbol, args) => {
                 tracing::trace!("reduce: {:?} -> {:?}", symbol, args);
                 match (symbol, args) {
-                    (
-                        SymbolID::SIMPLE_EXP,
-                        [T(Token::LParen), N(SymbolID::EXP), T(Token::RParen)],
-                    ) => {
+                    (Symbol::SimpleExpr, [T(Token::LParen), N(Symbol::Expr), T(Token::RParen)]) => {
                         ensure!(
                             matches!(stack.last(), Some(Expr(..))),
                             "unexpected stack item (expected: Expr)"
                         );
                     }
-                    (SymbolID::SIMPLE_EXP, [T(Token::LParen), T(Token::RParen)]) => {
+                    (Symbol::SimpleExpr, [T(Token::LParen), T(Token::RParen)]) => {
                         stack.push(Expr(Expr::Unit));
                     }
-                    (SymbolID::SIMPLE_EXP, [T(Token::True)]) => {
+                    (Symbol::SimpleExpr, [T(Token::True)]) => {
                         stack.push(Expr(Expr::Bool(true)));
                     }
-                    (SymbolID::SIMPLE_EXP, [T(Token::False)]) => {
+                    (Symbol::SimpleExpr, [T(Token::False)]) => {
                         stack.push(Expr(Expr::Bool(true)));
                     }
-                    (SymbolID::SIMPLE_EXP, [T(Token::Int(lit))]) => {
+                    (Symbol::SimpleExpr, [T(Token::Int(lit))]) => {
                         let lit: i64 = lit.parse().context("parsing integer literal")?;
                         stack.push(Expr(Expr::Int(lit)));
                     }
-                    (SymbolID::SIMPLE_EXP, [T(Token::Float(lit))]) => {
+                    (Symbol::SimpleExpr, [T(Token::Float(lit))]) => {
                         let lit: f64 = lit.parse().context("parsing integer literal")?;
                         stack.push(Expr(Expr::Float(lit)));
                     }
-                    (SymbolID::SIMPLE_EXP, [T(Token::Ident(var))]) => {
+                    (Symbol::SimpleExpr, [T(Token::Ident(var))]) => {
                         stack.push(Expr(Expr::Ident(var)));
                     }
                     (
-                        SymbolID::SIMPLE_EXP,
-                        [N(SymbolID::SIMPLE_EXP), T(Token::Dot), T(Token::LParen), N(SymbolID::EXP), T(Token::RParen)],
+                        Symbol::SimpleExpr,
+                        [N(Symbol::SimpleExpr), T(Token::Dot), T(Token::LParen), N(Symbol::Expr), T(Token::RParen)],
                     ) => {
                         let index = pop_stack!(Expr);
                         let array = pop_stack!(Expr);
                         stack.push(Expr(Expr::ArrayGet(Box::new(array), Box::new(index))));
                     }
 
-                    (SymbolID::EXP, [N(SymbolID::SIMPLE_EXP)]) => {
+                    (Symbol::Expr, [N(Symbol::SimpleExpr)]) => {
                         ensure!(
                             matches!(stack.last(), Some(Expr(..))),
                             "unexpected stack item (expected: Expr)"
                         );
                     }
-                    (SymbolID::EXP, [T(t_op), N(SymbolID::EXP)]) => {
+                    (Symbol::Expr, [T(t_op), N(Symbol::Expr)]) => {
                         let expr = pop_stack!(Expr);
                         let op = match t_op {
                             Token::Not => UnOp::Not,
@@ -113,7 +110,7 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                         };
                         stack.push(Expr(Expr::Unary(op, Box::new(expr))));
                     }
-                    (SymbolID::EXP, [N(SymbolID::EXP), T(t_op), N(SymbolID::EXP)])
+                    (Symbol::Expr, [N(Symbol::Expr), T(t_op), N(Symbol::Expr)])
                         if !matches!(t_op, Token::Semicolon) =>
                     {
                         let rhs = pop_stack!(Expr);
@@ -136,8 +133,8 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                         stack.push(Expr(Expr::Binary(op, Box::new(lhs), Box::new(rhs))));
                     }
                     (
-                        SymbolID::EXP,
-                        [T(Token::If), N(SymbolID::EXP), T(Token::Then), N(SymbolID::EXP), T(Token::Else), N(SymbolID::EXP)],
+                        Symbol::Expr,
+                        [T(Token::If), N(Symbol::Expr), T(Token::Then), N(Symbol::Expr), T(Token::Else), N(Symbol::Expr)],
                     ) => {
                         let e3 = pop_stack!(Expr);
                         let e2 = pop_stack!(Expr);
@@ -145,16 +142,16 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                         stack.push(Expr(Expr::If(Box::new(e1), Box::new(e2), Box::new(e3))));
                     }
                     (
-                        SymbolID::EXP,
-                        [T(Token::Let), T(Token::Ident(name)), T(Token::Equal), N(SymbolID::EXP), T(Token::In), N(SymbolID::EXP)],
+                        Symbol::Expr,
+                        [T(Token::Let), T(Token::Ident(name)), T(Token::Equal), N(Symbol::Expr), T(Token::In), N(Symbol::Expr)],
                     ) => {
                         let body = pop_stack!(Expr);
                         let value = pop_stack!(Expr);
                         stack.push(Expr(Expr::Let(vec![name], Box::new(value), Box::new(body))));
                     }
                     (
-                        SymbolID::EXP,
-                        [T(Token::Let), T(Token::LParen), N(SymbolID::PAT), T(Token::RParen), T(Token::Equal), N(SymbolID::EXP), T(Token::In), N(SymbolID::EXP)],
+                        Symbol::Expr,
+                        [T(Token::Let), T(Token::LParen), N(Symbol::Pat), T(Token::RParen), T(Token::Equal), N(Symbol::Expr), T(Token::In), N(Symbol::Expr)],
                     ) => {
                         let body = pop_stack!(Expr);
                         let value = pop_stack!(Expr);
@@ -162,26 +159,26 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                         stack.push(Expr(Expr::Let(pat, Box::new(value), Box::new(body))));
                     }
                     (
-                        SymbolID::EXP,
-                        [T(Token::Let), T(Token::Rec), N(SymbolID::FUNDEF), T(Token::In), N(SymbolID::EXP)],
+                        Symbol::Expr,
+                        [T(Token::Let), T(Token::Rec), N(Symbol::FunDef), T(Token::In), N(Symbol::Expr)],
                     ) => {
                         let body = pop_stack!(Expr);
                         let fundef = pop_stack!(FunDef);
                         stack.push(Expr(Expr::LetRec(fundef, Box::new(body))));
                     }
-                    (SymbolID::EXP, [N(SymbolID::SIMPLE_EXP), N(SymbolID::ACTUAL_ARGS)]) => {
+                    (Symbol::Expr, [N(Symbol::SimpleExpr), N(Symbol::ActualArgs)]) => {
                         let args = pop_stack!(ActualArgs);
                         let caller = pop_stack!(Expr);
                         stack.push(Expr(Expr::App(Box::new(caller), args)));
                     }
-                    (SymbolID::EXP, [N(SymbolID::ELEMS)]) => {
+                    (Symbol::Expr, [N(Symbol::Elems)]) => {
                         let mut elems = pop_stack!(Elems);
                         elems.reverse();
                         stack.push(Expr(Expr::Tuple(elems)));
                     }
                     (
-                        SymbolID::EXP,
-                        [N(SymbolID::SIMPLE_EXP), T(Token::Dot), T(Token::LParen), N(SymbolID::EXP), T(Token::RParen), T(Token::LessMinus), N(SymbolID::EXP)],
+                        Symbol::Expr,
+                        [N(Symbol::SimpleExpr), T(Token::Dot), T(Token::LParen), N(Symbol::Expr), T(Token::RParen), T(Token::LessMinus), N(Symbol::Expr)],
                     ) => {
                         let value = pop_stack!(Expr);
                         let index = pop_stack!(Expr);
@@ -192,15 +189,15 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                             Box::new(value),
                         )));
                     }
-                    (SymbolID::EXP, [N(SymbolID::EXP), T(Token::Semicolon), N(SymbolID::EXP)]) => {
+                    (Symbol::Expr, [N(Symbol::Expr), T(Token::Semicolon), N(Symbol::Expr)]) => {
                         // e1; e2  --> let () = e1 in e2
                         let e2 = pop_stack!(Expr);
                         let e1 = pop_stack!(Expr);
                         stack.push(Expr(Expr::Let(vec![], Box::new(e1), Box::new(e2))));
                     }
                     (
-                        SymbolID::EXP,
-                        [T(Token::ArrayMake), N(SymbolID::SIMPLE_EXP), N(SymbolID::SIMPLE_EXP)],
+                        Symbol::Expr,
+                        [T(Token::ArrayMake), N(Symbol::SimpleExpr), N(Symbol::SimpleExpr)],
                     ) => {
                         let default = pop_stack!(Expr);
                         let length = pop_stack!(Expr);
@@ -208,8 +205,8 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                     }
 
                     (
-                        SymbolID::FUNDEF,
-                        [T(Token::Ident(name)), N(SymbolID::FORMAL_ARGS), T(Token::Equal), N(SymbolID::EXP)],
+                        Symbol::FunDef,
+                        [T(Token::Ident(name)), N(Symbol::FormalArgs), T(Token::Equal), N(Symbol::Expr)],
                     ) => {
                         let body = pop_stack!(Expr);
                         let mut args = pop_stack!(FormalArgs);
@@ -221,7 +218,7 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                         }));
                     }
 
-                    (SymbolID::FORMAL_ARGS, [T(Token::Ident(arg)), N(SymbolID::FORMAL_ARGS)]) => {
+                    (Symbol::FormalArgs, [T(Token::Ident(arg)), N(Symbol::FormalArgs)]) => {
                         match stack.last_mut() {
                             Some(FormalArgs(args)) => {
                                 args.push(arg);
@@ -229,14 +226,11 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                             _ => anyhow::bail!("unexpected stack item (expected: FormalArgs)"),
                         }
                     }
-                    (SymbolID::FORMAL_ARGS, [T(Token::Ident(arg))]) => {
+                    (Symbol::FormalArgs, [T(Token::Ident(arg))]) => {
                         stack.push(StackItem::FormalArgs(vec![arg]));
                     }
 
-                    (
-                        SymbolID::ACTUAL_ARGS,
-                        [N(SymbolID::ACTUAL_ARGS), N(SymbolID::SIMPLE_EXP)],
-                    ) => {
+                    (Symbol::ActualArgs, [N(Symbol::ActualArgs), N(Symbol::SimpleExpr)]) => {
                         let arg = pop_stack!(Expr);
                         match stack.last_mut() {
                             Some(ActualArgs(args)) => {
@@ -245,12 +239,12 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                             _ => anyhow::bail!("unexpected stack item (expected: ActualArgs)"),
                         }
                     }
-                    (SymbolID::ACTUAL_ARGS, [N(SymbolID::SIMPLE_EXP)]) => {
+                    (Symbol::ActualArgs, [N(Symbol::SimpleExpr)]) => {
                         let arg = pop_stack!(Expr);
                         stack.push(ActualArgs(vec![arg]));
                     }
 
-                    (SymbolID::ELEMS, [N(SymbolID::ELEMS), T(Token::Comma), N(SymbolID::EXP)]) => {
+                    (Symbol::Elems, [N(Symbol::Elems), T(Token::Comma), N(Symbol::Expr)]) => {
                         let elem = pop_stack!(Expr);
                         match stack.last_mut() {
                             Some(Elems(elems)) => {
@@ -259,13 +253,13 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                             _ => anyhow::bail!("unexpected stack item (expected: Elems)"),
                         }
                     }
-                    (SymbolID::ELEMS, [N(SymbolID::EXP), T(Token::Comma), N(SymbolID::EXP)]) => {
+                    (Symbol::Elems, [N(Symbol::Expr), T(Token::Comma), N(Symbol::Expr)]) => {
                         let e2 = pop_stack!(Expr);
                         let e1 = pop_stack!(Expr);
                         stack.push(Elems(vec![e1, e2]));
                     }
 
-                    (SymbolID::PAT, [N(SymbolID::PAT), T(Token::Comma), T(Token::Ident(p))]) => {
+                    (Symbol::Pat, [N(Symbol::Pat), T(Token::Comma), T(Token::Ident(p))]) => {
                         match stack.last_mut() {
                             Some(Pat(patterns)) => {
                                 patterns.push(p);
@@ -273,10 +267,7 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                             _ => anyhow::bail!("unexpected stack item (expected: Pat)"),
                         }
                     }
-                    (
-                        SymbolID::PAT,
-                        [T(Token::Ident(p1)), T(Token::Comma), T(Token::Ident(p2))],
-                    ) => {
+                    (Symbol::Pat, [T(Token::Ident(p1)), T(Token::Comma), T(Token::Ident(p2))]) => {
                         stack.push(Pat(vec![p1, p2]));
                     }
 

@@ -15,10 +15,10 @@ pub fn g_arithmetic(g: &mut GrammarDef<'_>) -> Result {
     let num = g.terminal("NUM", None)?;
 
     // nonterminals.
-    let expr = g.nonterminal("EXPR")?;
-    let term = g.nonterminal("TERM")?;
-    let factor = g.nonterminal("FACTOR")?;
-    let atom = g.nonterminal("ATOM")?;
+    let expr = g.nonterminal("Expr")?;
+    let term = g.nonterminal("Term")?;
+    let factor = g.nonterminal("Factor")?;
+    let atom = g.nonterminal("Atom")?;
 
     g.start_symbol(expr)?;
 
@@ -56,7 +56,7 @@ pub fn g_arithmetic_prec(g: &mut GrammarDef<'_>) -> Result {
     let num = g.terminal("NUM", None)?;
 
     // nonterminal symbols.
-    let expr = g.nonterminal("EXPR")?;
+    let expr = g.nonterminal("Expr")?;
 
     g.start_symbol(expr)?;
 
@@ -96,12 +96,12 @@ pub fn g2(g: &mut GrammarDef<'_>) -> Result {
     let colon = g.terminal("COLON", None)?;
     let ident = g.terminal("ID", None)?;
 
-    let def = g.nonterminal("DEF")?;
-    let param_spec = g.nonterminal("PARAM_SPEC")?;
-    let return_spec = g.nonterminal("RETURN_SPEC")?;
-    let type_ = g.nonterminal("TYPE")?;
-    let name = g.nonterminal("NAME")?;
-    let name_list = g.nonterminal("NAME_LIST")?;
+    let def = g.nonterminal("Def")?;
+    let param_spec = g.nonterminal("ParamSpec")?;
+    let return_spec = g.nonterminal("ReturnSpec")?;
+    let type_ = g.nonterminal("Type")?;
+    let name = g.nonterminal("Name")?;
+    let name_list = g.nonterminal("NameList")?;
 
     g.rule(def, [param_spec, return_spec, comma], None)?;
 
@@ -260,14 +260,14 @@ pub fn g8(g: &mut GrammarDef<'_>) -> Result {
 }
 
 pub fn g9(g: &mut GrammarDef<'_>) -> Result {
-    let t_a = g.terminal("T_A", None)?;
-    let t_plus = g.terminal("T_PLUS", None)?;
-    let t_num = g.terminal("T_NUM", None)?;
-    let t_lparen = g.terminal("T_LPAREN", None)?;
-    let t_rparen = g.terminal("T_RPAREN", None)?;
+    let t_a = g.terminal("A", None)?;
+    let t_plus = g.terminal("PLUS", None)?;
+    let t_num = g.terminal("NUM", None)?;
+    let t_lparen = g.terminal("LPAREN", None)?;
+    let t_rparen = g.terminal("RPAREN", None)?;
 
-    let n_e = g.nonterminal("N_E")?;
-    let n_t = g.nonterminal("N_T")?;
+    let n_e = g.nonterminal("E")?;
+    let n_t = g.nonterminal("T")?;
 
     g.rule(n_e, [n_e, t_plus, n_t], None)?;
     g.rule(n_e, [n_t], None)?;
@@ -280,14 +280,14 @@ pub fn g9(g: &mut GrammarDef<'_>) -> Result {
 }
 
 pub fn g10(g: &mut GrammarDef<'_>) -> Result {
-    let t_a = g.terminal("T_A", None)?;
-    let t_x = g.terminal("T_X", None)?;
-    let t_lparen = g.terminal("T_LPAREN", None)?;
-    let t_rparen = g.terminal("T_RPAREN", None)?;
+    let t_a = g.terminal("A", None)?;
+    let t_x = g.terminal("X", None)?;
+    let t_lparen = g.terminal("LPAREN", None)?;
+    let t_rparen = g.terminal("RPAREN", None)?;
 
-    let n_e = g.nonterminal("N_E")?;
-    let n_t = g.nonterminal("N_T")?;
-    let n_o = g.nonterminal("N_O")?;
+    let n_e = g.nonterminal("E")?;
+    let n_t = g.nonterminal("T")?;
+    let n_o = g.nonterminal("O")?;
 
     g.rule(n_e, [n_e, n_o, n_t], None)?;
     g.rule(n_e, [n_t], None)?;

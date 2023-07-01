@@ -93,13 +93,13 @@ fn min_caml(g: &mut GrammarDef<'_>) -> Result<(), GrammarDefError> {
     let array_make = g.terminal("ARRAY_MAKE", None)?;
     let dot = g.terminal("DOT", Some(prec_dot))?;
 
-    let simple_exp = g.nonterminal("SIMPLE_EXP")?;
-    let exp = g.nonterminal("EXP")?;
-    let formal_args = g.nonterminal("FORMAL_ARGS")?;
-    let actual_args = g.nonterminal("ACTUAL_ARGS")?;
-    let fundef = g.nonterminal("FUNDEF")?;
-    let pat = g.nonterminal("PAT")?;
-    let elems = g.nonterminal("ELEMS")?;
+    let simple_exp = g.nonterminal("SimpleExpr")?;
+    let exp = g.nonterminal("Expr")?;
+    let formal_args = g.nonterminal("FormalArgs")?;
+    let actual_args = g.nonterminal("ActualArgs")?;
+    let fundef = g.nonterminal("FunDef")?;
+    let pat = g.nonterminal("Pat")?;
+    let elems = g.nonterminal("Elems")?;
 
     g.start_symbol(exp)?;
 

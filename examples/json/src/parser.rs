@@ -59,40 +59,40 @@ pub fn parse(input: &str) -> anyhow::Result<Value<'_>> {
             ParseEvent::AboutToReduce(symbol, args) => {
                 tracing::trace!("reduce: {:?} -> {:?}", symbol, args);
                 match (symbol, args) {
-                    (SymbolID::VALUE, [T(Token::Null)]) => {
+                    (Symbol::Value, [T(Token::Null)]) => {
                         stack.push(StackItem::Value(Value::Null));
                     }
-                    (SymbolID::VALUE, [T(Token::True)]) => {
+                    (Symbol::Value, [T(Token::True)]) => {
                         stack.push(StackItem::Value(Value::Bool(true)));
                     }
-                    (SymbolID::VALUE, [T(Token::False)]) => {
+                    (Symbol::Value, [T(Token::False)]) => {
                         stack.push(StackItem::Value(Value::Bool(false)));
                     }
-                    (SymbolID::VALUE, [T(Token::Number(number))]) => {
+                    (Symbol::Value, [T(Token::Number(number))]) => {
                         stack.push(StackItem::Value(Value::Number(number)));
                     }
-                    (SymbolID::VALUE, [T(Token::String(raw))]) => {
+                    (Symbol::Value, [T(Token::String(raw))]) => {
                         stack.push(StackItem::Value(Value::String(EscapedStr::from_raw(
                             &raw[1..raw.len() - 1],
                         ))));
                     }
-                    (SymbolID::VALUE, [N(SymbolID::ARRAY)]) => {
+                    (Symbol::Value, [N(Symbol::Array)]) => {
                         let array = pop_stack_item!(Array);
                         stack.push(StackItem::Value(Value::Array(array)));
                     }
-                    (SymbolID::VALUE, [N(SymbolID::OBJECT)]) => {
+                    (Symbol::Value, [N(Symbol::Object)]) => {
                         let object = pop_stack_item!(Object);
                         stack.push(StackItem::Value(Value::Object(object)));
                     }
 
-                    (SymbolID::OBJECT, [T(Token::LBracket), T(Token::RBracket)]) => {
+                    (Symbol::Object, [T(Token::LBracket), T(Token::RBracket)]) => {
                         stack.push(StackItem::Object(Object {
                             members: Default::default(),
                         }));
                     }
                     (
-                        SymbolID::OBJECT,
-                        [T(Token::LBracket), N(SymbolID::MEMBERS), T(Token::RBracket)],
+                        Symbol::Object,
+                        [T(Token::LBracket), N(Symbol::Members), T(Token::RBracket)],
                     ) => {
                         let members = pop_stack_item!(Members);
                         stack.push(StackItem::Object(Object {
@@ -100,15 +100,12 @@ pub fn parse(input: &str) -> anyhow::Result<Value<'_>> {
                         }));
                     }
 
-                    (SymbolID::MEMBERS, [N(SymbolID::MEMBER)]) => {
+                    (Symbol::Members, [N(Symbol::Member)]) => {
                         let (key, value) = pop_stack_item!(Member);
                         let members = vec![(key, value)];
                         stack.push(StackItem::Members(members));
                     }
-                    (
-                        SymbolID::MEMBERS,
-                        [N(SymbolID::MEMBER), T(Token::Comma), N(SymbolID::MEMBERS)],
-                    ) => {
+                    (Symbol::Members, [N(Symbol::Member), T(Token::Comma), N(Symbol::Members)]) => {
                         let mut members = pop_stack_item!(Members);
                         let (key, value) = pop_stack_item!(Member);
                         members.push((key, value));
@@ -116,8 +113,8 @@ pub fn parse(input: &str) -> anyhow::Result<Value<'_>> {
                     }
 
                     (
-                        SymbolID::MEMBER,
-                        [T(Token::String(key)), T(Token::Colon), N(SymbolID::VALUE)],
+                        Symbol::Member,
+                        [T(Token::String(key)), T(Token::Colon), N(Symbol::Value)],
                     ) => {
                         let value = pop_stack_item!(Value);
                         stack.push(StackItem::Member((
@@ -126,26 +123,23 @@ pub fn parse(input: &str) -> anyhow::Result<Value<'_>> {
                         )));
                     }
 
-                    (SymbolID::ARRAY, [T(Token::LBrace), T(Token::RBrace)]) => {
+                    (Symbol::Array, [T(Token::LBrace), T(Token::RBrace)]) => {
                         stack.push(StackItem::Array(Array { elements: vec![] }));
                     }
-                    (
-                        SymbolID::ARRAY,
-                        [T(Token::LBrace), N(SymbolID::ELEMENTS), T(Token::RBrace)],
-                    ) => {
+                    (Symbol::Array, [T(Token::LBrace), N(Symbol::Elements), T(Token::RBrace)]) => {
                         let mut elements = pop_stack_item!(Elements);
                         elements.reverse();
                         stack.push(StackItem::Array(Array { elements }));
                     }
 
-                    (SymbolID::ELEMENTS, [N(SymbolID::VALUE)]) => {
+                    (Symbol::Elements, [N(Symbol::Value)]) => {
                         let elem = pop_stack_item!(Value);
                         stack.push(StackItem::Elements(vec![Box::new(elem)]));
                     }
 
                     (
-                        SymbolID::ELEMENTS,
-                        [N(SymbolID::VALUE), T(Token::Comma), N(SymbolID::ELEMENTS)],
+                        Symbol::Elements,
+                        [N(Symbol::Value), T(Token::Comma), N(Symbol::Elements)],
                     ) => {
                         let mut elems = pop_stack_item!(Elements);
                         let elem = pop_stack_item!(Value);

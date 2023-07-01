@@ -86,10 +86,6 @@ impl NonterminalID {
         assert!(raw < u64::MAX / 2, "too large NonterminalID");
         Self { raw }
     }
-    #[inline]
-    pub(crate) const fn raw(self) -> u64 {
-        self.raw
-    }
 }
 #[derive(Debug)]
 pub struct Nonterminal {

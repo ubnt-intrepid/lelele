@@ -8,6 +8,5 @@ publish = false
 
 [dependencies]
 indexmap = { workspace = true }
-phf_codegen = { workspace = true }
 rustc-hash = { workspace = true }
 unicode-ident = { workspace = true }

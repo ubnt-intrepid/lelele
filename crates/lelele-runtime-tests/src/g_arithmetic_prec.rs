@@ -42,7 +42,7 @@ fn simple_expr() {
     offer_input!(TokenID::PLUS);
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(SymbolID::EXPR, [T(TokenID::NUM)]))
+        Ok(AboutToReduce(Symbol::Expr, [T(TokenID::NUM)]))
     );
     assert_matches!(parser.resume(), Ok(Shifting(&TokenID::PLUS)));
 
@@ -52,7 +52,7 @@ fn simple_expr() {
     offer_input!(TokenID::STAR);
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(SymbolID::EXPR, [T(TokenID::NUM)]))
+        Ok(AboutToReduce(Symbol::Expr, [T(TokenID::NUM)]))
     );
     assert_matches!(parser.resume(), Ok(Shifting(&TokenID::STAR)));
 
@@ -62,20 +62,20 @@ fn simple_expr() {
     offer_input!();
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(SymbolID::EXPR, [T(TokenID::NUM)]))
+        Ok(AboutToReduce(Symbol::Expr, [T(TokenID::NUM)]))
     );
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
-            SymbolID::EXPR,
-            [N(SymbolID::EXPR), T(TokenID::STAR), N(SymbolID::EXPR)]
+            Symbol::Expr,
+            [N(Symbol::Expr), T(TokenID::STAR), N(Symbol::Expr)]
         ))
     );
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
-            SymbolID::EXPR,
-            [N(SymbolID::EXPR), T(TokenID::PLUS), N(SymbolID::EXPR)]
+            Symbol::Expr,
+            [N(Symbol::Expr), T(TokenID::PLUS), N(Symbol::Expr)]
         ))
     );
     assert_matches!(parser.resume(), Ok(Accepted));
@@ -112,7 +112,7 @@ fn with_unary_minus() {
     offer_input!(TokenID::PLUS);
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(SymbolID::EXPR, [T(TokenID::NUM)]))
+        Ok(AboutToReduce(Symbol::Expr, [T(TokenID::NUM)]))
     );
     assert_matches!(parser.resume(), Ok(Shifting(&TokenID::PLUS)));
 
@@ -122,7 +122,7 @@ fn with_unary_minus() {
     offer_input!(TokenID::STAR);
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(SymbolID::EXPR, [T(TokenID::NUM)]))
+        Ok(AboutToReduce(Symbol::Expr, [T(TokenID::NUM)]))
     );
     assert_matches!(parser.resume(), Ok(Shifting(&TokenID::STAR)));
 
@@ -136,27 +136,27 @@ fn with_unary_minus() {
 
     assert_matches!(
         parser.resume(),
-        Ok(AboutToReduce(SymbolID::EXPR, [T(TokenID::NUM)]))
+        Ok(AboutToReduce(Symbol::Expr, [T(TokenID::NUM)]))
     );
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
-            SymbolID::EXPR,
-            [T(TokenID::MINUS), N(SymbolID::EXPR)]
+            Symbol::Expr,
+            [T(TokenID::MINUS), N(Symbol::Expr)]
         ))
     );
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
-            SymbolID::EXPR,
-            [N(SymbolID::EXPR), T(TokenID::STAR), N(SymbolID::EXPR)]
+            Symbol::Expr,
+            [N(Symbol::Expr), T(TokenID::STAR), N(Symbol::Expr)]
         ))
     );
     assert_matches!(
         parser.resume(),
         Ok(AboutToReduce(
-            SymbolID::EXPR,
-            [N(SymbolID::EXPR), T(TokenID::PLUS), N(SymbolID::EXPR)]
+            Symbol::Expr,
+            [N(Symbol::Expr), T(TokenID::PLUS), N(Symbol::Expr)]
         ))
     );
 
