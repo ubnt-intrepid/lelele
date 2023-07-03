@@ -229,9 +229,8 @@ impl<'g> Codegen<'g> {
                     writeln!(f, "NodeID::N{} => ", id)?;
                     f.bracket("match symbol", |f| {
                         for (symbol, target) in node.gotos() {
-                            if let Some(symbol) = self.grammar.nonterminal(&symbol).export_name() {
-                                writeln!(f, "Symbol::{} => Some(NodeID::N{}),", symbol, target)?;
-                            }
+                            let symbol = self.grammar.nonterminal(&symbol).export_name().unwrap();
+                            writeln!(f, "Symbol::{} => Some(NodeID::N{}),", symbol, target)?;
                         }
 
                         f.line("#[allow(unreachable_patterns)]")?;

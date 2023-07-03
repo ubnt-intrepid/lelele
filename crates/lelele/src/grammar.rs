@@ -612,11 +612,11 @@ impl<'def> GrammarDef<'def> {
             None => self
                 .nonterminals
                 .iter()
-                .map(|n| n.id())
-                .next()
+                .find(|n| n.id() != NonterminalID::START)
                 .ok_or_else(|| GrammarDefError::Other {
                     msg: "empty nonterminal symbols".into(),
-                })?,
+                })?
+                .id(),
         };
 
         let accept_rule = Rule {
