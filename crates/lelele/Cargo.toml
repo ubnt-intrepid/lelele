@@ -20,11 +20,6 @@ unicode-ident = { workspace = true }
 criterion = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-[[bin]]
-name = "lelele"
-path = "src/bin/lelele/main.rs"
-doc = false
-
 [[bench]]
 name = "benches"
 harness = false

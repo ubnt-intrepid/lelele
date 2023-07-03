@@ -1,0 +1,20 @@
+[package]
+name = "lelele-cli"
+version = "0.0.0-dev"
+authors = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+publish = false
+
+[dependencies]
+lelele = { path = "../lelele" }
+anyhow = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+xshell = { workspace = true }
+
+[[bin]]
+name = "lelele"
+path = "src/main.rs"
+doc = false

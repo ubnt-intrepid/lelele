@@ -1,8 +1,8 @@
 pub mod ast;
-mod gen;
-mod lexer;
-pub use gen::*;
+pub mod grammar;
+pub mod lexer;
 
+use grammar::*;
 use lelele_runtime::parser::{ParseEvent, ParseItem::*, Parser};
 use lexer::{Lexer, Token};
 use StackItem as s;
