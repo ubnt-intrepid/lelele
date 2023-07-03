@@ -401,6 +401,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unicode-ident",
+ "walkdir",
 ]
 
 [[package]]
@@ -463,7 +464,6 @@ dependencies = [
 name = "lelele-runtime-tests"
 version = "0.0.0"
 dependencies = [
- "anyhow",
  "lelele",
  "lelele-runtime",
 ]

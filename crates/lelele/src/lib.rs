@@ -1,5 +1,6 @@
 //! Syntax support for Lelele grammar file.
 
+pub mod build;
 pub mod codegen;
 pub mod dfa;
 pub mod grammar;

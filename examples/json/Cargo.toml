@@ -6,8 +6,6 @@ publish = false
 
 [build-dependencies]
 lelele = { path = "../../crates/lelele" }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 [dependencies]
 lelele-runtime = { path = "../../crates/lelele-runtime" }

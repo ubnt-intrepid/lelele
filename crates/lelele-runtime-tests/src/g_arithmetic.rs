@@ -1,5 +1,5 @@
 mod p {
-    include!(concat!(env!("OUT_DIR"), "/arithmetic/parser.rs"));
+    include!(concat!(env!("OUT_DIR"), "/arithmetic.rs"));
 }
 pub use p::*;
 
