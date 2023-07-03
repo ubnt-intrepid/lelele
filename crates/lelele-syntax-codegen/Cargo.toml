@@ -1,9 +1,0 @@
-[package]
-name = "lelele-syntax-codegen"
-version = "0.0.0"
-edition = "2021"
-publish = false
-
-[dependencies]
-lelele = { path = "../lelele" }
-anyhow = { workspace = true }

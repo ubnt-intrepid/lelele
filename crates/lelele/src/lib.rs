@@ -1,8 +1,9 @@
-//! An LR(1) parser generator.
+//! Syntax support for Lelele grammar file.
 
 pub mod codegen;
 pub mod dfa;
 pub mod grammar;
+pub mod parser;
 
 // type shortcut
 type BuildFxHasher = std::hash::BuildHasherDefault<rustc_hash::FxHasher>;

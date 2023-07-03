@@ -1,11 +1,13 @@
 //! Grammar types.
 
-use crate::IndexSet;
+use crate::{parser::ast, IndexMap, IndexSet};
 use std::{
     borrow::{Borrow, Cow},
-    fmt,
+    fmt, fs,
     hash::{Hash, Hasher},
+    io,
     marker::PhantomData,
+    path::Path,
 };
 
 const TERMINAL_ID_OFFSET: u64 = 0x4;
@@ -282,6 +284,16 @@ impl fmt::Display for Grammar {
 }
 
 impl Grammar {
+    pub fn from_file(path: impl AsRef<Path>) -> Result<Grammar, GrammarDefError> {
+        let source = fs::read_to_string(path).map_err(GrammarDefError::IO)?;
+        Self::from_str(&source)
+    }
+
+    pub fn from_str(source: &str) -> Result<Grammar, GrammarDefError> {
+        let grammar = crate::parser::parse(source).map_err(GrammarDefError::Syntax)?;
+        Grammar::define(|g| define_grammar_from_syntax(g, &grammar))
+    }
+
     /// Define a grammar using the specified function.
     pub fn define<F>(f: F) -> Result<Self, GrammarDefError>
     where
@@ -357,6 +369,103 @@ impl Grammar {
     }
 }
 
+fn define_grammar_from_syntax(
+    g: &mut GrammarDef<'_>,
+    grammar: &ast::Grammar,
+) -> Result<(), GrammarDefError> {
+    let mut precedences = IndexMap::default();
+    let mut next_priority = 0;
+    let mut symbols = IndexMap::default();
+
+    for desc in &grammar.descs {
+        match desc {
+            ast::Desc::Prec(ast::PrecDesc { configs, ident }) => {
+                let mut assoc = None;
+                for config in configs {
+                    match (&*config.key, &*config.value) {
+                        ("assoc", "left") => assoc = Some(Assoc::Left),
+                        ("assoc", "right") => assoc = Some(Assoc::Right),
+                        ("assoc", "none" | "nonassoc") => assoc = Some(Assoc::Nonassoc),
+                        _ => return Err("unexpected config in @prec desc".into()),
+                    }
+                }
+                let assoc = assoc.unwrap_or(Assoc::Nonassoc);
+                precedences.insert(ident.to_string(), Precedence::new(next_priority, assoc));
+                next_priority += 1;
+            }
+            ast::Desc::Terminal(ast::TerminalDesc { configs, idents }) => {
+                let mut prec = None;
+                for config in configs {
+                    if config.key == "prec" {
+                        prec = Some(config.value.clone());
+                    }
+                }
+                let prec = match prec {
+                    Some(prec) => Some(
+                        precedences
+                            .get(&prec)
+                            .copied()
+                            .ok_or_else(|| format!("missing precedence name: `{}'", prec))?,
+                    ),
+                    None => None,
+                };
+                for name in idents {
+                    let symbol = g.terminal(&*name, prec)?;
+                    symbols.insert(name, symbol);
+                }
+            }
+
+            ast::Desc::Nonterminal(ast::NonterminalDesc { idents }) => {
+                for name in idents {
+                    let symbol = g.nonterminal(&*name)?;
+                    symbols.insert(name, symbol);
+                }
+            }
+
+            ast::Desc::Start(ast::StartDesc { name }) => {
+                let start_symbol = symbols
+                    .get(name)
+                    .copied()
+                    .ok_or_else(|| format!("unknown start symbol: `{}'", name))?;
+                g.start_symbol(start_symbol)?;
+            }
+
+            ast::Desc::Rule(ast::RuleDesc { left, productions }) => {
+                let left = symbols
+                    .get(left)
+                    .copied()
+                    .ok_or_else(|| format!("unknown left symbol: `{}'", left))?;
+                for production in productions {
+                    let mut prec = None;
+                    for config in &production.configs {
+                        match &*config.key {
+                            "prec" => {
+                                prec = Some(precedences.get(&config.value).copied().ok_or_else(
+                                    || format!("unknown precedence name: `{}'", config.value),
+                                )?);
+                            }
+                            _ => (),
+                        }
+                    }
+
+                    let mut right = vec![];
+                    for symbol in &production.elems {
+                        let symbol = symbols
+                            .get(symbol)
+                            .copied()
+                            .ok_or_else(|| format!("unknown symbol: `{}'", symbol))?;
+                        right.push(symbol);
+                    }
+
+                    g.rule(left, right, prec)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// The contextural values for building a `Grammar`.
 #[derive(Debug)]
 pub struct GrammarDef<'def> {
@@ -378,14 +487,14 @@ impl<'def> GrammarDef<'def> {
         precedence: Option<Precedence>,
     ) -> Result<SymbolRef, GrammarDefError> {
         if !verify_ident(export_name) {
-            return Err(GrammarDefError {
+            return Err(GrammarDefError::Other {
                 msg: "incorrect token name".into(),
             });
         }
 
         for terminal in &self.terminals {
             if matches!(terminal.export_name(), Some(name) if name == export_name) {
-                return Err(GrammarDefError {
+                return Err(GrammarDefError::Other {
                     msg: format!(
                         "The terminal `{}' has already been exported",
                         terminal.export_name().unwrap_or("<bogus>")
@@ -411,14 +520,14 @@ impl<'def> GrammarDef<'def> {
     /// Declare a nonterminal symbol used in this grammar.
     pub fn nonterminal(&mut self, export_name: &str) -> Result<SymbolRef, GrammarDefError> {
         if !verify_ident(export_name) {
-            return Err(GrammarDefError {
+            return Err(GrammarDefError::Other {
                 msg: "incorrect symbol name".into(),
             });
         }
 
         for nonterminal in &self.nonterminals {
             if matches!(nonterminal.export_name(), Some(name) if name == export_name) {
-                return Err(GrammarDefError {
+                return Err(GrammarDefError::Other {
                     msg: format!(
                         "The nonterminal export `{}' has already been used",
                         nonterminal.export_name().unwrap_or("<bogus>")
@@ -452,7 +561,7 @@ impl<'def> GrammarDef<'def> {
     {
         let left = match left.inner {
             SymbolRefInner::T(..) => {
-                return Err(GrammarDefError {
+                return Err(GrammarDefError::Other {
                     msg: "The starting symbol in production rule must be nonterminal".into(),
                 });
             }
@@ -484,7 +593,7 @@ impl<'def> GrammarDef<'def> {
     pub fn start_symbol(&mut self, symbol: SymbolRef) -> Result<(), GrammarDefError> {
         match symbol.inner {
             SymbolRefInner::T(..) => {
-                return Err(GrammarDefError {
+                return Err(GrammarDefError::Other {
                     msg: "the start symbol must be nonterminal".into(),
                 });
             }
@@ -505,7 +614,7 @@ impl<'def> GrammarDef<'def> {
                 .iter()
                 .map(|n| n.id())
                 .next()
-                .ok_or_else(|| GrammarDefError {
+                .ok_or_else(|| GrammarDefError::Other {
                     msg: "empty nonterminal symbols".into(),
                 })?,
         };
@@ -539,18 +648,24 @@ enum SymbolRefInner {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("Grammar define error: {}", msg)]
-pub struct GrammarDefError {
-    msg: String,
+pub enum GrammarDefError {
+    #[error("IO error: {}", _0)]
+    IO(io::Error),
+
+    #[error("Syntax error: {}", _0)]
+    Syntax(anyhow::Error),
+
+    #[error("Other error: {}", msg)]
+    Other { msg: String },
 }
 impl From<&str> for GrammarDefError {
     fn from(msg: &str) -> Self {
-        Self { msg: msg.into() }
+        Self::Other { msg: msg.into() }
     }
 }
 impl From<String> for GrammarDefError {
     fn from(msg: String) -> Self {
-        Self { msg }
+        Self::Other { msg }
     }
 }
 

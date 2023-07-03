@@ -1,11 +1,10 @@
+pub mod ast;
 mod gen;
+mod lexer;
 pub use gen::*;
 
-use crate::{
-    ast,
-    lexer::{Lexer, Token},
-};
 use lelele_runtime::parser::{ParseEvent, ParseItem::*, Parser};
+use lexer::{Lexer, Token};
 use StackItem as s;
 use Symbol::*;
 use Token::*;

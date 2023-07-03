@@ -7,7 +7,24 @@ rust-version = { workspace = true }
 publish = false
 
 [dependencies]
+lelele-runtime = { path = "../lelele-runtime" }
+anyhow = { workspace = true }
 indexmap = { workspace = true }
+logos = { workspace = true }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 unicode-ident = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[[bin]]
+name = "lelele"
+path = "src/bin/lelele/main.rs"
+doc = false
+
+[[bench]]
+name = "benches"
+harness = false

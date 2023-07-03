@@ -1,7 +1,7 @@
 use std::{env, path::PathBuf};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use lelele::dfa::Config;
+use lelele::{dfa::Config, grammar::Grammar};
 
 criterion_main!(benches);
 criterion_group!(benches, bench_arithmetic, bench_simple_2);
@@ -28,8 +28,7 @@ fn bench_dfa_gen(c: &mut Criterion, grammar_name: &str) {
         .map(PathBuf::from)
         .expect("missing environment variable: `CARGO_MANIFEST_DIR'");
     let grammar =
-        lelele_syntax::grammar_from_file(&project_root.join(format!("tests/{}.lll", grammar_name)))
-            .unwrap();
+        Grammar::from_file(&project_root.join(format!("tests/{}.lll", grammar_name))).unwrap();
 
     let mut group = c.benchmark_group(grammar_name);
     group.bench_function("Canonical", |b| {

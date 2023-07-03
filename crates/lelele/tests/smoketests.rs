@@ -1,11 +1,11 @@
-use lelele::dfa::Config;
+use lelele::{dfa::Config, grammar::Grammar};
 use std::{env, path::PathBuf};
 
 macro_rules! define_tests {
     ($($name:ident),*$(,)?) => {$(
         #[test]
         fn $name() {
-            let grammar = lelele_syntax::grammar_from_file(
+            let grammar = Grammar::from_file(
                 &PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
                     .join(concat!("tests/", stringify!($name), ".lll"))
             ).unwrap();

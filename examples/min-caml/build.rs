@@ -1,4 +1,4 @@
-use lelele::{codegen::Codegen, dfa::DFA};
+use lelele::{codegen::Codegen, dfa::DFA, grammar::Grammar};
 use std::{env, fs, io::Write, path::PathBuf};
 use tracing::Level;
 
@@ -15,7 +15,7 @@ fn main() {
 
     // 文法定義から構文解析表を導出する
     println!("cargo:rerun-if-changed=min-caml.lll"); // 冗長なコード生成の抑制
-    let grammar = lelele_syntax::grammar_from_file(&project_root.join("min-caml.lll")).unwrap();
+    let grammar = Grammar::from_file(&project_root.join("min-caml.lll")).unwrap();
     fs::write(project_root.join("min-caml.grammar"), grammar.to_string()).unwrap();
 
     let dfa = DFA::generate(&grammar);
