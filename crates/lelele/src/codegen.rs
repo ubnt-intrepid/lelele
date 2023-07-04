@@ -74,6 +74,10 @@ impl<'g> Codegen<'g> {
                 writeln!(f, "{},", export_name)?;
             }
             Ok(())
+        })?;
+        f.bracket("impl lelele::Token<TokenID> for TokenID", |f| {
+            f.line("#[inline]")?;
+            f.bracket("fn to_index(&self) -> TokenID", |f| f.line("*self"))
         })
     }
 

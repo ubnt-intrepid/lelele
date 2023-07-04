@@ -91,6 +91,12 @@ pub enum TokenID {
     /// Terminal `IDENT`.
     IDENT,
 }
+impl lelele::Token<TokenID> for TokenID {
+    #[inline]
+    fn to_index(&self) -> TokenID {
+        *self
+    }
+}
 /// The type to identify nonterminal symbols used in generated DFA.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Symbol {

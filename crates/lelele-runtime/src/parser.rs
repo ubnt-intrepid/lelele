@@ -9,13 +9,6 @@ pub trait Token<TIdx> {
     fn to_index(&self) -> TIdx;
 }
 
-impl<TIdx: Copy> Token<TIdx> for TIdx {
-    #[inline]
-    fn to_index(&self) -> TIdx {
-        *self
-    }
-}
-
 /// The parser using the generated parser definition based on specified grammar.
 pub struct Parser<TDef, TTok>
 where

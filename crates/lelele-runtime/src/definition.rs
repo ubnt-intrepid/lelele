@@ -80,6 +80,37 @@ where
     }
 }
 
+impl<T: ?Sized> ParserDef for Box<T>
+where
+    T: ParserDef,
+{
+    type State = T::State;
+    type Token = T::Token;
+    type Symbol = T::Symbol;
+
+    fn initial_state(&self) -> Self::State {
+        (**self).initial_state()
+    }
+
+    #[inline]
+    fn action<TCtx>(
+        &self,
+        current: Self::State,
+        lookahead: Option<Self::Token>,
+        cx: TCtx,
+    ) -> Result<TCtx::Ok, TCtx::Error>
+    where
+        TCtx: ParseAction<State = Self::State, Token = Self::Token, Symbol = Self::Symbol>,
+    {
+        (**self).action(current, lookahead, cx)
+    }
+
+    #[inline]
+    fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Self::State {
+        (**self).goto(current, symbol)
+    }
+}
+
 impl<T: ?Sized> ParserDef for std::rc::Rc<T>
 where
     T: ParserDef,
