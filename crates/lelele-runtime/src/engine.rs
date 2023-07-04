@@ -1,6 +1,6 @@
 //! The implementation of LR(1) parser engine.
 
-use crate::definition::ParserDef;
+use crate::definition::{ParserDef, Terminal};
 use std::{fmt, marker::PhantomData};
 
 /// A trait for abstracting token symbols.
@@ -13,11 +13,11 @@ pub trait Token<TIdx> {
 pub struct ParseEngine<TDef, TTok>
 where
     TDef: ParserDef,
-    TTok: Token<TDef::Token>,
+    TTok: Token<TDef::TerminalIndex>,
 {
     definition: TDef,
     state: ParseEngineState<TDef>,
-    states_stack: Vec<TDef::State>,
+    states_stack: Vec<TDef::StateIndex>,
     symbols_stack: Vec<Symbol<TDef, TTok>>,
     lookahead: Option<Option<TTok>>,
 }
@@ -25,10 +25,10 @@ where
 impl<TDef, TTok> fmt::Debug for ParseEngine<TDef, TTok>
 where
     TDef: ParserDef + fmt::Debug,
-    TDef::State: fmt::Debug,
-    TDef::Token: fmt::Debug,
-    TDef::Symbol: fmt::Debug,
-    TTok: Token<TDef::Token> + fmt::Debug,
+    TDef::StateIndex: fmt::Debug,
+    TDef::TerminalIndex: fmt::Debug,
+    TDef::NonterminalIndex: fmt::Debug,
+    TTok: Token<TDef::TerminalIndex> + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Parser")
@@ -47,8 +47,8 @@ where
 {
     Pending,
     WaitingInput,
-    Shifting(TDef::State),
-    Reducing(TDef::Symbol, usize),
+    Shifting(TDef::StateIndex),
+    Reducing(TDef::NonterminalIndex, usize),
     HandlingError,
     Accepted,
 }
@@ -56,9 +56,9 @@ where
 impl<TDef> fmt::Debug for ParseEngineState<TDef>
 where
     TDef: ParserDef,
-    TDef::State: fmt::Debug,
-    TDef::Token: fmt::Debug,
-    TDef::Symbol: fmt::Debug,
+    TDef::StateIndex: fmt::Debug,
+    TDef::TerminalIndex: fmt::Debug,
+    TDef::NonterminalIndex: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -75,7 +75,7 @@ where
 impl<TDef, TTok> ParseEngine<TDef, TTok>
 where
     TDef: ParserDef,
-    TTok: Token<TDef::Token>,
+    TTok: Token<TDef::TerminalIndex>,
 {
     /// Create a parser engine using the specified parser definition.
     pub fn new(definition: TDef) -> Self {
@@ -197,12 +197,12 @@ where
                 return Ok(ParseEvent::Accepted);
             }
 
-            ParseAction::Fail { expected } => {
+            ParseAction::Fail => {
                 self.state = ParseEngineState::HandlingError;
                 return Ok(ParseEvent::HandlingError {
                     state: current,
                     lookahead,
-                    expected,
+                    expected: self.definition.expected_terminals(current),
                 });
             }
         }
@@ -213,15 +213,15 @@ where
 pub enum ParseEvent<'p, TDef, TTok>
 where
     TDef: ParserDef,
-    TTok: Token<TDef::Token>,
+    TTok: Token<TDef::TerminalIndex>,
 {
     InputNeeded,
     Shifting(&'p TTok),
-    AboutToReduce(TDef::Symbol, &'p [Symbol<TDef, TTok>]),
+    AboutToReduce(TDef::NonterminalIndex, &'p [Symbol<TDef, TTok>]),
     HandlingError {
-        state: TDef::State,
+        state: TDef::StateIndex,
         lookahead: Option<&'p TTok>,
-        expected: Vec<TDef::Token>,
+        expected: &'p [Terminal<TDef::TerminalIndex>],
     },
     Accepted,
     Rejected,
@@ -232,10 +232,10 @@ where
 pub enum Symbol<TDef, TTok>
 where
     TDef: ParserDef,
-    TTok: Token<TDef::Token>,
+    TTok: Token<TDef::TerminalIndex>,
 {
     T(TTok),
-    N(TDef::Symbol),
+    N(TDef::NonterminalIndex),
 
     #[doc(hidden)]
     __Empty,
@@ -244,7 +244,7 @@ where
 impl<TDef, TTok> Default for Symbol<TDef, TTok>
 where
     TDef: ParserDef,
-    TTok: Token<TDef::Token>,
+    TTok: Token<TDef::TerminalIndex>,
 {
     fn default() -> Self {
         Self::__Empty
@@ -271,11 +271,11 @@ pub enum ParseError {
 
 // ---- ParseAction ----
 
-enum ParseAction<TState, TToken, TSymbol> {
+enum ParseAction<TState, TSymbol> {
     Shift(TState),
     Reduce(TSymbol, usize),
     Accept,
-    Fail { expected: Vec<TToken> },
+    Fail,
 }
 
 struct ParseContext<TState, TToken, TSymbol> {
@@ -285,18 +285,18 @@ struct ParseContext<TState, TToken, TSymbol> {
 impl<TState: Copy, TToken: Copy, TSymbol: Copy> crate::definition::ParseAction
     for ParseContext<TState, TToken, TSymbol>
 {
-    type State = TState;
-    type Token = TToken;
-    type Symbol = TSymbol;
+    type StateIndex = TState;
+    type TerminalIndex = TToken;
+    type NonterminalIndex = TSymbol;
 
-    type Ok = ParseAction<TState, TToken, TSymbol>;
+    type Ok = ParseAction<TState, TSymbol>;
     type Error = std::convert::Infallible;
 
-    fn shift(self, next: Self::State) -> Result<Self::Ok, Self::Error> {
+    fn shift(self, next: Self::StateIndex) -> Result<Self::Ok, Self::Error> {
         Ok(ParseAction::Shift(next))
     }
 
-    fn reduce(self, s: Self::Symbol, n: usize) -> Result<Self::Ok, Self::Error> {
+    fn reduce(self, s: Self::NonterminalIndex, n: usize) -> Result<Self::Ok, Self::Error> {
         Ok(ParseAction::Reduce(s, n))
     }
 
@@ -304,12 +304,7 @@ impl<TState: Copy, TToken: Copy, TSymbol: Copy> crate::definition::ParseAction
         Ok(ParseAction::Accept)
     }
 
-    fn fail<I>(self, expected_tokens: I) -> Result<Self::Ok, Self::Error>
-    where
-        I: IntoIterator<Item = Self::Token>,
-    {
-        Ok(ParseAction::Fail {
-            expected: expected_tokens.into_iter().collect(),
-        })
+    fn fail(self) -> Result<Self::Ok, Self::Error> {
+        Ok(ParseAction::Fail)
     }
 }

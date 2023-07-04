@@ -2,7 +2,7 @@
 
 use crate::{
     dfa::{Action, NodeID, DFA},
-    grammar::{Grammar, RuleID},
+    grammar::{Grammar, RuleID, TerminalID},
 };
 use std::fmt;
 
@@ -52,11 +52,6 @@ impl<'g> Codegen<'g> {
             }
             Ok(())
         })?;
-        writeln!(
-            f,
-            "const __START_NODE: NodeID = NodeID::N{};",
-            NodeID::START
-        )?;
         Ok(())
     }
 
@@ -102,28 +97,28 @@ impl<'g> Codegen<'g> {
         f.line("#[derive(Debug, Default)]")?;
         f.line("pub struct ParserDef {_p: () }")?;
         f.bracket("impl lelele::ParserDef for ParserDef", |f| {
-            f.line("type State = NodeID;")?;
-            f.line("type Token = TokenID;")?;
-            f.line("type Symbol = Symbol;")?;
+            f.line("type StateIndex = NodeID;")?;
+            f.line("type TerminalIndex = TokenID;")?;
+            f.line("type NonterminalIndex = Symbol;")?;
 
             f.line("#[inline]")?;
-            f.bracket("fn initial_state(&self) -> Self::State", |f| {
-                f.line("__START_NODE")
+            f.bracket("fn initial_state(&self) -> Self::StateIndex", |f| {
+                writeln!(f, "NodeID::N{}", NodeID::START)
             })?;
 
             f.line("#[inline]")?;
             let prefix = "\
                 fn action<TAction>(
                     &self,
-                    current: Self::State,
-                    lookahead: Option<Self::Token>,
+                    current: Self::StateIndex,
+                    lookahead: Option<Self::TerminalIndex>,
                     action: TAction,
                 ) -> Result<TAction::Ok, TAction::Error>
                 where
                     TAction: lelele::ParseAction<
-                        State = Self::State,
-                        Token = Self::Token,
-                        Symbol = Self::Symbol,
+                        StateIndex = Self::StateIndex,
+                        TerminalIndex = Self::TerminalIndex,
+                        NonterminalIndex = Self::NonterminalIndex,
                     >,
             ";
             f.bracket(prefix, |f| {
@@ -133,17 +128,21 @@ impl<'g> Codegen<'g> {
                         "Some(SimulatedAction::Reduce(symbol, n)) => action.reduce(symbol, n),",
                     )?;
                     f.line("Some(SimulatedAction::Accept) => action.accept(),")?;
-                    f.line(
-                        "None => action.fail(__expected_tokens(current).into_iter().copied()),",
-                    )?;
+                    f.line("None => action.fail(),")?;
                     Ok(())
                 })
             })?;
 
             f.line("#[inline]")?;
             f.bracket(
-                "fn goto(&self, current: Self::State, symbol: Self::Symbol) -> Self::State",
+                "fn goto(&self, current: Self::StateIndex, symbol: Self::NonterminalIndex) -> Self::StateIndex",
                 |f| f.line("__goto(current, symbol).unwrap()"),
+            )?;
+
+            f.line("#[inline]")?;
+            f.bracket(
+                "fn expected_terminals(&self, current: Self::StateIndex) -> &[lelele::Terminal<Self::TerminalIndex>]",
+                |f| f.line("__expected_terminals(current)"),
             )?;
 
             Ok(())
@@ -156,6 +155,7 @@ impl<'g> Codegen<'g> {
             Ok(())
         })?;
 
+        f.line("#[allow(unreachable_patterns)]")?;
         f.bracket("const fn __action(current: NodeID, lookahead: Option<TokenID>) -> Option<SimulatedAction>", |f| {
             f.bracket("match current", |f| {
                 for (id, node) in self.dfa.nodes() {
@@ -190,7 +190,6 @@ impl<'g> Codegen<'g> {
                             f.write_str(",\n")?;
                         }
 
-                        f.line("#[allow(unreachable_patterns)]")?;
                         f.line("_ => None,")?;
 
                         Ok(())
@@ -202,24 +201,28 @@ impl<'g> Codegen<'g> {
         })?;
 
         f.bracket(
-            "const fn __expected_tokens(current: NodeID) -> &'static [TokenID]",
+            "const fn __expected_terminals(current: NodeID) -> &'static [lelele::Terminal<TokenID>]",
             |f| {
                 f.bracket("match current", |f| {
                     for (id, node) in self.dfa.nodes() {
-                        write!(f, "NodeID::N{} => &[", id)?;
+                        writeln!(f, "NodeID::N{} => &[", id)?;
                         for (lookahead, _) in node.actions() {
-                            // FIXME: export EOI
-                            if let Some(name) = self.grammar.terminal(&lookahead).export_name() {
-                                write!(f, "TokenID::{},", name)?;
+                            let name = self.grammar.terminal(&lookahead).export_name();
+                            match (lookahead, name) {
+                                (TerminalID::EOI, _) => write!(f, "lelele::Terminal::EOI")?,
+                                (_, Some(name)) => write!(f, "lelele::Terminal::T(TokenID::{})", name)?,
+                                _ => continue,
                             }
+                            f.line(",")?;
                         }
-                        f.write_str("],\n")?;
+                        f.line("],")?;
                     }
                     Ok(())
                 })
             },
         )?;
 
+        f.line("#[allow(unreachable_patterns)]")?;
         let prefix = "const fn __goto(current: NodeID, symbol: Symbol) -> Option<NodeID>";
         f.bracket(prefix, |f| {
             f.bracket("match current", |f| {
@@ -237,14 +240,12 @@ impl<'g> Codegen<'g> {
                             writeln!(f, "Symbol::{} => Some(NodeID::N{}),", symbol, target)?;
                         }
 
-                        f.line("#[allow(unreachable_patterns)]")?;
                         f.line("_ => None,")?;
 
                         Ok(())
                     })?;
                 }
 
-                f.line("#[allow(unreachable_patterns)]")?;
                 f.line("_ => None,")?;
 
                 Ok(())

@@ -7,7 +7,7 @@ pub mod engine;
 #[doc(hidden)]
 pub mod _private {
     pub use crate::{
-        definition::{ParseAction, ParserDef},
+        definition::{ParseAction, ParserDef, Terminal},
         engine::{ParseEngine, Token},
     };
 }
