@@ -8,7 +8,7 @@ use crate::{
     syntax::{BinOp, Expr, FunDef, UnOp},
 };
 use anyhow::{ensure, Context as _};
-use lelele_runtime::parser::{ParseEvent, ParseItem::*, Parser};
+use lelele_runtime::engine::{ParseEngine, ParseEvent, Symbol::*};
 
 #[derive(Debug)]
 enum StackItem<'source> {
@@ -26,7 +26,7 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
     let _entered = span.enter();
 
     let mut lexer = Lexer::new(input);
-    let mut parser = Parser::new(ParserDef::default());
+    let mut engine = ParseEngine::new(ParserDef::default());
     let mut stack: Vec<StackItem> = vec![];
     macro_rules! pop_stack {
         ($Variant:ident) => {
@@ -38,17 +38,17 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
     }
 
     loop {
-        let event = parser.resume()?;
+        let event = engine.resume()?;
         match event {
             ParseEvent::InputNeeded => match lexer.next() {
                 Some(tok) => {
                     let tok = tok?;
                     tracing::trace!("offer token {:?}", tok);
-                    parser.offer_token(tok)?;
+                    engine.offer_token(tok)?;
                 }
                 None => {
                     tracing::trace!("offer end of input");
-                    parser.offer_eoi()?;
+                    engine.offer_eoi()?;
                 }
             },
 
@@ -276,13 +276,13 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
             }
 
             ParseEvent::HandlingError {
-                lr_state,
+                state,
                 lookahead,
                 expected,
             } => {
                 tracing::trace!(
                     "handling error: lr_state={:?}, lookahead={:?}, expected={:?}",
-                    lr_state,
+                    state,
                     lookahead,
                     expected,
                 );

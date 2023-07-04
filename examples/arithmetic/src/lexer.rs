@@ -27,7 +27,7 @@ pub enum Token<'source> {
     Num(&'source str),
 }
 
-impl lelele_runtime::parser::Token<TokenID> for Token<'_> {
+impl lelele_runtime::engine::Token<TokenID> for Token<'_> {
     fn to_index(&self) -> TokenID {
         match self {
             Self::LParen => TokenID::LPAREN,

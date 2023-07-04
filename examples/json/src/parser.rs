@@ -7,7 +7,7 @@ use crate::{
     lexer::Token,
     syntax::{Array, EscapedStr, Object, Value},
 };
-use lelele_runtime::parser::{ParseEvent, ParseItem::*, Parser};
+use lelele_runtime::engine::{ParseEngine, ParseEvent, Symbol::*};
 
 enum StackItem<'source> {
     Value(Value<'source>),
@@ -19,8 +19,11 @@ enum StackItem<'source> {
 }
 
 pub fn parse(input: &str) -> anyhow::Result<Value<'_>> {
+    let span = tracing::trace_span!("parse");
+    let _entered = span.enter();
+
     let mut lexer = crate::lexer::lexer(&input);
-    let mut parser = Parser::new(ParserDef::default());
+    let mut engine = ParseEngine::new(ParserDef::default());
     let mut stack = vec![];
     macro_rules! pop_stack_item {
         ($variant:ident) => {{
@@ -32,23 +35,17 @@ pub fn parse(input: &str) -> anyhow::Result<Value<'_>> {
     }
 
     loop {
-        let span = tracing::trace_span!("resume");
-        let _entered = span.enter();
-
-        let event = parser.resume().map_err(|e| {
-            eprintln!("parse error: {:?}", e);
-            e
-        })?;
+        let event = engine.resume()?;
         match event {
             ParseEvent::InputNeeded => match lexer.next() {
                 Some(tok) => {
                     let tok = tok?;
                     tracing::trace!("offer token {:?}", tok);
-                    parser.offer_token(tok)?;
+                    engine.offer_token(tok)?;
                 }
                 None => {
                     tracing::trace!("offer end of input");
-                    parser.offer_eoi()?;
+                    engine.offer_eoi()?;
                 }
             },
 
@@ -152,13 +149,13 @@ pub fn parse(input: &str) -> anyhow::Result<Value<'_>> {
             }
 
             ParseEvent::HandlingError {
-                lr_state,
+                state,
                 lookahead,
                 expected,
             } => {
                 tracing::trace!(
                     "handling error: lr_state={:?}, lookahead={:?}, expected={:?}",
-                    lr_state,
+                    state,
                     lookahead,
                     expected,
                 );

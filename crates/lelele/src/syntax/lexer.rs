@@ -27,7 +27,7 @@ pub enum Keyword {
     Empty,
 }
 
-impl lelele_runtime::parser::Token<TokenID> for Token<'_> {
+impl lelele_runtime::engine::Token<TokenID> for Token<'_> {
     fn to_index(&self) -> TokenID {
         match self {
             Token::LBracket => TokenID::LBRACKET,
@@ -50,7 +50,7 @@ impl lelele_runtime::parser::Token<TokenID> for Token<'_> {
 }
 
 pub type Spanned<'input> = (Loc, Token<'input>, Loc);
-impl lelele_runtime::parser::Token<TokenID> for Spanned<'_> {
+impl lelele_runtime::engine::Token<TokenID> for Spanned<'_> {
     #[inline]
     fn to_index(&self) -> TokenID {
         self.1.to_index()

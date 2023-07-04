@@ -6,7 +6,7 @@ use self::{
     grammar::{ParserDef, Symbol},
     lexer::{Keyword, Lexer, Token},
 };
-use lelele_runtime::parser::{ParseEvent, ParseItem::*, Parser};
+use lelele_runtime::engine::{ParseEngine, ParseEvent, Symbol::*};
 use Keyword::*;
 use StackItem as s;
 use Symbol::*;
@@ -29,7 +29,7 @@ pub fn parse(source: &str) -> anyhow::Result<ast::Grammar> {
     let _entered = span.enter();
 
     let mut lexer = Lexer::new(source);
-    let mut parser = Parser::new(ParserDef::default());
+    let mut engine = ParseEngine::new(ParserDef::default());
     let mut stack: Vec<StackItem> = vec![];
     macro_rules! pop_stack {
         ($Variant:ident) => {
@@ -55,7 +55,7 @@ pub fn parse(source: &str) -> anyhow::Result<ast::Grammar> {
     }
 
     loop {
-        let event = parser.resume()?;
+        let event = engine.resume()?;
         match event {
             ParseEvent::InputNeeded => {
                 let token = lexer
@@ -65,11 +65,11 @@ pub fn parse(source: &str) -> anyhow::Result<ast::Grammar> {
                 match token {
                     Some(tok) => {
                         tracing::trace!("offer token {:?}", tok);
-                        parser.offer_token(tok)?;
+                        engine.offer_token(tok)?;
                     }
                     None => {
                         tracing::trace!("offer EOI");
-                        parser.offer_eoi()?;
+                        engine.offer_eoi()?;
                     }
                 }
             }
@@ -243,13 +243,13 @@ pub fn parse(source: &str) -> anyhow::Result<ast::Grammar> {
             }
 
             ParseEvent::HandlingError {
-                lr_state,
+                state,
                 lookahead,
                 expected,
             } => {
                 tracing::trace!(
-                    "handling error: {:?}, {:?}, {:?}",
-                    lr_state,
+                    "handling error: state={:?}, lookahead={:?}, expected={:?}",
+                    state,
                     lookahead,
                     expected
                 );

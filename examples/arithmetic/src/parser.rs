@@ -5,31 +5,28 @@ pub use gen::*;
 
 use crate::{lexer::Token, syntax::Expr};
 use anyhow::Context as _;
-use lelele_runtime::parser::{ParseEvent, ParseItem::*, Parser};
+use lelele_runtime::engine::{ParseEngine, ParseEvent, Symbol::*};
 
 pub fn parse(input: &str) -> anyhow::Result<Box<Expr<'_>>> {
+    let span = tracing::trace_span!("parse");
+    let _entered = span.enter();
+
     let mut lexer = crate::lexer::lexer(input);
-    let mut parser = Parser::new(ParserDef::default());
+    let mut engine = ParseEngine::new(ParserDef::default());
     let mut ast_stack = vec![];
 
     loop {
-        let span = tracing::trace_span!("resume");
-        let _entered = span.enter();
-
-        let event = parser.resume().map_err(|e| {
-            eprintln!("parse error: {:?}", e);
-            e
-        })?;
+        let event = engine.resume()?;
         match event {
             ParseEvent::InputNeeded => match lexer.next() {
                 Some(tok) => {
                     let tok = tok?;
                     tracing::trace!("offer token {:?}", tok);
-                    parser.offer_token(tok)?;
+                    engine.offer_token(tok)?;
                 }
                 None => {
                     tracing::trace!("offer end of input");
-                    parser.offer_eoi()?;
+                    engine.offer_eoi()?;
                 }
             },
 
@@ -93,13 +90,13 @@ pub fn parse(input: &str) -> anyhow::Result<Box<Expr<'_>>> {
             ParseEvent::AboutToReduce(..) => unreachable!(),
 
             ParseEvent::HandlingError {
-                lr_state,
+                state,
                 lookahead,
                 expected,
             } => {
                 tracing::trace!(
-                    "handling error: lr_state={:?}, lookahead={:?}, expected={:?}",
-                    lr_state,
+                    "handling error: state={:?}, lookahead={:?}, expected={:?}",
+                    state,
                     lookahead,
                     expected,
                 );
