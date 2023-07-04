@@ -18,6 +18,8 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 criterion = "0.5"
 indexmap = "1"
+lexgen = "0.14"
+lexgen_util = "0.14"
 logos = "0.13"
 phf = "0.11"
 phf_codegen = "0.11"

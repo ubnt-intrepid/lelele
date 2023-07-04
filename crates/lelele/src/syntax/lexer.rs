@@ -1,178 +1,151 @@
+//! Lexer implementation.
+
 use super::grammar::TokenID;
-use logos::Logos;
-use std::mem;
+use lexgen_util::Loc;
+use std::convert::Infallible;
 
-#[derive(Debug, Logos)]
-#[logos(skip "[ \r\n\t]")]
-pub enum Token<'source> {
-    #[token("//")]
-    LineCommentBegin,
+#[derive(Debug, Clone, PartialEq)]
+pub struct Token<'input> {
+    pub kind: TokenKind<'input>,
+    pub begin: Loc,
+    pub end: Loc,
+}
 
-    #[token("/*")]
-    BlockCommentBegin,
-
-    #[token("{")]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum TokenKind<'input> {
     LBracket,
-
-    #[token("}")]
     RBracket,
-
-    #[token("@{")]
     AtLBracket,
-
-    #[token(":=")]
     ColonEq,
-
-    #[token("=")]
     Eq,
-
-    #[token(",")]
     Comma,
-
-    #[token(";")]
     Semicolon,
-
-    #[token("|")]
     VertBar,
-
-    #[token("@terminal")]
     Terminal,
-
-    #[token("@nonterminal")]
     Nonterminal,
-
-    #[token("@start")]
     Start,
-
-    #[token("@rule")]
     Rule,
-
-    #[token("@prec")]
     Prec,
-
-    #[token("@empty")]
     Empty,
-
-    #[regex(r"[_a-zA-Z][_0-9a-zA-Z]*")]
-    Ident(&'source str),
+    Ident(&'input str),
 }
 
 impl lelele_runtime::parser::Token<TokenID> for Token<'_> {
     fn to_index(&self) -> TokenID {
-        match self {
-            Self::LBracket => TokenID::LBRACKET,
-            Self::RBracket => TokenID::RBRACKET,
-            Self::AtLBracket => TokenID::AT_LBRACKET,
-            Self::ColonEq => TokenID::COLON_EQ,
-            Self::Eq => TokenID::EQ,
-            Self::Comma => TokenID::COMMA,
-            Self::Semicolon => TokenID::SEMICOLON,
-            Self::VertBar => TokenID::VERT_BAR,
-            Self::Terminal => TokenID::TERMINAL,
-            Self::Nonterminal => TokenID::NONTERMINAL,
-            Self::Start => TokenID::START,
-            Self::Rule => TokenID::RULE,
-            Self::Prec => TokenID::PREC,
-            Self::Empty => TokenID::EMPTY,
-            Self::Ident(..) => TokenID::IDENT,
-            _ => unreachable!(),
+        match self.kind {
+            TokenKind::LBracket => TokenID::LBRACKET,
+            TokenKind::RBracket => TokenID::RBRACKET,
+            TokenKind::AtLBracket => TokenID::AT_LBRACKET,
+            TokenKind::ColonEq => TokenID::COLON_EQ,
+            TokenKind::Eq => TokenID::EQ,
+            TokenKind::Comma => TokenID::COMMA,
+            TokenKind::Semicolon => TokenID::SEMICOLON,
+            TokenKind::VertBar => TokenID::VERT_BAR,
+            TokenKind::Terminal => TokenID::TERMINAL,
+            TokenKind::Nonterminal => TokenID::NONTERMINAL,
+            TokenKind::Start => TokenID::START,
+            TokenKind::Rule => TokenID::RULE,
+            TokenKind::Prec => TokenID::PREC,
+            TokenKind::Empty => TokenID::EMPTY,
+            TokenKind::Ident(..) => TokenID::IDENT,
         }
     }
 }
 
-#[derive(Debug, Logos)]
-enum LineCommentToken {
-    #[regex(r"(?:\r?\n|\r)")]
-    Newline,
-
-    #[regex(".")]
-    Anything,
+pub struct Lexer<'input> {
+    inner: imp::Lexer<'input, std::str::Chars<'input>>,
 }
-
-#[derive(Debug, Logos)]
-enum BlockCommentToken {
-    #[token("/*")]
-    BlockCommentBegin,
-
-    #[token("*/")]
-    BlockCommentEnd,
-
-    #[regex("(?s:.)")]
-    Anything,
-}
-
-#[derive(Debug)]
-pub struct Lexer<'source> {
-    mode: LexerMode<'source>,
-}
-
-#[derive(Debug)]
-enum LexerMode<'source> {
-    Main(logos::Lexer<'source, Token<'source>>),
-    LineComment(logos::Lexer<'source, LineCommentToken>),
-    BlockComment {
-        lexer: logos::Lexer<'source, BlockCommentToken>,
-        nest_level: usize,
-    },
-    Gone,
-}
-
-impl<'source> Lexer<'source> {
-    pub fn new(source: &'source str) -> Self {
+impl<'input> Lexer<'input> {
+    pub fn new(input: &'input str) -> Self {
         Self {
-            mode: LexerMode::Main(Token::lexer(source)),
+            inner: imp::Lexer::new_with_state(input, imp::LexerState::default()),
         }
     }
 }
-impl<'source> Iterator for Lexer<'source> {
-    type Item = anyhow::Result<Token<'source>>;
+
+impl<'input> Iterator for Lexer<'input> {
+    type Item = Result<Token<'input>, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match &mut self.mode {
-                LexerMode::Main(lexer) => match lexer.next()? {
-                    Ok(Token::LineCommentBegin) => {
-                        let LexerMode::Main(main) = mem::replace(&mut self.mode, LexerMode::Gone) else { unreachable!() };
-                        self.mode = LexerMode::LineComment(main.morph());
-                        continue;
-                    }
-                    Ok(Token::BlockCommentBegin) => {
-                        let LexerMode::Main(main) = mem::replace(&mut self.mode, LexerMode::Gone) else { unreachable!() };
-                        self.mode = LexerMode::BlockComment {
-                            lexer: main.morph(),
-                            nest_level: 1,
-                        };
-                        continue;
-                    }
-                    next => return Some(next.map_err(|_| anyhow::anyhow!("lexer error"))),
-                },
-                LexerMode::LineComment(lexer) => match lexer.next()? {
-                    Ok(LineCommentToken::Newline) => {
-                        let LexerMode::LineComment(lexer) = mem::replace(&mut self.mode, LexerMode::Gone) else { unreachable!() };
-                        self.mode = LexerMode::Main(lexer.morph());
-                        continue;
-                    }
-                    _ => continue,
-                },
-                LexerMode::BlockComment { lexer, nest_level } => match lexer.next()? {
-                    Ok(BlockCommentToken::BlockCommentBegin) => {
-                        *nest_level += 1;
-                        continue;
-                    }
-                    Ok(BlockCommentToken::BlockCommentEnd) if *nest_level > 1 => {
-                        *nest_level -= 1;
-                        continue;
-                    }
-                    Ok(BlockCommentToken::BlockCommentEnd) => {
-                        let LexerMode::BlockComment { lexer, .. } = mem::replace(&mut self.mode, LexerMode::Gone) else { unreachable!() };
-                        self.mode = LexerMode::Main(lexer.morph());
-                        continue;
-                    }
-                    Ok(BlockCommentToken::Anything) => continue,
-                    Err(_) => return Some(Err(anyhow::anyhow!("lexer error"))),
-                },
-                LexerMode::Gone => unreachable!(),
-            }
+        match self.inner.next()? {
+            Ok((begin, kind, end)) => Some(Ok(Token { kind, begin, end })),
+            Err(inner) => Some(Err(LexerError { inner })),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("lexer error")]
+pub struct LexerError {
+    inner: lexgen_util::LexerError<Infallible>,
+}
+
+mod imp {
+    use super::*;
+
+    #[derive(Debug, Default)]
+    pub struct LexerState {
+        comment_depth: usize,
+    }
+
+    lexgen::lexer! {
+        pub Lexer(LexerState) -> TokenKind<'input>;
+
+        let whitespace = [' ' '\t' '\n'];
+        let newline = '\r'* '\n' | '\r';
+        let ident = $$XID_Start $$XID_Continue*;
+
+        rule Init {
+            $whitespace+,
+            "//" => |lexer| {
+                lexer.switch(LexerRule::LineComment)
+            },
+            "/*" => |lexer| {
+                lexer.state().comment_depth += 1;
+                lexer.switch(LexerRule::BlockComment)
+            },
+            "{" = TokenKind::LBracket,
+            "}" = TokenKind::RBracket,
+            "@{" = TokenKind::AtLBracket,
+            ":=" = TokenKind::ColonEq,
+            "=" = TokenKind::Eq,
+            "," = TokenKind::Comma,
+            ";" = TokenKind::Semicolon,
+            "|" = TokenKind::VertBar,
+            "@terminal" = TokenKind::Terminal,
+            "@nonterminal" = TokenKind::Nonterminal,
+            "@start" = TokenKind::Start,
+            "@rule" = TokenKind::Rule,
+            "@prec" = TokenKind::Prec,
+            "@empty" = TokenKind::Empty,
+            $ident => |lexer| {
+                let token = TokenKind::Ident(lexer.match_());
+                lexer.return_(token)
+            },
+        }
+
+        rule LineComment {
+            $newline => |lexer| {
+                lexer.switch(LexerRule::Init)
+            },
+            _,
+        }
+
+        rule BlockComment {
+            "/*" => |lexer| {
+                lexer.state().comment_depth += 1;
+                lexer.continue_()
+            },
+            "*/" => |lexer| {
+                let depth = &mut lexer.state().comment_depth;
+                if *depth == 1 {
+                    lexer.switch(LexerRule::Init)
+                } else {
+                    *depth -= 1;
+                    lexer.continue_()
+                }
+            },
+            _,
         }
     }
 }
@@ -180,20 +153,24 @@ impl<'source> Iterator for Lexer<'source> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use Token::*;
+    use TokenKind::*;
 
     #[test]
-    fn case1() {
+    fn smoketest() {
         let input = "\
-@prec { assoc = left } prec1;
-@terminal FOO, BAR, BAZ;
-@nonterminal Expr;
+@prec { assoc = left } prec1; // precedences /* block-comment in line-comment */
+@terminal FOO, BAR, BAZ; /* block comment /* nested */ */
+@nonterminal Expr, ｔｒｕｅ;
 @rule Expr :=
     { FOO BAR BAZ
     | @{ prec = prec1 } Expr FOO
     };
 ";
-        let tokens = Token::lexer(input).collect::<Result<Vec<_>, _>>().unwrap();
+        let lexer = Lexer::new(input);
+        let tokens = lexer
+            .map(|res| res.map(|t| t.kind))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert!(matches!(
             dbg!(&tokens[..]),
             [
@@ -217,6 +194,8 @@ mod tests {
                 // @nonterminal ... ;
                 Nonterminal,
                 Ident("Expr"),
+                Comma,
+                Ident("ｔｒｕｅ"),
                 Semicolon,
                 // @rule ... ;
                 Rule,
