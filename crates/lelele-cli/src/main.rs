@@ -22,18 +22,11 @@ fn main() -> anyhow::Result<()> {
 
     let in_file =
         fs::canonicalize(&args.input).context("failed to canonicalize the input file name")?;
-    let grammar_name = in_file
-        .file_stem()
-        .context("invalid grammar file name")?
-        .to_str()
-        .context("grammar file name is not valid UTF-8")?;
 
-    let out_dir = in_file
-        .parent()
-        .context("failed to obtain the parent directory path")?;
-    let out_file = out_dir.join(format!("{}.rs", grammar_name));
-    let expanded_file = out_dir.join(format!("{}.grammar", grammar_name));
-    let automaton_file = out_dir.join(format!("{}.automaton", grammar_name));
+    let out_file = in_file.with_extension("rs");
+    let backup_file = in_file.with_extension("rs.bak");
+    let expanded_file = in_file.with_extension("lll.expanded");
+    let automaton_file = in_file.with_extension("lll.automaton");
 
     let grammar = Grammar::from_file(&in_file)?;
     fs::write(&expanded_file, grammar.to_string()).context("writing .grammar")?;
@@ -55,6 +48,13 @@ fn main() -> anyhow::Result<()> {
             generated = output.stdout;
         }
     }
+
+    fs::copy(&out_file, &backup_file).with_context(|| {
+        anyhow::anyhow!(
+            "failed to backup the output file to {}",
+            backup_file.display()
+        )
+    })?;
 
     fs::write(&out_file, &generated).with_context(|| {
         anyhow::anyhow!("failed to write generated parser to {}", out_file.display())

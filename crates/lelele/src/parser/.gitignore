@@ -1,2 +1,3 @@
-*.automaton
-*.grammar
+*.lll.automaton
+*.lll.expanded
+*.rs.bak
