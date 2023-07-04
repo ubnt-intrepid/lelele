@@ -1,15 +1,15 @@
 #[derive(Debug)]
 pub struct Grammar {
-    pub descs: Vec<Desc>,
+    pub stmts: Vec<Stmt>,
 }
 
 #[derive(Debug)]
-pub enum Desc {
-    Terminal(TerminalDesc),
-    Nonterminal(NonterminalDesc),
-    Rule(RuleDesc),
-    Prec(PrecDesc),
-    Start(StartDesc),
+pub enum Stmt {
+    TerminalDesc(TerminalDesc),
+    NonterminalDesc(NonterminalDesc),
+    RuleDesc(RuleDesc),
+    PrecDesc(PrecDesc),
+    StartDesc(StartDesc),
 }
 
 #[derive(Debug)]

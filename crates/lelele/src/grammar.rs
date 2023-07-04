@@ -377,9 +377,9 @@ fn define_grammar_from_syntax(
     let mut next_priority = 0;
     let mut symbols = IndexMap::default();
 
-    for desc in &grammar.descs {
+    for desc in &grammar.stmts {
         match desc {
-            ast::Desc::Prec(ast::PrecDesc { configs, ident }) => {
+            ast::Stmt::PrecDesc(ast::PrecDesc { configs, ident }) => {
                 let mut assoc = None;
                 for config in configs {
                     match (&*config.key, &*config.value) {
@@ -393,7 +393,7 @@ fn define_grammar_from_syntax(
                 precedences.insert(ident.to_string(), Precedence::new(next_priority, assoc));
                 next_priority += 1;
             }
-            ast::Desc::Terminal(ast::TerminalDesc { configs, idents }) => {
+            ast::Stmt::TerminalDesc(ast::TerminalDesc { configs, idents }) => {
                 let mut prec = None;
                 for config in configs {
                     if config.key == "prec" {
@@ -415,14 +415,14 @@ fn define_grammar_from_syntax(
                 }
             }
 
-            ast::Desc::Nonterminal(ast::NonterminalDesc { idents }) => {
+            ast::Stmt::NonterminalDesc(ast::NonterminalDesc { idents }) => {
                 for name in idents {
                     let symbol = g.nonterminal(&*name)?;
                     symbols.insert(name, symbol);
                 }
             }
 
-            ast::Desc::Start(ast::StartDesc { name }) => {
+            ast::Stmt::StartDesc(ast::StartDesc { name }) => {
                 let start_symbol = symbols
                     .get(name)
                     .copied()
@@ -430,7 +430,7 @@ fn define_grammar_from_syntax(
                 g.start_symbol(start_symbol)?;
             }
 
-            ast::Desc::Rule(ast::RuleDesc { left, productions }) => {
+            ast::Stmt::RuleDesc(ast::RuleDesc { left, productions }) => {
                 let left = symbols
                     .get(left)
                     .copied()

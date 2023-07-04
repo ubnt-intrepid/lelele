@@ -4,22 +4,18 @@ pub mod lexer;
 
 use self::{
     grammar::{ParserDef, Symbol},
-    lexer::{Lexer, Token, TokenKind},
+    lexer::{Keyword, Lexer, Token},
 };
 use lelele_runtime::parser::{ParseEvent, ParseItem::*, Parser};
+use Keyword::*;
 use StackItem as s;
 use Symbol::*;
-use TokenKind::*;
+use Token::*;
 
 enum StackItem {
     Grammar(ast::Grammar),
-    Descs(Vec<ast::Desc>),
-    Desc(ast::Desc),
-    TerminalDesc(ast::TerminalDesc),
-    NonterminalDesc(ast::NonterminalDesc),
-    RuleDesc(ast::RuleDesc),
-    PrecDesc(ast::PrecDesc),
-    StartDesc(ast::StartDesc),
+    Descs(Vec<ast::Stmt>),
+    Desc(ast::Stmt),
     Productions(Vec<ast::Production>),
     Production(ast::Production),
     Elems(Vec<String>),
@@ -61,156 +57,122 @@ pub fn parse(source: &str) -> anyhow::Result<ast::Grammar> {
     loop {
         let event = parser.resume()?;
         match event {
-            ParseEvent::InputNeeded => match lexer.next().transpose()? {
-                Some(tok) => {
-                    tracing::trace!("offer token {:?}", tok);
-                    parser.offer_token(tok)?;
+            ParseEvent::InputNeeded => {
+                let token = lexer
+                    .next()
+                    .transpose()
+                    .map_err(|_e| anyhow::anyhow!("lexer error"))?;
+                match token {
+                    Some(tok) => {
+                        tracing::trace!("offer token {:?}", tok);
+                        parser.offer_token(tok)?;
+                    }
+                    None => {
+                        tracing::trace!("offer EOI");
+                        parser.offer_eoi()?;
+                    }
                 }
-                None => {
-                    tracing::trace!("offer EOI");
-                    parser.offer_eoi()?;
-                }
-            },
+            }
             ParseEvent::Shifting(_lookahead) => {
                 //tracing::trace!("shifting: {:?}", lookahead);
             }
             ParseEvent::AboutToReduce(lhs, args) => {
                 tracing::trace!("reducing: {:?} -> {:?}", lhs, args);
                 match (lhs, args) {
-                    (Grammar, [N(Descs)]) => {
+                    (Grammar, [N(Stmts)]) => {
                         let descs = pop_stack!(Descs);
-                        stack.push(s::Grammar(ast::Grammar { descs }));
+                        stack.push(s::Grammar(ast::Grammar { stmts: descs }));
                     }
 
-                    (Descs, []) => {
+                    (Stmts, []) => {
                         stack.push(s::Descs(vec![]));
                     }
-                    (
-                        Descs,
-                        [N(Descs), N(Desc), T(Token {
-                            kind: Semicolon, ..
-                        })],
-                    ) => {
+                    (Stmts, [N(Stmts), N(Stmt), T((_, Semicolon, _))]) => {
                         let desc = pop_stack!(Desc);
                         let descs = peek_stack!(Descs);
                         descs.push(desc);
                     }
 
-                    (Desc, [N(TerminalDesc)]) => {
-                        let desc = pop_stack!(TerminalDesc);
-                        stack.push(s::Desc(ast::Desc::Terminal(desc)));
-                    }
-                    (Desc, [N(NonterminalDesc)]) => {
-                        let desc = pop_stack!(NonterminalDesc);
-                        stack.push(s::Desc(ast::Desc::Nonterminal(desc)));
-                    }
-                    (Desc, [N(RuleDesc)]) => {
-                        let desc = pop_stack!(RuleDesc);
-                        stack.push(s::Desc(ast::Desc::Rule(desc)));
-                    }
-                    (Desc, [N(PrecDesc)]) => {
-                        let desc = pop_stack!(PrecDesc);
-                        stack.push(s::Desc(ast::Desc::Prec(desc)));
-                    }
-                    (Desc, [N(StartDesc)]) => {
-                        let desc = pop_stack!(StartDesc);
-                        stack.push(s::Desc(ast::Desc::Start(desc)));
-                    }
-
-                    (
-                        PrecDesc,
-                        [T(Token { kind: Prec, .. }), T(Token { kind: LBracket, .. }), N(Configs), T(Token { kind: RBracket, .. }), T(Token {
-                            kind: Ident(ident), ..
-                        })],
-                    ) => {
-                        let mut configs = pop_stack!(Configs);
-                        configs.reverse();
-                        stack.push(s::PrecDesc(ast::PrecDesc {
-                            configs,
-                            ident: ident.to_string(),
-                        }));
-                    }
-
-                    (TerminalDesc, [T(Token { kind: Terminal, .. }), N(Idents)]) => {
+                    (Stmt, [T((_, Kw(Terminal), _)), N(Idents)]) => {
                         let mut idents = pop_stack!(Idents);
                         idents.reverse();
-                        stack.push(s::TerminalDesc(ast::TerminalDesc {
+                        stack.push(s::Desc(ast::Stmt::TerminalDesc(ast::TerminalDesc {
                             configs: vec![],
                             idents,
-                        }));
+                        })));
                     }
                     (
-                        TerminalDesc,
-                        [T(Token { kind: Terminal, .. }), T(Token { kind: LBracket, .. }), N(Configs), T(Token { kind: RBracket, .. }), N(Idents)],
+                        Stmt,
+                        [T((_, Kw(Terminal), _)), T((_, LBracket, _)), N(Configs), T((_, RBracket, _)), N(Idents)],
                     ) => {
                         let mut idents = pop_stack!(Idents);
                         idents.reverse();
                         let mut configs = pop_stack!(Configs);
                         configs.reverse();
-                        stack.push(s::TerminalDesc(ast::TerminalDesc { configs, idents }));
+                        stack.push(s::Desc(ast::Stmt::TerminalDesc(ast::TerminalDesc {
+                            configs,
+                            idents,
+                        })));
                     }
 
-                    (
-                        NonterminalDesc,
-                        [T(Token {
-                            kind: Nonterminal, ..
-                        }), N(Idents)],
-                    ) => {
+                    (Stmt, [T((_, Kw(Nonterminal), _)), N(Idents)]) => {
                         let mut idents = pop_stack!(Idents);
                         idents.reverse();
-                        stack.push(s::NonterminalDesc(ast::NonterminalDesc { idents }));
+                        stack.push(s::Desc(ast::Stmt::NonterminalDesc(ast::NonterminalDesc {
+                            idents,
+                        })));
                     }
 
                     (
-                        StartDesc,
-                        [T(Token { kind: Start, .. }), T(Token {
-                            kind: Ident(name), ..
-                        })],
+                        Stmt,
+                        [T((_, Kw(Rule), _)), T((_, Ident(left), _)), T((_, ColonEq, _)), N(Productions)],
                     ) => {
-                        stack.push(s::StartDesc(ast::StartDesc {
+                        let productions = pop_stack!(Productions);
+                        stack.push(s::Desc(ast::Stmt::RuleDesc(ast::RuleDesc {
+                            left: left.to_string(),
+                            productions,
+                        })));
+                    }
+                    (
+                        Stmt,
+                        [T((_, Kw(Rule), _)), T((_, Ident(left), _)), T((_, ColonEq, _)), T((_, VertBar, _)), N(Productions)],
+                    ) => {
+                        let productions = pop_stack!(Productions);
+                        stack.push(s::Desc(ast::Stmt::RuleDesc(ast::RuleDesc {
+                            left: left.to_string(),
+                            productions,
+                        })));
+                    }
+
+                    (Stmt, [T((_, Kw(Start), _)), T((_, Ident(name), _))]) => {
+                        stack.push(s::Desc(ast::Stmt::StartDesc(ast::StartDesc {
                             name: name.to_string(),
-                        }));
+                        })));
                     }
 
                     (
-                        RuleDesc,
-                        [T(Token { kind: Rule, .. }), T(Token {
-                            kind: Ident(left), ..
-                        }), T(Token { kind: ColonEq, .. }), N(Productions)],
+                        Stmt,
+                        [T((_, Kw(Prec), _)), T((_, LBracket, _)), N(Configs), T((_, RBracket, _)), T((_, Ident(ident), _))],
                     ) => {
-                        let productions = pop_stack!(Productions);
-                        stack.push(s::RuleDesc(ast::RuleDesc {
-                            left: left.to_string(),
-                            productions,
-                        }));
-                    }
-                    (
-                        RuleDesc,
-                        [T(Token { kind: Rule, .. }), T(Token {
-                            kind: Ident(left), ..
-                        }), T(Token { kind: ColonEq, .. }), T(Token { kind: VertBar, .. }), N(Productions)],
-                    ) => {
-                        let productions = pop_stack!(Productions);
-                        stack.push(s::RuleDesc(ast::RuleDesc {
-                            left: left.to_string(),
-                            productions,
-                        }));
+                        let mut configs = pop_stack!(Configs);
+                        configs.reverse();
+                        stack.push(s::Desc(ast::Stmt::PrecDesc(ast::PrecDesc {
+                            configs,
+                            ident: ident.to_string(),
+                        })));
                     }
 
                     (Productions, [N(Production)]) => {
                         let production = pop_stack!(Production);
                         stack.push(s::Productions(vec![production]));
                     }
-                    (
-                        Productions,
-                        [N(Productions), T(Token { kind: VertBar, .. }), N(Production)],
-                    ) => {
+                    (Productions, [N(Productions), T((_, VertBar, _)), N(Production)]) => {
                         let production = pop_stack!(Production);
                         let productions = peek_stack!(Productions);
                         productions.push(production);
                     }
 
-                    (Production, [T(Token { kind: Empty, .. })]) => {
+                    (Production, [T((_, Kw(Empty), _))]) => {
                         stack.push(s::Production(ast::Production {
                             configs: vec![],
                             elems: vec![],
@@ -226,9 +188,7 @@ pub fn parse(source: &str) -> anyhow::Result<ast::Grammar> {
                     }
                     (
                         Production,
-                        [T(Token {
-                            kind: AtLBracket, ..
-                        }), N(Configs), T(Token { kind: RBracket, .. }), N(Elems)],
+                        [T((_, AtLBracket, _)), N(Configs), T((_, RBracket, _)), N(Elems)],
                     ) => {
                         let mut elems = pop_stack!(Elems);
                         elems.reverse();
@@ -237,68 +197,35 @@ pub fn parse(source: &str) -> anyhow::Result<ast::Grammar> {
                         stack.push(s::Production(ast::Production { configs, elems }));
                     }
 
-                    (
-                        Elems,
-                        [T(Token {
-                            kind: Ident(ident), ..
-                        })],
-                    ) => {
+                    (Elems, [T((_, Ident(ident), _))]) => {
                         stack.push(s::Elems(vec![ident.to_string()]));
                     }
-                    (
-                        Elems,
-                        [T(Token {
-                            kind: Ident(elem), ..
-                        }), N(Elems)],
-                    ) => {
+                    (Elems, [T((_, Ident(elem), _)), N(Elems)]) => {
                         let elems = peek_stack!(Elems);
                         elems.push(elem.to_string());
                     }
 
-                    (
-                        Idents,
-                        [T(Token {
-                            kind: Ident(ident), ..
-                        })],
-                    )
-                    | (
-                        Idents,
-                        [T(Token {
-                            kind: Ident(ident), ..
-                        }), T(Token { kind: Comma, .. })],
-                    ) => {
+                    (Idents, [T((_, Ident(ident), _))])
+                    | (Idents, [T((_, Ident(ident), _)), T((_, Comma, _))]) => {
                         stack.push(s::Idents(vec![ident.to_string()]));
                     }
-                    (
-                        Idents,
-                        [T(Token {
-                            kind: Ident(ident), ..
-                        }), T(Token { kind: Comma, .. }), N(Idents)],
-                    ) => {
+                    (Idents, [T((_, Ident(ident), _)), T((_, Comma, _)), N(Idents)]) => {
                         let idents = peek_stack!(Idents);
                         idents.push(ident.to_string());
                     }
 
-                    (Configs, [N(Config)])
-                    | (Configs, [N(Config), T(Token { kind: Comma, .. })]) => {
+                    (Configs, [N(Config)]) | (Configs, [N(Config), T((_, Comma, _))]) => {
                         let config = pop_stack!(Config);
                         stack.push(s::Configs(vec![config]));
                     }
-                    (Configs, [N(Config), T(Token { kind: Comma, .. }), N(Configs)]) => {
+                    (Configs, [N(Config), T((_, Comma, _)), N(Configs)]) => {
                         let mut configs = pop_stack!(Configs);
                         let config = pop_stack!(Config);
                         configs.push(config);
                         stack.push(s::Configs(configs));
                     }
 
-                    (
-                        Config,
-                        [T(Token {
-                            kind: Ident(key), ..
-                        }), T(Token { kind: Eq, .. }), T(Token {
-                            kind: Ident(value), ..
-                        })],
-                    ) => {
+                    (Config, [T((_, Ident(key), _)), T((_, Eq, _)), T((_, Ident(value), _))]) => {
                         stack.push(s::Config(ast::Config {
                             key: key.to_string(),
                             value: value.to_string(),

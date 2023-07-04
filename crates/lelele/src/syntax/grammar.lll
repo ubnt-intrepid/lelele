@@ -1,42 +1,27 @@
 // grammar definition for lelele.
 
 @terminal LBRACKET, RBRACKET, AT_LBRACKET, COLON_EQ, EQ, COMMA, SEMICOLON, VERT_BAR;
-@terminal TERMINAL, NONTERMINAL, START, RULE, EMPTY, PREC;
+@terminal KW_TERMINAL, KW_NONTERMINAL, KW_START, KW_RULE, KW_PREC, KW_EMPTY;
 @terminal IDENT;
 
-@nonterminal Grammar, Descs, Desc, TerminalDesc, NonterminalDesc, StartDesc, RuleDesc, PrecDesc;
-@nonterminal Productions, Production, Configs, Config, Idents, Elems;
+@nonterminal Grammar, Stmts, Stmt, Productions, Production, Configs, Config, Idents, Elems;
 @start Grammar;
 
-@rule Grammar := Descs ;
+@rule Grammar := Stmts ;
 
-@rule Descs :=
+@rule Stmts :=
     | @empty
-    | Descs Desc SEMICOLON
+    | Stmts Stmt SEMICOLON
     ;
 
-@rule Desc :=
-    | TerminalDesc
-    | NonterminalDesc
-    | RuleDesc
-    | PrecDesc
-    | StartDesc
-    ;
-
-@rule PrecDesc := PREC LBRACKET Configs RBRACKET IDENT ;
-
-@rule TerminalDesc :=
-    | TERMINAL Idents
-    | TERMINAL LBRACKET Configs RBRACKET Idents
-    ;
-
-@rule NonterminalDesc := NONTERMINAL Idents ;
-
-@rule StartDesc := START IDENT ;
-
-@rule RuleDesc :=
-    | RULE IDENT COLON_EQ Productions
-    | RULE IDENT COLON_EQ VERT_BAR Productions
+@rule Stmt :=
+    | KW_TERMINAL Idents
+    | KW_TERMINAL LBRACKET Configs RBRACKET Idents
+    | KW_NONTERMINAL Idents
+    | KW_RULE IDENT COLON_EQ Productions
+    | KW_RULE IDENT COLON_EQ VERT_BAR Productions
+    | KW_START IDENT
+    | KW_PREC LBRACKET Configs RBRACKET IDENT
     ;
 
 @rule Productions :=
@@ -45,7 +30,7 @@
     ;
 
 @rule Production :=
-    | EMPTY
+    | KW_EMPTY
     | Elems
     | AT_LBRACKET Configs RBRACKET Elems
     ;

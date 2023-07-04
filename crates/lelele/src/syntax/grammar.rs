@@ -49,11 +49,6 @@ pub enum NodeID {
     N43,
     N44,
     N45,
-    N46,
-    N47,
-    N48,
-    N49,
-    N50,
 }
 const __START_NODE: NodeID = NodeID::N0;
 /// The type to identify terminal or nonterminal symbols used in generated DFA.
@@ -76,18 +71,18 @@ pub enum TokenID {
     SEMICOLON,
     /// Terminal `VERT_BAR`.
     VERT_BAR,
-    /// Terminal `TERMINAL`.
-    TERMINAL,
-    /// Terminal `NONTERMINAL`.
-    NONTERMINAL,
-    /// Terminal `START`.
-    START,
-    /// Terminal `RULE`.
-    RULE,
-    /// Terminal `EMPTY`.
-    EMPTY,
-    /// Terminal `PREC`.
-    PREC,
+    /// Terminal `KW_TERMINAL`.
+    KW_TERMINAL,
+    /// Terminal `KW_NONTERMINAL`.
+    KW_NONTERMINAL,
+    /// Terminal `KW_START`.
+    KW_START,
+    /// Terminal `KW_RULE`.
+    KW_RULE,
+    /// Terminal `KW_PREC`.
+    KW_PREC,
+    /// Terminal `KW_EMPTY`.
+    KW_EMPTY,
     /// Terminal `IDENT`.
     IDENT,
 }
@@ -102,20 +97,10 @@ impl lelele::Token<TokenID> for TokenID {
 pub enum Symbol {
     /// Nonterminal `Grammar`.
     Grammar,
-    /// Nonterminal `Descs`.
-    Descs,
-    /// Nonterminal `Desc`.
-    Desc,
-    /// Nonterminal `TerminalDesc`.
-    TerminalDesc,
-    /// Nonterminal `NonterminalDesc`.
-    NonterminalDesc,
-    /// Nonterminal `StartDesc`.
-    StartDesc,
-    /// Nonterminal `RuleDesc`.
-    RuleDesc,
-    /// Nonterminal `PrecDesc`.
-    PrecDesc,
+    /// Nonterminal `Stmts`.
+    Stmts,
+    /// Nonterminal `Stmt`.
+    Stmt,
     /// Nonterminal `Productions`.
     Productions,
     /// Nonterminal `Production`.
@@ -173,12 +158,12 @@ enum SimulatedAction {
 const fn __action(current: NodeID, lookahead: Option<TokenID>) -> Option<SimulatedAction> {
     match current {
         NodeID::N0 => match lookahead {
-            None => Some(SimulatedAction::Reduce(Symbol::Descs, 0)),
-            Some(TokenID::TERMINAL) => Some(SimulatedAction::Reduce(Symbol::Descs, 0)),
-            Some(TokenID::NONTERMINAL) => Some(SimulatedAction::Reduce(Symbol::Descs, 0)),
-            Some(TokenID::RULE) => Some(SimulatedAction::Reduce(Symbol::Descs, 0)),
-            Some(TokenID::PREC) => Some(SimulatedAction::Reduce(Symbol::Descs, 0)),
-            Some(TokenID::START) => Some(SimulatedAction::Reduce(Symbol::Descs, 0)),
+            None => Some(SimulatedAction::Reduce(Symbol::Stmts, 0)),
+            Some(TokenID::KW_TERMINAL) => Some(SimulatedAction::Reduce(Symbol::Stmts, 0)),
+            Some(TokenID::KW_NONTERMINAL) => Some(SimulatedAction::Reduce(Symbol::Stmts, 0)),
+            Some(TokenID::KW_RULE) => Some(SimulatedAction::Reduce(Symbol::Stmts, 0)),
+            Some(TokenID::KW_START) => Some(SimulatedAction::Reduce(Symbol::Stmts, 0)),
+            Some(TokenID::KW_PREC) => Some(SimulatedAction::Reduce(Symbol::Stmts, 0)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
@@ -188,278 +173,253 @@ const fn __action(current: NodeID, lookahead: Option<TokenID>) -> Option<Simulat
             _ => None,
         },
         NodeID::N2 => match lookahead {
-            Some(TokenID::PREC) => Some(SimulatedAction::Shift(NodeID::N9)),
-            Some(TokenID::TERMINAL) => Some(SimulatedAction::Shift(NodeID::N10)),
-            Some(TokenID::NONTERMINAL) => Some(SimulatedAction::Shift(NodeID::N11)),
-            Some(TokenID::START) => Some(SimulatedAction::Shift(NodeID::N12)),
-            Some(TokenID::RULE) => Some(SimulatedAction::Shift(NodeID::N13)),
+            Some(TokenID::KW_TERMINAL) => Some(SimulatedAction::Shift(NodeID::N4)),
+            Some(TokenID::KW_NONTERMINAL) => Some(SimulatedAction::Shift(NodeID::N5)),
+            Some(TokenID::KW_RULE) => Some(SimulatedAction::Shift(NodeID::N6)),
+            Some(TokenID::KW_START) => Some(SimulatedAction::Shift(NodeID::N7)),
+            Some(TokenID::KW_PREC) => Some(SimulatedAction::Shift(NodeID::N8)),
             None => Some(SimulatedAction::Reduce(Symbol::Grammar, 1)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N3 => match lookahead {
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Shift(NodeID::N14)),
+            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Shift(NodeID::N9)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N4 => match lookahead {
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Desc, 1)),
+            Some(TokenID::LBRACKET) => Some(SimulatedAction::Shift(NodeID::N11)),
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N12)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N5 => match lookahead {
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Desc, 1)),
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N12)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N6 => match lookahead {
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Desc, 1)),
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N14)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N7 => match lookahead {
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Desc, 1)),
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N15)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N8 => match lookahead {
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Desc, 1)),
+            Some(TokenID::LBRACKET) => Some(SimulatedAction::Shift(NodeID::N16)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N9 => match lookahead {
-            Some(TokenID::LBRACKET) => Some(SimulatedAction::Shift(NodeID::N15)),
+            None => Some(SimulatedAction::Reduce(Symbol::Stmts, 3)),
+            Some(TokenID::KW_TERMINAL) => Some(SimulatedAction::Reduce(Symbol::Stmts, 3)),
+            Some(TokenID::KW_NONTERMINAL) => Some(SimulatedAction::Reduce(Symbol::Stmts, 3)),
+            Some(TokenID::KW_RULE) => Some(SimulatedAction::Reduce(Symbol::Stmts, 3)),
+            Some(TokenID::KW_START) => Some(SimulatedAction::Reduce(Symbol::Stmts, 3)),
+            Some(TokenID::KW_PREC) => Some(SimulatedAction::Reduce(Symbol::Stmts, 3)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N10 => match lookahead {
-            Some(TokenID::LBRACKET) => Some(SimulatedAction::Shift(NodeID::N17)),
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N18)),
+            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Stmt, 2)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N11 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N18)),
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N19)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N12 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N20)),
-            #[allow(unreachable_patterns)]
-            _ => None,
-        },
-        NodeID::N13 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N21)),
-            #[allow(unreachable_patterns)]
-            _ => None,
-        },
-        NodeID::N14 => match lookahead {
-            None => Some(SimulatedAction::Reduce(Symbol::Descs, 3)),
-            Some(TokenID::TERMINAL) => Some(SimulatedAction::Reduce(Symbol::Descs, 3)),
-            Some(TokenID::NONTERMINAL) => Some(SimulatedAction::Reduce(Symbol::Descs, 3)),
-            Some(TokenID::RULE) => Some(SimulatedAction::Reduce(Symbol::Descs, 3)),
-            Some(TokenID::PREC) => Some(SimulatedAction::Reduce(Symbol::Descs, 3)),
-            Some(TokenID::START) => Some(SimulatedAction::Reduce(Symbol::Descs, 3)),
-            #[allow(unreachable_patterns)]
-            _ => None,
-        },
-        NodeID::N15 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N24)),
-            #[allow(unreachable_patterns)]
-            _ => None,
-        },
-        NodeID::N16 => match lookahead {
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::TerminalDesc, 2)),
-            #[allow(unreachable_patterns)]
-            _ => None,
-        },
-        NodeID::N17 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N24)),
-            #[allow(unreachable_patterns)]
-            _ => None,
-        },
-        NodeID::N18 => match lookahead {
-            Some(TokenID::COMMA) => Some(SimulatedAction::Shift(NodeID::N26)),
+            Some(TokenID::COMMA) => Some(SimulatedAction::Shift(NodeID::N20)),
             Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Idents, 1)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N19 => match lookahead {
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::NonterminalDesc, 2)),
+        NodeID::N13 => match lookahead {
+            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Stmt, 2)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N20 => match lookahead {
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::StartDesc, 2)),
+        NodeID::N14 => match lookahead {
+            Some(TokenID::COLON_EQ) => Some(SimulatedAction::Shift(NodeID::N21)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N21 => match lookahead {
-            Some(TokenID::COLON_EQ) => Some(SimulatedAction::Shift(NodeID::N27)),
+        NodeID::N15 => match lookahead {
+            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Stmt, 2)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N22 => match lookahead {
-            Some(TokenID::RBRACKET) => Some(SimulatedAction::Shift(NodeID::N28)),
+        NodeID::N16 => match lookahead {
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N19)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N23 => match lookahead {
-            Some(TokenID::COMMA) => Some(SimulatedAction::Shift(NodeID::N29)),
+        NodeID::N17 => match lookahead {
+            Some(TokenID::RBRACKET) => Some(SimulatedAction::Shift(NodeID::N23)),
+            #[allow(unreachable_patterns)]
+            _ => None,
+        },
+        NodeID::N18 => match lookahead {
+            Some(TokenID::COMMA) => Some(SimulatedAction::Shift(NodeID::N24)),
             Some(TokenID::RBRACKET) => Some(SimulatedAction::Reduce(Symbol::Configs, 1)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N24 => match lookahead {
-            Some(TokenID::EQ) => Some(SimulatedAction::Shift(NodeID::N30)),
+        NodeID::N19 => match lookahead {
+            Some(TokenID::EQ) => Some(SimulatedAction::Shift(NodeID::N25)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N25 => match lookahead {
-            Some(TokenID::RBRACKET) => Some(SimulatedAction::Shift(NodeID::N31)),
-            #[allow(unreachable_patterns)]
-            _ => None,
-        },
-        NodeID::N26 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N18)),
+        NodeID::N20 => match lookahead {
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N12)),
             Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Idents, 2)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N27 => match lookahead {
-            Some(TokenID::VERT_BAR) => Some(SimulatedAction::Shift(NodeID::N34)),
-            Some(TokenID::EMPTY) => Some(SimulatedAction::Shift(NodeID::N36)),
-            Some(TokenID::AT_LBRACKET) => Some(SimulatedAction::Shift(NodeID::N38)),
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N39)),
+        NodeID::N21 => match lookahead {
+            Some(TokenID::VERT_BAR) => Some(SimulatedAction::Shift(NodeID::N28)),
+            Some(TokenID::KW_EMPTY) => Some(SimulatedAction::Shift(NodeID::N30)),
+            Some(TokenID::AT_LBRACKET) => Some(SimulatedAction::Shift(NodeID::N32)),
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N33)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N28 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N40)),
+        NodeID::N22 => match lookahead {
+            Some(TokenID::RBRACKET) => Some(SimulatedAction::Shift(NodeID::N34)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N29 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N24)),
+        NodeID::N23 => match lookahead {
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N12)),
+            #[allow(unreachable_patterns)]
+            _ => None,
+        },
+        NodeID::N24 => match lookahead {
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N19)),
             Some(TokenID::RBRACKET) => Some(SimulatedAction::Reduce(Symbol::Configs, 2)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N30 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N42)),
+        NodeID::N25 => match lookahead {
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N37)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N31 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N18)),
-            #[allow(unreachable_patterns)]
-            _ => None,
-        },
-        NodeID::N32 => match lookahead {
+        NodeID::N26 => match lookahead {
             Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Idents, 3)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N33 => match lookahead {
-            Some(TokenID::VERT_BAR) => Some(SimulatedAction::Shift(NodeID::N44)),
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::RuleDesc, 4)),
+        NodeID::N27 => match lookahead {
+            Some(TokenID::VERT_BAR) => Some(SimulatedAction::Shift(NodeID::N38)),
+            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Stmt, 4)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N34 => match lookahead {
-            Some(TokenID::EMPTY) => Some(SimulatedAction::Shift(NodeID::N36)),
-            Some(TokenID::AT_LBRACKET) => Some(SimulatedAction::Shift(NodeID::N38)),
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N39)),
+        NodeID::N28 => match lookahead {
+            Some(TokenID::KW_EMPTY) => Some(SimulatedAction::Shift(NodeID::N30)),
+            Some(TokenID::AT_LBRACKET) => Some(SimulatedAction::Shift(NodeID::N32)),
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N33)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N35 => match lookahead {
+        NodeID::N29 => match lookahead {
             Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Productions, 1)),
             Some(TokenID::VERT_BAR) => Some(SimulatedAction::Reduce(Symbol::Productions, 1)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N36 => match lookahead {
+        NodeID::N30 => match lookahead {
             Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Production, 1)),
             Some(TokenID::VERT_BAR) => Some(SimulatedAction::Reduce(Symbol::Production, 1)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N37 => match lookahead {
+        NodeID::N31 => match lookahead {
             Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Production, 1)),
             Some(TokenID::VERT_BAR) => Some(SimulatedAction::Reduce(Symbol::Production, 1)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N38 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N24)),
+        NodeID::N32 => match lookahead {
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N19)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N39 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N39)),
+        NodeID::N33 => match lookahead {
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N33)),
             Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Elems, 1)),
             Some(TokenID::VERT_BAR) => Some(SimulatedAction::Reduce(Symbol::Elems, 1)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N40 => match lookahead {
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::PrecDesc, 5)),
+        NodeID::N34 => match lookahead {
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N42)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N41 => match lookahead {
+        NodeID::N35 => match lookahead {
+            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Stmt, 5)),
+            #[allow(unreachable_patterns)]
+            _ => None,
+        },
+        NodeID::N36 => match lookahead {
             Some(TokenID::RBRACKET) => Some(SimulatedAction::Reduce(Symbol::Configs, 3)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N42 => match lookahead {
+        NodeID::N37 => match lookahead {
             Some(TokenID::RBRACKET) => Some(SimulatedAction::Reduce(Symbol::Config, 3)),
             Some(TokenID::COMMA) => Some(SimulatedAction::Reduce(Symbol::Config, 3)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N43 => match lookahead {
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::TerminalDesc, 5)),
+        NodeID::N38 => match lookahead {
+            Some(TokenID::KW_EMPTY) => Some(SimulatedAction::Shift(NodeID::N30)),
+            Some(TokenID::AT_LBRACKET) => Some(SimulatedAction::Shift(NodeID::N32)),
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N33)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N44 => match lookahead {
-            Some(TokenID::EMPTY) => Some(SimulatedAction::Shift(NodeID::N36)),
-            Some(TokenID::AT_LBRACKET) => Some(SimulatedAction::Shift(NodeID::N38)),
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N39)),
+        NodeID::N39 => match lookahead {
+            Some(TokenID::VERT_BAR) => Some(SimulatedAction::Shift(NodeID::N38)),
+            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Stmt, 5)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N45 => match lookahead {
-            Some(TokenID::VERT_BAR) => Some(SimulatedAction::Shift(NodeID::N44)),
-            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::RuleDesc, 5)),
+        NodeID::N40 => match lookahead {
+            Some(TokenID::RBRACKET) => Some(SimulatedAction::Shift(NodeID::N44)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N46 => match lookahead {
-            Some(TokenID::RBRACKET) => Some(SimulatedAction::Shift(NodeID::N49)),
-            #[allow(unreachable_patterns)]
-            _ => None,
-        },
-        NodeID::N47 => match lookahead {
+        NodeID::N41 => match lookahead {
             Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Elems, 2)),
             Some(TokenID::VERT_BAR) => Some(SimulatedAction::Reduce(Symbol::Elems, 2)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N48 => match lookahead {
+        NodeID::N42 => match lookahead {
+            Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Stmt, 5)),
+            #[allow(unreachable_patterns)]
+            _ => None,
+        },
+        NodeID::N43 => match lookahead {
             Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Productions, 3)),
             Some(TokenID::VERT_BAR) => Some(SimulatedAction::Reduce(Symbol::Productions, 3)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N49 => match lookahead {
-            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N39)),
+        NodeID::N44 => match lookahead {
+            Some(TokenID::IDENT) => Some(SimulatedAction::Shift(NodeID::N33)),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N50 => match lookahead {
+        NodeID::N45 => match lookahead {
             Some(TokenID::SEMICOLON) => Some(SimulatedAction::Reduce(Symbol::Production, 4)),
             Some(TokenID::VERT_BAR) => Some(SimulatedAction::Reduce(Symbol::Production, 4)),
             #[allow(unreachable_patterns)]
@@ -470,170 +430,160 @@ const fn __action(current: NodeID, lookahead: Option<TokenID>) -> Option<Simulat
 const fn __expected_tokens(current: NodeID) -> &'static [TokenID] {
     match current {
         NodeID::N0 => &[
-            TokenID::TERMINAL,
-            TokenID::NONTERMINAL,
-            TokenID::RULE,
-            TokenID::PREC,
-            TokenID::START,
+            TokenID::KW_TERMINAL,
+            TokenID::KW_NONTERMINAL,
+            TokenID::KW_RULE,
+            TokenID::KW_START,
+            TokenID::KW_PREC,
         ],
         NodeID::N1 => &[],
         NodeID::N2 => &[
-            TokenID::PREC,
-            TokenID::TERMINAL,
-            TokenID::NONTERMINAL,
-            TokenID::START,
-            TokenID::RULE,
+            TokenID::KW_TERMINAL,
+            TokenID::KW_NONTERMINAL,
+            TokenID::KW_RULE,
+            TokenID::KW_START,
+            TokenID::KW_PREC,
         ],
         NodeID::N3 => &[TokenID::SEMICOLON],
-        NodeID::N4 => &[TokenID::SEMICOLON],
-        NodeID::N5 => &[TokenID::SEMICOLON],
-        NodeID::N6 => &[TokenID::SEMICOLON],
-        NodeID::N7 => &[TokenID::SEMICOLON],
-        NodeID::N8 => &[TokenID::SEMICOLON],
-        NodeID::N9 => &[TokenID::LBRACKET],
-        NodeID::N10 => &[TokenID::LBRACKET, TokenID::IDENT],
-        NodeID::N11 => &[TokenID::IDENT],
-        NodeID::N12 => &[TokenID::IDENT],
-        NodeID::N13 => &[TokenID::IDENT],
-        NodeID::N14 => &[
-            TokenID::TERMINAL,
-            TokenID::NONTERMINAL,
-            TokenID::RULE,
-            TokenID::PREC,
-            TokenID::START,
+        NodeID::N4 => &[TokenID::LBRACKET, TokenID::IDENT],
+        NodeID::N5 => &[TokenID::IDENT],
+        NodeID::N6 => &[TokenID::IDENT],
+        NodeID::N7 => &[TokenID::IDENT],
+        NodeID::N8 => &[TokenID::LBRACKET],
+        NodeID::N9 => &[
+            TokenID::KW_TERMINAL,
+            TokenID::KW_NONTERMINAL,
+            TokenID::KW_RULE,
+            TokenID::KW_START,
+            TokenID::KW_PREC,
         ],
-        NodeID::N15 => &[TokenID::IDENT],
-        NodeID::N16 => &[TokenID::SEMICOLON],
-        NodeID::N17 => &[TokenID::IDENT],
-        NodeID::N18 => &[TokenID::COMMA, TokenID::SEMICOLON],
-        NodeID::N19 => &[TokenID::SEMICOLON],
-        NodeID::N20 => &[TokenID::SEMICOLON],
-        NodeID::N21 => &[TokenID::COLON_EQ],
-        NodeID::N22 => &[TokenID::RBRACKET],
-        NodeID::N23 => &[TokenID::COMMA, TokenID::RBRACKET],
-        NodeID::N24 => &[TokenID::EQ],
-        NodeID::N25 => &[TokenID::RBRACKET],
-        NodeID::N26 => &[TokenID::IDENT, TokenID::SEMICOLON],
-        NodeID::N27 => &[
+        NodeID::N10 => &[TokenID::SEMICOLON],
+        NodeID::N11 => &[TokenID::IDENT],
+        NodeID::N12 => &[TokenID::COMMA, TokenID::SEMICOLON],
+        NodeID::N13 => &[TokenID::SEMICOLON],
+        NodeID::N14 => &[TokenID::COLON_EQ],
+        NodeID::N15 => &[TokenID::SEMICOLON],
+        NodeID::N16 => &[TokenID::IDENT],
+        NodeID::N17 => &[TokenID::RBRACKET],
+        NodeID::N18 => &[TokenID::COMMA, TokenID::RBRACKET],
+        NodeID::N19 => &[TokenID::EQ],
+        NodeID::N20 => &[TokenID::IDENT, TokenID::SEMICOLON],
+        NodeID::N21 => &[
             TokenID::VERT_BAR,
-            TokenID::EMPTY,
+            TokenID::KW_EMPTY,
             TokenID::AT_LBRACKET,
             TokenID::IDENT,
         ],
-        NodeID::N28 => &[TokenID::IDENT],
-        NodeID::N29 => &[TokenID::IDENT, TokenID::RBRACKET],
-        NodeID::N30 => &[TokenID::IDENT],
-        NodeID::N31 => &[TokenID::IDENT],
-        NodeID::N32 => &[TokenID::SEMICOLON],
-        NodeID::N33 => &[TokenID::VERT_BAR, TokenID::SEMICOLON],
-        NodeID::N34 => &[TokenID::EMPTY, TokenID::AT_LBRACKET, TokenID::IDENT],
-        NodeID::N35 => &[TokenID::SEMICOLON, TokenID::VERT_BAR],
-        NodeID::N36 => &[TokenID::SEMICOLON, TokenID::VERT_BAR],
-        NodeID::N37 => &[TokenID::SEMICOLON, TokenID::VERT_BAR],
-        NodeID::N38 => &[TokenID::IDENT],
-        NodeID::N39 => &[TokenID::IDENT, TokenID::SEMICOLON, TokenID::VERT_BAR],
-        NodeID::N40 => &[TokenID::SEMICOLON],
-        NodeID::N41 => &[TokenID::RBRACKET],
-        NodeID::N42 => &[TokenID::RBRACKET, TokenID::COMMA],
-        NodeID::N43 => &[TokenID::SEMICOLON],
-        NodeID::N44 => &[TokenID::EMPTY, TokenID::AT_LBRACKET, TokenID::IDENT],
-        NodeID::N45 => &[TokenID::VERT_BAR, TokenID::SEMICOLON],
-        NodeID::N46 => &[TokenID::RBRACKET],
-        NodeID::N47 => &[TokenID::SEMICOLON, TokenID::VERT_BAR],
-        NodeID::N48 => &[TokenID::SEMICOLON, TokenID::VERT_BAR],
-        NodeID::N49 => &[TokenID::IDENT],
-        NodeID::N50 => &[TokenID::SEMICOLON, TokenID::VERT_BAR],
+        NodeID::N22 => &[TokenID::RBRACKET],
+        NodeID::N23 => &[TokenID::IDENT],
+        NodeID::N24 => &[TokenID::IDENT, TokenID::RBRACKET],
+        NodeID::N25 => &[TokenID::IDENT],
+        NodeID::N26 => &[TokenID::SEMICOLON],
+        NodeID::N27 => &[TokenID::VERT_BAR, TokenID::SEMICOLON],
+        NodeID::N28 => &[TokenID::KW_EMPTY, TokenID::AT_LBRACKET, TokenID::IDENT],
+        NodeID::N29 => &[TokenID::SEMICOLON, TokenID::VERT_BAR],
+        NodeID::N30 => &[TokenID::SEMICOLON, TokenID::VERT_BAR],
+        NodeID::N31 => &[TokenID::SEMICOLON, TokenID::VERT_BAR],
+        NodeID::N32 => &[TokenID::IDENT],
+        NodeID::N33 => &[TokenID::IDENT, TokenID::SEMICOLON, TokenID::VERT_BAR],
+        NodeID::N34 => &[TokenID::IDENT],
+        NodeID::N35 => &[TokenID::SEMICOLON],
+        NodeID::N36 => &[TokenID::RBRACKET],
+        NodeID::N37 => &[TokenID::RBRACKET, TokenID::COMMA],
+        NodeID::N38 => &[TokenID::KW_EMPTY, TokenID::AT_LBRACKET, TokenID::IDENT],
+        NodeID::N39 => &[TokenID::VERT_BAR, TokenID::SEMICOLON],
+        NodeID::N40 => &[TokenID::RBRACKET],
+        NodeID::N41 => &[TokenID::SEMICOLON, TokenID::VERT_BAR],
+        NodeID::N42 => &[TokenID::SEMICOLON],
+        NodeID::N43 => &[TokenID::SEMICOLON, TokenID::VERT_BAR],
+        NodeID::N44 => &[TokenID::IDENT],
+        NodeID::N45 => &[TokenID::SEMICOLON, TokenID::VERT_BAR],
     }
 }
 const fn __goto(current: NodeID, symbol: Symbol) -> Option<NodeID> {
     match current {
         NodeID::N0 => match symbol {
             Symbol::Grammar => Some(NodeID::N1),
-            Symbol::Descs => Some(NodeID::N2),
+            Symbol::Stmts => Some(NodeID::N2),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N2 => match symbol {
-            Symbol::Desc => Some(NodeID::N3),
-            Symbol::TerminalDesc => Some(NodeID::N4),
-            Symbol::NonterminalDesc => Some(NodeID::N5),
-            Symbol::RuleDesc => Some(NodeID::N6),
-            Symbol::PrecDesc => Some(NodeID::N7),
-            Symbol::StartDesc => Some(NodeID::N8),
+            Symbol::Stmt => Some(NodeID::N3),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N10 => match symbol {
-            Symbol::Idents => Some(NodeID::N16),
+        NodeID::N4 => match symbol {
+            Symbol::Idents => Some(NodeID::N10),
+            #[allow(unreachable_patterns)]
+            _ => None,
+        },
+        NodeID::N5 => match symbol {
+            Symbol::Idents => Some(NodeID::N13),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N11 => match symbol {
-            Symbol::Idents => Some(NodeID::N19),
+            Symbol::Configs => Some(NodeID::N17),
+            Symbol::Config => Some(NodeID::N18),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N15 => match symbol {
+        NodeID::N16 => match symbol {
             Symbol::Configs => Some(NodeID::N22),
-            Symbol::Config => Some(NodeID::N23),
+            Symbol::Config => Some(NodeID::N18),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N17 => match symbol {
-            Symbol::Configs => Some(NodeID::N25),
-            Symbol::Config => Some(NodeID::N23),
+        NodeID::N20 => match symbol {
+            Symbol::Idents => Some(NodeID::N26),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N26 => match symbol {
-            Symbol::Idents => Some(NodeID::N32),
+        NodeID::N21 => match symbol {
+            Symbol::Productions => Some(NodeID::N27),
+            Symbol::Production => Some(NodeID::N29),
+            Symbol::Elems => Some(NodeID::N31),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N27 => match symbol {
-            Symbol::Productions => Some(NodeID::N33),
-            Symbol::Production => Some(NodeID::N35),
-            Symbol::Elems => Some(NodeID::N37),
+        NodeID::N23 => match symbol {
+            Symbol::Idents => Some(NodeID::N35),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N29 => match symbol {
-            Symbol::Config => Some(NodeID::N23),
-            Symbol::Configs => Some(NodeID::N41),
+        NodeID::N24 => match symbol {
+            Symbol::Config => Some(NodeID::N18),
+            Symbol::Configs => Some(NodeID::N36),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N31 => match symbol {
-            Symbol::Idents => Some(NodeID::N43),
+        NodeID::N28 => match symbol {
+            Symbol::Productions => Some(NodeID::N39),
+            Symbol::Production => Some(NodeID::N29),
+            Symbol::Elems => Some(NodeID::N31),
             #[allow(unreachable_patterns)]
             _ => None,
         },
-        NodeID::N34 => match symbol {
-            Symbol::Productions => Some(NodeID::N45),
-            Symbol::Production => Some(NodeID::N35),
-            Symbol::Elems => Some(NodeID::N37),
+        NodeID::N32 => match symbol {
+            Symbol::Configs => Some(NodeID::N40),
+            Symbol::Config => Some(NodeID::N18),
+            #[allow(unreachable_patterns)]
+            _ => None,
+        },
+        NodeID::N33 => match symbol {
+            Symbol::Elems => Some(NodeID::N41),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N38 => match symbol {
-            Symbol::Configs => Some(NodeID::N46),
-            Symbol::Config => Some(NodeID::N23),
-            #[allow(unreachable_patterns)]
-            _ => None,
-        },
-        NodeID::N39 => match symbol {
-            Symbol::Elems => Some(NodeID::N47),
+            Symbol::Production => Some(NodeID::N43),
+            Symbol::Elems => Some(NodeID::N31),
             #[allow(unreachable_patterns)]
             _ => None,
         },
         NodeID::N44 => match symbol {
-            Symbol::Production => Some(NodeID::N48),
-            Symbol::Elems => Some(NodeID::N37),
-            #[allow(unreachable_patterns)]
-            _ => None,
-        },
-        NodeID::N49 => match symbol {
-            Symbol::Elems => Some(NodeID::N50),
+            Symbol::Elems => Some(NodeID::N45),
             #[allow(unreachable_patterns)]
             _ => None,
         },

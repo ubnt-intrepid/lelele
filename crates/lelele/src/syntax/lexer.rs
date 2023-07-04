@@ -2,17 +2,9 @@
 
 use super::grammar::TokenID;
 use lexgen_util::Loc;
-use std::convert::Infallible;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Token<'input> {
-    pub kind: TokenKind<'input>,
-    pub begin: Loc,
-    pub end: Loc,
-}
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum TokenKind<'input> {
+pub enum Token<'input> {
     LBracket,
     RBracket,
     AtLBracket,
@@ -21,139 +13,121 @@ pub enum TokenKind<'input> {
     Comma,
     Semicolon,
     VertBar,
+    Kw(Keyword),
+    Ident(&'input str),
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Keyword {
     Terminal,
     Nonterminal,
     Start,
     Rule,
     Prec,
     Empty,
-    Ident(&'input str),
 }
 
 impl lelele_runtime::parser::Token<TokenID> for Token<'_> {
     fn to_index(&self) -> TokenID {
-        match self.kind {
-            TokenKind::LBracket => TokenID::LBRACKET,
-            TokenKind::RBracket => TokenID::RBRACKET,
-            TokenKind::AtLBracket => TokenID::AT_LBRACKET,
-            TokenKind::ColonEq => TokenID::COLON_EQ,
-            TokenKind::Eq => TokenID::EQ,
-            TokenKind::Comma => TokenID::COMMA,
-            TokenKind::Semicolon => TokenID::SEMICOLON,
-            TokenKind::VertBar => TokenID::VERT_BAR,
-            TokenKind::Terminal => TokenID::TERMINAL,
-            TokenKind::Nonterminal => TokenID::NONTERMINAL,
-            TokenKind::Start => TokenID::START,
-            TokenKind::Rule => TokenID::RULE,
-            TokenKind::Prec => TokenID::PREC,
-            TokenKind::Empty => TokenID::EMPTY,
-            TokenKind::Ident(..) => TokenID::IDENT,
+        match self {
+            Token::LBracket => TokenID::LBRACKET,
+            Token::RBracket => TokenID::RBRACKET,
+            Token::AtLBracket => TokenID::AT_LBRACKET,
+            Token::ColonEq => TokenID::COLON_EQ,
+            Token::Eq => TokenID::EQ,
+            Token::Comma => TokenID::COMMA,
+            Token::Semicolon => TokenID::SEMICOLON,
+            Token::VertBar => TokenID::VERT_BAR,
+            Token::Kw(Keyword::Terminal) => TokenID::KW_TERMINAL,
+            Token::Kw(Keyword::Nonterminal) => TokenID::KW_NONTERMINAL,
+            Token::Kw(Keyword::Start) => TokenID::KW_START,
+            Token::Kw(Keyword::Rule) => TokenID::KW_RULE,
+            Token::Kw(Keyword::Prec) => TokenID::KW_PREC,
+            Token::Kw(Keyword::Empty) => TokenID::KW_EMPTY,
+            Token::Ident(..) => TokenID::IDENT,
         }
     }
 }
 
-pub struct Lexer<'input> {
-    inner: imp::Lexer<'input, std::str::Chars<'input>>,
-}
-impl<'input> Lexer<'input> {
-    pub fn new(input: &'input str) -> Self {
-        Self {
-            inner: imp::Lexer::new_with_state(input, imp::LexerState::default()),
-        }
+pub type Spanned<'input> = (Loc, Token<'input>, Loc);
+impl lelele_runtime::parser::Token<TokenID> for Spanned<'_> {
+    #[inline]
+    fn to_index(&self) -> TokenID {
+        self.1.to_index()
     }
 }
 
-impl<'input> Iterator for Lexer<'input> {
-    type Item = Result<Token<'input>, LexerError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.inner.next()? {
-            Ok((begin, kind, end)) => Some(Ok(Token { kind, begin, end })),
-            Err(inner) => Some(Err(LexerError { inner })),
-        }
-    }
+#[derive(Debug, Default)]
+pub struct LexerState {
+    comment_depth: usize,
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("lexer error")]
-pub struct LexerError {
-    inner: lexgen_util::LexerError<Infallible>,
-}
+lexgen::lexer! {
+    pub Lexer(LexerState) -> Token<'input>;
 
-mod imp {
-    use super::*;
+    let whitespace = [' ' '\t' '\n'];
+    let newline = '\r'* '\n' | '\r';
+    let ident = $$XID_Start $$XID_Continue*;
 
-    #[derive(Debug, Default)]
-    pub struct LexerState {
-        comment_depth: usize,
+    rule Init {
+        $whitespace+,
+        "//" => |lexer| {
+            lexer.switch(LexerRule::LineComment)
+        },
+        "/*" => |lexer| {
+            lexer.state().comment_depth += 1;
+            lexer.switch(LexerRule::BlockComment)
+        },
+        "{" = Token::LBracket,
+        "}" = Token::RBracket,
+        "@{" = Token::AtLBracket,
+        ":=" = Token::ColonEq,
+        "=" = Token::Eq,
+        "," = Token::Comma,
+        ";" = Token::Semicolon,
+        "|" = Token::VertBar,
+        "@terminal" = Token::Kw(Keyword::Terminal),
+        "@nonterminal" = Token::Kw(Keyword::Nonterminal),
+        "@start" = Token::Kw(Keyword::Start),
+        "@rule" = Token::Kw(Keyword::Rule),
+        "@prec" = Token::Kw(Keyword::Prec),
+        "@empty" = Token::Kw(Keyword::Empty),
+        $ident => |lexer| {
+            let token = Token::Ident(lexer.match_());
+            lexer.return_(token)
+        },
     }
 
-    lexgen::lexer! {
-        pub Lexer(LexerState) -> TokenKind<'input>;
+    rule LineComment {
+        $newline => |lexer| {
+            lexer.switch(LexerRule::Init)
+        },
+        _,
+    }
 
-        let whitespace = [' ' '\t' '\n'];
-        let newline = '\r'* '\n' | '\r';
-        let ident = $$XID_Start $$XID_Continue*;
-
-        rule Init {
-            $whitespace+,
-            "//" => |lexer| {
-                lexer.switch(LexerRule::LineComment)
-            },
-            "/*" => |lexer| {
-                lexer.state().comment_depth += 1;
-                lexer.switch(LexerRule::BlockComment)
-            },
-            "{" = TokenKind::LBracket,
-            "}" = TokenKind::RBracket,
-            "@{" = TokenKind::AtLBracket,
-            ":=" = TokenKind::ColonEq,
-            "=" = TokenKind::Eq,
-            "," = TokenKind::Comma,
-            ";" = TokenKind::Semicolon,
-            "|" = TokenKind::VertBar,
-            "@terminal" = TokenKind::Terminal,
-            "@nonterminal" = TokenKind::Nonterminal,
-            "@start" = TokenKind::Start,
-            "@rule" = TokenKind::Rule,
-            "@prec" = TokenKind::Prec,
-            "@empty" = TokenKind::Empty,
-            $ident => |lexer| {
-                let token = TokenKind::Ident(lexer.match_());
-                lexer.return_(token)
-            },
-        }
-
-        rule LineComment {
-            $newline => |lexer| {
+    rule BlockComment {
+        "/*" => |lexer| {
+            lexer.state().comment_depth += 1;
+            lexer.continue_()
+        },
+        "*/" => |lexer| {
+            let depth = &mut lexer.state().comment_depth;
+            if *depth == 1 {
                 lexer.switch(LexerRule::Init)
-            },
-            _,
-        }
-
-        rule BlockComment {
-            "/*" => |lexer| {
-                lexer.state().comment_depth += 1;
+            } else {
+                *depth -= 1;
                 lexer.continue_()
-            },
-            "*/" => |lexer| {
-                let depth = &mut lexer.state().comment_depth;
-                if *depth == 1 {
-                    lexer.switch(LexerRule::Init)
-                } else {
-                    *depth -= 1;
-                    lexer.continue_()
-                }
-            },
-            _,
-        }
+            }
+        },
+        _,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use TokenKind::*;
+    use Keyword::*;
+    use Token::*;
 
     #[test]
     fn smoketest() {
@@ -168,14 +142,14 @@ mod tests {
 ";
         let lexer = Lexer::new(input);
         let tokens = lexer
-            .map(|res| res.map(|t| t.kind))
+            .map(|res| res.map(|(_, t, _)| t))
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         assert!(matches!(
             dbg!(&tokens[..]),
             [
                 // @prec ... ;
-                Prec,
+                Kw(Prec),
                 LBracket,
                 Ident("assoc"),
                 Eq,
@@ -184,7 +158,7 @@ mod tests {
                 Ident("prec1"),
                 Semicolon,
                 // @terminal ... ;
-                Terminal,
+                Kw(Terminal),
                 Ident("FOO"),
                 Comma,
                 Ident("BAR"),
@@ -192,13 +166,13 @@ mod tests {
                 Ident("BAZ"),
                 Semicolon,
                 // @nonterminal ... ;
-                Nonterminal,
+                Kw(Nonterminal),
                 Ident("Expr"),
                 Comma,
                 Ident("ｔｒｕｅ"),
                 Semicolon,
                 // @rule ... ;
-                Rule,
+                Kw(Rule),
                 Ident("Expr"),
                 ColonEq,
                 LBracket,
