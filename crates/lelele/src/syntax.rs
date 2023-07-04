@@ -2,9 +2,11 @@ pub mod ast;
 pub mod grammar;
 pub mod lexer;
 
-use grammar::*;
+use self::{
+    grammar::{ParserDef, Symbol},
+    lexer::{Lexer, Token},
+};
 use lelele_runtime::parser::{ParseEvent, ParseItem::*, Parser};
-use lexer::{Lexer, Token};
 use StackItem as s;
 use Symbol::*;
 use Token::*;

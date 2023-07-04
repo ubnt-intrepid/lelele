@@ -1,6 +1,6 @@
 //! Grammar types.
 
-use crate::{parser::ast, IndexMap, IndexSet};
+use crate::{syntax::ast, IndexMap, IndexSet};
 use std::{
     borrow::{Borrow, Cow},
     fmt, fs,
@@ -290,7 +290,7 @@ impl Grammar {
     }
 
     pub fn from_str(source: &str) -> Result<Grammar, GrammarDefError> {
-        let grammar = crate::parser::parse(source).map_err(GrammarDefError::Syntax)?;
+        let grammar = crate::syntax::parse(source).map_err(GrammarDefError::Syntax)?;
         Grammar::define(|g| define_grammar_from_syntax(g, &grammar))
     }
 

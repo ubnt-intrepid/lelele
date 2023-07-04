@@ -1,4 +1,4 @@
-use crate::parser::TokenID;
+use super::grammar::TokenID;
 use logos::Logos;
 use std::mem;
 
