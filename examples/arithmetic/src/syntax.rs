@@ -35,6 +35,7 @@ pub enum Expr<'source> {
         minus: Token<'source>,
         expr: Box<Expr<'source>>,
     },
+    Error,
 }
 
 impl fmt::Display for Expr<'_> {
@@ -47,6 +48,7 @@ impl fmt::Display for Expr<'_> {
             Self::Num(n) => write!(f, "{}", n),
             Self::Paren { expr, .. } => write!(f, "({})", expr),
             Self::Neg { expr, .. } => write!(f, "(neg {})", expr),
+            Self::Error => write!(f, "<error>"),
         }
     }
 }

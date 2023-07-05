@@ -1,10 +1,10 @@
 // grammar definition for lelele.
 
 @terminal LBRACKET, RBRACKET, AT_LBRACKET, COLON_EQ, EQ, COMMA, SEMICOLON, VERT_BAR;
-@terminal KW_TERMINAL, KW_NONTERMINAL, KW_START, KW_RULE, KW_PREC, KW_EMPTY;
+@terminal KW_TERMINAL, KW_NONTERMINAL, KW_START, KW_RULE, KW_PREC, KW_EMPTY, KW_ERROR;
 @terminal IDENT;
 
-@nonterminal Grammar, Stmts, Stmt, Productions, Production, Configs, Config, Idents, Elems;
+@nonterminal Grammar, Stmts, Stmt, Productions, Production, Configs, Config, Idents, ProductionElems, ProductionElem;
 @start Grammar;
 
 @rule Grammar := Stmts ;
@@ -31,13 +31,18 @@
 
 @rule Production :=
     | KW_EMPTY
-    | Elems
-    | AT_LBRACKET Configs RBRACKET Elems
+    | ProductionElems
+    | AT_LBRACKET Configs RBRACKET ProductionElems
     ;
 
-@rule Elems :=
+@rule ProductionElems :=
+    | ProductionElem
+    | ProductionElem ProductionElems
+    ;
+
+@rule ProductionElem :=
     | IDENT
-    | IDENT Elems
+    | KW_ERROR
     ;
 
 @rule Idents :=

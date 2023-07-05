@@ -25,6 +25,7 @@ pub enum Keyword {
     Rule,
     Prec,
     Empty,
+    Error,
 }
 
 impl lelele_runtime::engine::Token<TokenID> for Token<'_> {
@@ -44,6 +45,7 @@ impl lelele_runtime::engine::Token<TokenID> for Token<'_> {
             Token::Kw(Keyword::Rule) => TokenID::KW_RULE,
             Token::Kw(Keyword::Prec) => TokenID::KW_PREC,
             Token::Kw(Keyword::Empty) => TokenID::KW_EMPTY,
+            Token::Kw(Keyword::Error) => TokenID::KW_ERROR,
             Token::Ident(..) => TokenID::IDENT,
         }
     }
@@ -92,6 +94,7 @@ lexgen::lexer! {
         "@rule" = Token::Kw(Keyword::Rule),
         "@prec" = Token::Kw(Keyword::Prec),
         "@empty" = Token::Kw(Keyword::Empty),
+        "@error" = Token::Kw(Keyword::Error),
         $ident => |lexer| {
             let token = Token::Ident(lexer.match_());
             lexer.return_(token)
@@ -136,7 +139,7 @@ mod tests {
 @terminal FOO, BAR, BAZ; /* block comment /* nested */ */
 @nonterminal Expr, ｔｒｕｅ;
 @rule Expr :=
-    | FOO BAR BAZ
+    | FOO BAR BAZ @error
     | @{ prec = prec1 } Expr FOO
     ;
 ";
@@ -179,6 +182,7 @@ mod tests {
                 Ident("FOO"),
                 Ident("BAR"),
                 Ident("BAZ"),
+                Kw(Keyword::Error),
                 VertBar,
                 AtLBracket,
                 Ident("prec"),

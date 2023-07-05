@@ -18,7 +18,8 @@ enum StackItem {
     Desc(ast::Stmt),
     Productions(Vec<ast::Production>),
     Production(ast::Production),
-    Elems(Vec<String>),
+    ProductionElems(Vec<ast::ProductionElem>),
+    ProductionElem(ast::ProductionElem),
     Idents(Vec<String>),
     Configs(Vec<ast::Config>),
     Config(ast::Config),
@@ -178,8 +179,8 @@ pub fn parse(source: &str) -> anyhow::Result<ast::Grammar> {
                             elems: vec![],
                         }));
                     }
-                    (Production, [N(Elems)]) => {
-                        let mut elems = pop_stack!(Elems);
+                    (Production, [N(ProductionElems)]) => {
+                        let mut elems = pop_stack!(ProductionElems);
                         elems.reverse();
                         stack.push(s::Production(ast::Production {
                             configs: vec![],
@@ -188,21 +189,33 @@ pub fn parse(source: &str) -> anyhow::Result<ast::Grammar> {
                     }
                     (
                         Production,
-                        [T((_, AtLBracket, _)), N(Configs), T((_, RBracket, _)), N(Elems)],
+                        [T((_, AtLBracket, _)), N(Configs), T((_, RBracket, _)), N(ProductionElems)],
                     ) => {
-                        let mut elems = pop_stack!(Elems);
+                        let mut elems = pop_stack!(ProductionElems);
                         elems.reverse();
                         let mut configs = pop_stack!(Configs);
                         configs.reverse();
                         stack.push(s::Production(ast::Production { configs, elems }));
                     }
 
-                    (Elems, [T((_, Ident(ident), _))]) => {
-                        stack.push(s::Elems(vec![ident.to_string()]));
+                    (ProductionElems, [N(ProductionElem)]) => {
+                        let elem = pop_stack!(ProductionElem);
+                        stack.push(s::ProductionElems(vec![elem]));
                     }
-                    (Elems, [T((_, Ident(elem), _)), N(Elems)]) => {
-                        let elems = peek_stack!(Elems);
-                        elems.push(elem.to_string());
+                    (ProductionElems, [N(ProductionElem), N(ProductionElems)]) => {
+                        let mut elems = pop_stack!(ProductionElems);
+                        let elem = pop_stack!(ProductionElem);
+                        elems.push(elem);
+                        stack.push(s::ProductionElems(elems));
+                    }
+
+                    (ProductionElem, [T((_, Ident(ident), _))]) => {
+                        stack.push(s::ProductionElem(ast::ProductionElem::Ident(
+                            ident.to_string(),
+                        )));
+                    }
+                    (ProductionElem, [T((_, Kw(Keyword::Error), _))]) => {
+                        stack.push(s::ProductionElem(ast::ProductionElem::ErrorToken));
                     }
 
                     (Idents, [T((_, Ident(ident), _))])
@@ -276,12 +289,16 @@ mod tests {
 
         let input = "\
 @terminal A, B, C;
-@nonterminal E;
+@nonterminal D, E;
 @rule E := A B C;
 @rule E :=
     | @empty
     | B C A
     | E D
+    ;
+@rule D :=
+    | A
+    | @error
     ;
 ";
         let _parsed = parse(input).unwrap();

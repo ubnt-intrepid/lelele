@@ -49,6 +49,8 @@ pub enum NodeID {
     N43,
     N44,
     N45,
+    N46,
+    N47,
 }
 /// The type to identify terminal or nonterminal symbols used in generated DFA.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -82,6 +84,8 @@ pub enum TokenID {
     KW_PREC,
     /// Terminal `KW_EMPTY`.
     KW_EMPTY,
+    /// Terminal `KW_ERROR`.
+    KW_ERROR,
     /// Terminal `IDENT`.
     IDENT,
 }
@@ -110,8 +114,10 @@ pub enum Symbol {
     Config,
     /// Nonterminal `Idents`.
     Idents,
-    /// Nonterminal `Elems`.
-    Elems,
+    /// Nonterminal `ProductionElems`.
+    ProductionElems,
+    /// Nonterminal `ProductionElem`.
+    ProductionElem,
 }
 /// The generated LR(1) parser definition.
 #[derive(Debug, Default)]
@@ -259,11 +265,12 @@ const fn __action(
             lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Shift(NodeID::N28),
             lelele::Terminal::T(TokenID::KW_EMPTY) => lelele::Shift(NodeID::N30),
             lelele::Terminal::T(TokenID::AT_LBRACKET) => lelele::Shift(NodeID::N32),
-            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N33),
+            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N34),
+            lelele::Terminal::T(TokenID::KW_ERROR) => lelele::Shift(NodeID::N35),
             _ => lelele::Fail,
         },
         NodeID::N22 => match lookahead {
-            lelele::Terminal::T(TokenID::RBRACKET) => lelele::Shift(NodeID::N34),
+            lelele::Terminal::T(TokenID::RBRACKET) => lelele::Shift(NodeID::N36),
             _ => lelele::Fail,
         },
         NodeID::N23 => match lookahead {
@@ -276,7 +283,7 @@ const fn __action(
             _ => lelele::Fail,
         },
         NodeID::N25 => match lookahead {
-            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N37),
+            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N39),
             _ => lelele::Fail,
         },
         NodeID::N26 => match lookahead {
@@ -284,14 +291,15 @@ const fn __action(
             _ => lelele::Fail,
         },
         NodeID::N27 => match lookahead {
-            lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Shift(NodeID::N38),
+            lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Shift(NodeID::N40),
             lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::Stmt, 4),
             _ => lelele::Fail,
         },
         NodeID::N28 => match lookahead {
             lelele::Terminal::T(TokenID::KW_EMPTY) => lelele::Shift(NodeID::N30),
             lelele::Terminal::T(TokenID::AT_LBRACKET) => lelele::Shift(NodeID::N32),
-            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N33),
+            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N34),
+            lelele::Terminal::T(TokenID::KW_ERROR) => lelele::Shift(NodeID::N35),
             _ => lelele::Fail,
         },
         NodeID::N29 => match lookahead {
@@ -314,62 +322,79 @@ const fn __action(
             _ => lelele::Fail,
         },
         NodeID::N33 => match lookahead {
-            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N33),
-            lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::Elems, 1),
-            lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Reduce(Symbol::Elems, 1),
+            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N34),
+            lelele::Terminal::T(TokenID::KW_ERROR) => lelele::Shift(NodeID::N35),
+            lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::ProductionElems, 1),
+            lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Reduce(Symbol::ProductionElems, 1),
             _ => lelele::Fail,
         },
         NodeID::N34 => match lookahead {
-            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N42),
+            lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::ProductionElem, 1),
+            lelele::Terminal::T(TokenID::IDENT) => lelele::Reduce(Symbol::ProductionElem, 1),
+            lelele::Terminal::T(TokenID::KW_ERROR) => lelele::Reduce(Symbol::ProductionElem, 1),
+            lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Reduce(Symbol::ProductionElem, 1),
             _ => lelele::Fail,
         },
         NodeID::N35 => match lookahead {
-            lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::Stmt, 5),
+            lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::ProductionElem, 1),
+            lelele::Terminal::T(TokenID::IDENT) => lelele::Reduce(Symbol::ProductionElem, 1),
+            lelele::Terminal::T(TokenID::KW_ERROR) => lelele::Reduce(Symbol::ProductionElem, 1),
+            lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Reduce(Symbol::ProductionElem, 1),
             _ => lelele::Fail,
         },
         NodeID::N36 => match lookahead {
-            lelele::Terminal::T(TokenID::RBRACKET) => lelele::Reduce(Symbol::Configs, 3),
+            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N44),
             _ => lelele::Fail,
         },
         NodeID::N37 => match lookahead {
+            lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::Stmt, 5),
+            _ => lelele::Fail,
+        },
+        NodeID::N38 => match lookahead {
+            lelele::Terminal::T(TokenID::RBRACKET) => lelele::Reduce(Symbol::Configs, 3),
+            _ => lelele::Fail,
+        },
+        NodeID::N39 => match lookahead {
             lelele::Terminal::T(TokenID::RBRACKET) => lelele::Reduce(Symbol::Config, 3),
             lelele::Terminal::T(TokenID::COMMA) => lelele::Reduce(Symbol::Config, 3),
             _ => lelele::Fail,
         },
-        NodeID::N38 => match lookahead {
+        NodeID::N40 => match lookahead {
             lelele::Terminal::T(TokenID::KW_EMPTY) => lelele::Shift(NodeID::N30),
             lelele::Terminal::T(TokenID::AT_LBRACKET) => lelele::Shift(NodeID::N32),
-            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N33),
-            _ => lelele::Fail,
-        },
-        NodeID::N39 => match lookahead {
-            lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Shift(NodeID::N38),
-            lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::Stmt, 5),
-            _ => lelele::Fail,
-        },
-        NodeID::N40 => match lookahead {
-            lelele::Terminal::T(TokenID::RBRACKET) => lelele::Shift(NodeID::N44),
+            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N34),
+            lelele::Terminal::T(TokenID::KW_ERROR) => lelele::Shift(NodeID::N35),
             _ => lelele::Fail,
         },
         NodeID::N41 => match lookahead {
-            lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::Elems, 2),
-            lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Reduce(Symbol::Elems, 2),
-            _ => lelele::Fail,
-        },
-        NodeID::N42 => match lookahead {
+            lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Shift(NodeID::N40),
             lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::Stmt, 5),
             _ => lelele::Fail,
         },
+        NodeID::N42 => match lookahead {
+            lelele::Terminal::T(TokenID::RBRACKET) => lelele::Shift(NodeID::N46),
+            _ => lelele::Fail,
+        },
         NodeID::N43 => match lookahead {
+            lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::ProductionElems, 2),
+            lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Reduce(Symbol::ProductionElems, 2),
+            _ => lelele::Fail,
+        },
+        NodeID::N44 => match lookahead {
+            lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::Stmt, 5),
+            _ => lelele::Fail,
+        },
+        NodeID::N45 => match lookahead {
             lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::Productions, 3),
             lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Reduce(Symbol::Productions, 3),
             _ => lelele::Fail,
         },
-        NodeID::N44 => match lookahead {
-            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N33),
+        NodeID::N46 => match lookahead {
+            lelele::Terminal::T(TokenID::IDENT) => lelele::Shift(NodeID::N34),
+            lelele::Terminal::T(TokenID::KW_ERROR) => lelele::Shift(NodeID::N35),
             _ => lelele::Fail,
         },
-        NodeID::N45 => match lookahead {
+        NodeID::N47 => match lookahead {
             lelele::Terminal::T(TokenID::SEMICOLON) => lelele::Reduce(Symbol::Production, 4),
             lelele::Terminal::T(TokenID::VERT_BAR) => lelele::Reduce(Symbol::Production, 4),
             _ => lelele::Fail,
@@ -437,6 +462,7 @@ const fn __expected_terminals(current: NodeID) -> &'static [lelele::Terminal<Tok
             lelele::Terminal::T(TokenID::KW_EMPTY),
             lelele::Terminal::T(TokenID::AT_LBRACKET),
             lelele::Terminal::T(TokenID::IDENT),
+            lelele::Terminal::T(TokenID::KW_ERROR),
         ],
         NodeID::N22 => &[lelele::Terminal::T(TokenID::RBRACKET)],
         NodeID::N23 => &[lelele::Terminal::T(TokenID::IDENT)],
@@ -454,6 +480,7 @@ const fn __expected_terminals(current: NodeID) -> &'static [lelele::Terminal<Tok
             lelele::Terminal::T(TokenID::KW_EMPTY),
             lelele::Terminal::T(TokenID::AT_LBRACKET),
             lelele::Terminal::T(TokenID::IDENT),
+            lelele::Terminal::T(TokenID::KW_ERROR),
         ],
         NodeID::N29 => &[
             lelele::Terminal::T(TokenID::SEMICOLON),
@@ -470,37 +497,54 @@ const fn __expected_terminals(current: NodeID) -> &'static [lelele::Terminal<Tok
         NodeID::N32 => &[lelele::Terminal::T(TokenID::IDENT)],
         NodeID::N33 => &[
             lelele::Terminal::T(TokenID::IDENT),
+            lelele::Terminal::T(TokenID::KW_ERROR),
             lelele::Terminal::T(TokenID::SEMICOLON),
             lelele::Terminal::T(TokenID::VERT_BAR),
         ],
-        NodeID::N34 => &[lelele::Terminal::T(TokenID::IDENT)],
-        NodeID::N35 => &[lelele::Terminal::T(TokenID::SEMICOLON)],
-        NodeID::N36 => &[lelele::Terminal::T(TokenID::RBRACKET)],
-        NodeID::N37 => &[
+        NodeID::N34 => &[
+            lelele::Terminal::T(TokenID::SEMICOLON),
+            lelele::Terminal::T(TokenID::IDENT),
+            lelele::Terminal::T(TokenID::KW_ERROR),
+            lelele::Terminal::T(TokenID::VERT_BAR),
+        ],
+        NodeID::N35 => &[
+            lelele::Terminal::T(TokenID::SEMICOLON),
+            lelele::Terminal::T(TokenID::IDENT),
+            lelele::Terminal::T(TokenID::KW_ERROR),
+            lelele::Terminal::T(TokenID::VERT_BAR),
+        ],
+        NodeID::N36 => &[lelele::Terminal::T(TokenID::IDENT)],
+        NodeID::N37 => &[lelele::Terminal::T(TokenID::SEMICOLON)],
+        NodeID::N38 => &[lelele::Terminal::T(TokenID::RBRACKET)],
+        NodeID::N39 => &[
             lelele::Terminal::T(TokenID::RBRACKET),
             lelele::Terminal::T(TokenID::COMMA),
         ],
-        NodeID::N38 => &[
+        NodeID::N40 => &[
             lelele::Terminal::T(TokenID::KW_EMPTY),
             lelele::Terminal::T(TokenID::AT_LBRACKET),
             lelele::Terminal::T(TokenID::IDENT),
+            lelele::Terminal::T(TokenID::KW_ERROR),
         ],
-        NodeID::N39 => &[
-            lelele::Terminal::T(TokenID::VERT_BAR),
-            lelele::Terminal::T(TokenID::SEMICOLON),
-        ],
-        NodeID::N40 => &[lelele::Terminal::T(TokenID::RBRACKET)],
         NodeID::N41 => &[
-            lelele::Terminal::T(TokenID::SEMICOLON),
             lelele::Terminal::T(TokenID::VERT_BAR),
+            lelele::Terminal::T(TokenID::SEMICOLON),
         ],
-        NodeID::N42 => &[lelele::Terminal::T(TokenID::SEMICOLON)],
+        NodeID::N42 => &[lelele::Terminal::T(TokenID::RBRACKET)],
         NodeID::N43 => &[
             lelele::Terminal::T(TokenID::SEMICOLON),
             lelele::Terminal::T(TokenID::VERT_BAR),
         ],
-        NodeID::N44 => &[lelele::Terminal::T(TokenID::IDENT)],
+        NodeID::N44 => &[lelele::Terminal::T(TokenID::SEMICOLON)],
         NodeID::N45 => &[
+            lelele::Terminal::T(TokenID::SEMICOLON),
+            lelele::Terminal::T(TokenID::VERT_BAR),
+        ],
+        NodeID::N46 => &[
+            lelele::Terminal::T(TokenID::IDENT),
+            lelele::Terminal::T(TokenID::KW_ERROR),
+        ],
+        NodeID::N47 => &[
             lelele::Terminal::T(TokenID::SEMICOLON),
             lelele::Terminal::T(TokenID::VERT_BAR),
         ],
@@ -543,40 +587,45 @@ const fn __goto(current: NodeID, symbol: Symbol) -> Option<NodeID> {
         NodeID::N21 => match symbol {
             Symbol::Productions => Some(NodeID::N27),
             Symbol::Production => Some(NodeID::N29),
-            Symbol::Elems => Some(NodeID::N31),
+            Symbol::ProductionElems => Some(NodeID::N31),
+            Symbol::ProductionElem => Some(NodeID::N33),
             _ => None,
         },
         NodeID::N23 => match symbol {
-            Symbol::Idents => Some(NodeID::N35),
+            Symbol::Idents => Some(NodeID::N37),
             _ => None,
         },
         NodeID::N24 => match symbol {
             Symbol::Config => Some(NodeID::N18),
-            Symbol::Configs => Some(NodeID::N36),
+            Symbol::Configs => Some(NodeID::N38),
             _ => None,
         },
         NodeID::N28 => match symbol {
-            Symbol::Productions => Some(NodeID::N39),
+            Symbol::Productions => Some(NodeID::N41),
             Symbol::Production => Some(NodeID::N29),
-            Symbol::Elems => Some(NodeID::N31),
+            Symbol::ProductionElems => Some(NodeID::N31),
+            Symbol::ProductionElem => Some(NodeID::N33),
             _ => None,
         },
         NodeID::N32 => match symbol {
-            Symbol::Configs => Some(NodeID::N40),
+            Symbol::Configs => Some(NodeID::N42),
             Symbol::Config => Some(NodeID::N18),
             _ => None,
         },
         NodeID::N33 => match symbol {
-            Symbol::Elems => Some(NodeID::N41),
+            Symbol::ProductionElem => Some(NodeID::N33),
+            Symbol::ProductionElems => Some(NodeID::N43),
             _ => None,
         },
-        NodeID::N38 => match symbol {
-            Symbol::Production => Some(NodeID::N43),
-            Symbol::Elems => Some(NodeID::N31),
+        NodeID::N40 => match symbol {
+            Symbol::Production => Some(NodeID::N45),
+            Symbol::ProductionElems => Some(NodeID::N31),
+            Symbol::ProductionElem => Some(NodeID::N33),
             _ => None,
         },
-        NodeID::N44 => match symbol {
-            Symbol::Elems => Some(NodeID::N45),
+        NodeID::N46 => match symbol {
+            Symbol::ProductionElems => Some(NodeID::N47),
+            Symbol::ProductionElem => Some(NodeID::N33),
             _ => None,
         },
         _ => None,

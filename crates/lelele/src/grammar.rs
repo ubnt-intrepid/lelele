@@ -22,6 +22,10 @@ pub struct TerminalID {
 impl TerminalID {
     /// Reserved symbol used as a terminal symbol that means the end of input.
     pub(crate) const EOI: Self = Self::new(0);
+
+    /// Reserved symbol used as an error token.
+    pub(crate) const ERROR: Self = Self::new(1);
+
     #[inline]
     const fn new(raw: u64) -> Self {
         assert!(raw < u64::MAX / 2, "too large TerminalID");
@@ -51,6 +55,7 @@ impl fmt::Display for Terminal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.id {
             TerminalID::EOI => f.write_str("$eoi"),
+            TerminalID::ERROR => f.write_str("$error"),
             _ => f.write_str(self.export_name().unwrap_or("<unknown>")),
         }
     }
@@ -335,6 +340,11 @@ impl Grammar {
             export_name: None,
             precedence: None,
         });
+        def.terminals.insert(Terminal {
+            id: TerminalID::ERROR,
+            export_name: None,
+            precedence: None,
+        });
 
         def.nonterminals.insert(Nonterminal {
             id: NonterminalID::START,
@@ -470,10 +480,14 @@ fn define_grammar_from_syntax(
 
                     let mut right = vec![];
                     for symbol in &production.elems {
-                        let symbol = symbols
-                            .get(symbol)
-                            .copied()
-                            .ok_or_else(|| format!("unknown symbol: `{}'", symbol))?;
+                        use ast::ProductionElem::*;
+                        let symbol = match symbol {
+                            Ident(symbol) => symbols
+                                .get(symbol)
+                                .copied()
+                                .ok_or_else(|| format!("unknown symbol: `{}'", symbol))?,
+                            ErrorToken => SymbolRef::error_token(),
+                        };
                         right.push(symbol);
                     }
 
@@ -665,6 +679,14 @@ pub struct SymbolRef {
 enum SymbolRefInner {
     T(TerminalID),
     N(NonterminalID),
+}
+
+impl SymbolRef {
+    pub const fn error_token() -> Self {
+        Self {
+            inner: SymbolRefInner::T(TerminalID::ERROR),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

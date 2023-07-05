@@ -43,7 +43,13 @@ pub struct StartDesc {
 #[derive(Debug)]
 pub struct Production {
     pub configs: Vec<Config>,
-    pub elems: Vec<String>,
+    pub elems: Vec<ProductionElem>,
+}
+
+#[derive(Debug)]
+pub enum ProductionElem {
+    Ident(String),
+    ErrorToken,
 }
 
 #[derive(Debug)]
