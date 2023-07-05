@@ -31,6 +31,7 @@ pub trait ParserDef {
 pub enum Terminal<T> {
     T(T),
     EOI,
+    Error,
 }
 
 pub type ParseAction<TDef> =

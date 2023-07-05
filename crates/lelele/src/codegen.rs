@@ -140,9 +140,12 @@ impl<'g> Codegen<'g> {
                     write!(f, "NodeID::N{} => ", id)?;
                     f.bracket("match lookahead", |f| {
                         for (lookahead, action) in node.actions() {
-                            match self.grammar.terminal(&lookahead).export_name() {
-                                Some(name) => write!(f, "lelele::Terminal::T(TokenID::{}) => ", name)?,
-                                None => f.write_str("lelele::Terminal::EOI => ")?,
+                            let name = self.grammar.terminal(&lookahead).export_name();
+                            match (lookahead, name) {
+                                (TerminalID::EOI, _) => f.write_str("lelele::Terminal::EOI => ")?,
+                                (TerminalID::ERROR, _) => f.write_str("lelele::Terminal::Error => ")?,
+                                (_, Some(name)) => write!(f, "lelele::Terminal::T(TokenID::{}) => ", name)?,
+                                _ => continue,
                             };
                             match action {
                                 Action::Shift(n) => write!(f, "lelele::Shift(NodeID::N{})", n)?,
@@ -207,6 +210,7 @@ impl<'g> Codegen<'g> {
                             let name = self.grammar.terminal(&lookahead).export_name();
                             match (lookahead, name) {
                                 (TerminalID::EOI, _) => write!(f, "lelele::Terminal::EOI")?,
+                                (TerminalID::ERROR, _) => write!(f, "lelele::Terminal::Error")?,
                                 (_, Some(name)) => write!(f, "lelele::Terminal::T(TokenID::{})", name)?,
                                 _ => continue,
                             }
