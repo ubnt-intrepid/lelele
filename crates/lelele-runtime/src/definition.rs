@@ -1,11 +1,5 @@
 //! Parser definition.
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Terminal<T> {
-    T(T),
-    EOI,
-}
-
 /// The trait that represents an LR(1) parser definition generated from a particular CFG.
 ///
 /// The main responsibility of types implementing this trait is to tell the parser engine
@@ -20,18 +14,11 @@ pub trait ParserDef {
 
     /// Suggests the next action that the parser engine should take for
     /// the current state and lookahead symbol.
-    fn action<TAction>(
+    fn action(
         &self,
         current: Self::StateIndex,
-        lookahead: Option<Self::TerminalIndex>,
-        action: TAction,
-    ) -> Result<TAction::Ok, TAction::Error>
-    where
-        TAction: ParseAction<
-            StateIndex = Self::StateIndex,
-            TerminalIndex = Self::TerminalIndex,
-            NonterminalIndex = Self::NonterminalIndex,
-        >;
+        lookahead: Terminal<Self::TerminalIndex>,
+    ) -> ParseAction<Self>;
 
     ///
     fn goto(&self, current: Self::StateIndex, symbol: Self::NonterminalIndex) -> Self::StateIndex;
@@ -40,25 +27,21 @@ pub trait ParserDef {
     fn expected_terminals(&self, current: Self::StateIndex) -> &[Terminal<Self::TerminalIndex>];
 }
 
-pub trait ParseAction {
-    type StateIndex: Copy;
-    type TerminalIndex: Copy;
-    type NonterminalIndex: Copy;
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Terminal<T> {
+    T(T),
+    EOI,
+}
 
-    type Ok;
-    type Error;
+pub type ParseAction<TDef> =
+    ParseActionKind<<TDef as ParserDef>::StateIndex, <TDef as ParserDef>::NonterminalIndex>;
 
-    ///
-    fn shift(self, next: Self::StateIndex) -> Result<Self::Ok, Self::Error>;
-
-    ///
-    fn reduce(self, s: Self::NonterminalIndex, n: usize) -> Result<Self::Ok, Self::Error>;
-
-    ///
-    fn accept(self) -> Result<Self::Ok, Self::Error>;
-
-    ///
-    fn fail(self) -> Result<Self::Ok, Self::Error>;
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum ParseActionKind<TState, TNonterminal> {
+    Shift(TState),
+    Reduce(TNonterminal, usize),
+    Accept,
+    Fail,
 }
 
 impl<T: ?Sized> ParserDef for &T
@@ -74,20 +57,12 @@ where
     }
 
     #[inline]
-    fn action<TCtx>(
+    fn action(
         &self,
         current: Self::StateIndex,
-        lookahead: Option<Self::TerminalIndex>,
-        cx: TCtx,
-    ) -> Result<TCtx::Ok, TCtx::Error>
-    where
-        TCtx: ParseAction<
-            StateIndex = Self::StateIndex,
-            TerminalIndex = Self::TerminalIndex,
-            NonterminalIndex = Self::NonterminalIndex,
-        >,
-    {
-        (**self).action(current, lookahead, cx)
+        lookahead: Terminal<Self::TerminalIndex>,
+    ) -> ParseAction<Self> {
+        (**self).action(current, lookahead)
     }
 
     #[inline]
@@ -114,20 +89,12 @@ where
     }
 
     #[inline]
-    fn action<TCtx>(
+    fn action(
         &self,
         current: Self::StateIndex,
-        lookahead: Option<Self::TerminalIndex>,
-        cx: TCtx,
-    ) -> Result<TCtx::Ok, TCtx::Error>
-    where
-        TCtx: ParseAction<
-            StateIndex = Self::StateIndex,
-            TerminalIndex = Self::TerminalIndex,
-            NonterminalIndex = Self::NonterminalIndex,
-        >,
-    {
-        (**self).action(current, lookahead, cx)
+        lookahead: Terminal<Self::TerminalIndex>,
+    ) -> ParseAction<Self> {
+        (**self).action(current, lookahead)
     }
 
     #[inline]
@@ -154,20 +121,12 @@ where
     }
 
     #[inline]
-    fn action<TCtx>(
+    fn action(
         &self,
         current: Self::StateIndex,
-        lookahead: Option<Self::TerminalIndex>,
-        cx: TCtx,
-    ) -> Result<TCtx::Ok, TCtx::Error>
-    where
-        TCtx: ParseAction<
-            StateIndex = Self::StateIndex,
-            TerminalIndex = Self::TerminalIndex,
-            NonterminalIndex = Self::NonterminalIndex,
-        >,
-    {
-        (**self).action(current, lookahead, cx)
+        lookahead: Terminal<Self::TerminalIndex>,
+    ) -> ParseAction<Self> {
+        (**self).action(current, lookahead)
     }
 
     #[inline]
@@ -194,20 +153,12 @@ where
     }
 
     #[inline]
-    fn action<TCtx>(
+    fn action(
         &self,
         current: Self::StateIndex,
-        lookahead: Option<Self::TerminalIndex>,
-        cx: TCtx,
-    ) -> Result<TCtx::Ok, TCtx::Error>
-    where
-        TCtx: ParseAction<
-            StateIndex = Self::StateIndex,
-            TerminalIndex = Self::TerminalIndex,
-            NonterminalIndex = Self::NonterminalIndex,
-        >,
-    {
-        (**self).action(current, lookahead, cx)
+        lookahead: Terminal<Self::TerminalIndex>,
+    ) -> ParseAction<Self> {
+        (**self).action(current, lookahead)
     }
 
     #[inline]

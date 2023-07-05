@@ -108,29 +108,14 @@ impl<'g> Codegen<'g> {
 
             f.line("#[inline]")?;
             let prefix = "\
-                fn action<TAction>(
+                fn action(
                     &self,
                     current: Self::StateIndex,
-                    lookahead: Option<Self::TerminalIndex>,
-                    action: TAction,
-                ) -> Result<TAction::Ok, TAction::Error>
-                where
-                    TAction: lelele::ParseAction<
-                        StateIndex = Self::StateIndex,
-                        TerminalIndex = Self::TerminalIndex,
-                        NonterminalIndex = Self::NonterminalIndex,
-                    >,
+                    lookahead: lelele::Terminal<Self::TerminalIndex>,
+                ) -> lelele::ParseAction<Self>
             ";
             f.bracket(prefix, |f| {
-                f.bracket("match __action(current, lookahead)", |f| {
-                    f.line("Some(SimulatedAction::Shift(next)) => action.shift(next),")?;
-                    f.line(
-                        "Some(SimulatedAction::Reduce(symbol, n)) => action.reduce(symbol, n),",
-                    )?;
-                    f.line("Some(SimulatedAction::Accept) => action.accept(),")?;
-                    f.line("None => action.fail(),")?;
-                    Ok(())
-                })
+                f.line("__action(current, lookahead)")
             })?;
 
             f.line("#[inline]")?;
@@ -148,26 +133,19 @@ impl<'g> Codegen<'g> {
             Ok(())
         })?;
 
-        f.bracket("enum SimulatedAction", |f| {
-            f.line("Shift(NodeID),")?;
-            f.line("Reduce(Symbol, usize),")?;
-            f.line("Accept,")?;
-            Ok(())
-        })?;
-
         f.line("#[allow(unreachable_patterns)]")?;
-        f.bracket("const fn __action(current: NodeID, lookahead: Option<TokenID>) -> Option<SimulatedAction>", |f| {
+        f.bracket("const fn __action(current: NodeID, lookahead: lelele::Terminal<TokenID>) -> lelele::ParseAction<ParserDef>", |f| {
             f.bracket("match current", |f| {
                 for (id, node) in self.dfa.nodes() {
                     write!(f, "NodeID::N{} => ", id)?;
                     f.bracket("match lookahead", |f| {
                         for (lookahead, action) in node.actions() {
                             match self.grammar.terminal(&lookahead).export_name() {
-                                Some(name) => write!(f, "Some(TokenID::{}) => ", name)?,
-                                None => f.write_str("None => ")?,
+                                Some(name) => write!(f, "lelele::Terminal::T(TokenID::{}) => ", name)?,
+                                None => f.write_str("lelele::Terminal::EOI => ")?,
                             };
                             match action {
-                                Action::Shift(n) => write!(f, "Some(SimulatedAction::Shift(NodeID::N{}))", n)?,
+                                Action::Shift(n) => write!(f, "lelele::Shift(NodeID::N{})", n)?,
                                 Action::Reduce(rule) => {
                                     let rule = self.grammar.rule(rule);
                                     let left = self
@@ -177,18 +155,18 @@ impl<'g> Codegen<'g> {
                                         .unwrap();
                                     write!(
                                         f,
-                                        "Some(SimulatedAction::Reduce(Symbol::{left}, {n}))",
+                                        "lelele::Reduce(Symbol::{left}, {n})",
                                         left = left,
                                         n = rule.right().len(),
                                     )?;
                                 }
-                                Action::Accept => f.write_str("Some(SimulatedAction::Accept)")?,
-                                Action::Fail => f.write_str("None")?,
+                                Action::Accept => f.write_str("lelele::Accept")?,
+                                Action::Fail => f.write_str("lelele::Fail")?,
 
                                 Action::Inconsistent { shift, reduces, .. } => {
                                     if let Some(n) = shift {
                                         // shift/reduce conflict(s)
-                                        write!(f, "Some(SimulatedAction::Shift(NodeID::N{}))", n)?;
+                                        write!(f, "lelele::Shift(NodeID::N{})", n)?;
                                     } else {
                                         // reduce/reduce conflict(s)
                                         let rule = self.grammar.rule(&reduces[0]);
@@ -199,7 +177,7 @@ impl<'g> Codegen<'g> {
                                             .unwrap();
                                         write!(
                                             f,
-                                            "Some(SimulatedAction::Reduce(Symbol::{left}, {n}))",
+                                            "lelele::Reduce(Symbol::{left}, {n})",
                                             left = left,
                                             n = rule.right().len(),
                                         )?;
@@ -209,7 +187,7 @@ impl<'g> Codegen<'g> {
                             f.write_str(",\n")?;
                         }
 
-                        f.line("_ => None,")?;
+                        f.line("_ => lelele::Fail,")?;
 
                         Ok(())
                     })?;

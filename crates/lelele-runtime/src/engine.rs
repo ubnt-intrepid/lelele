@@ -1,7 +1,7 @@
 //! The implementation of LR(1) parser engine.
 
-use crate::definition::{ParserDef, Terminal};
-use std::{fmt, marker::PhantomData};
+use crate::definition::{ParseActionKind::*, ParserDef, Terminal};
+use std::fmt;
 
 /// A trait for abstracting token symbols.
 pub trait Token<TIdx> {
@@ -166,19 +166,16 @@ where
             }
         };
 
-        let action = self
-            .definition
-            .action(
-                current,
-                lookahead.map(|t| t.to_index()),
-                ParseContext {
-                    _marker: PhantomData,
-                },
-            )
-            .unwrap();
+        let action = self.definition.action(
+            current,
+            match lookahead {
+                Some(t) => Terminal::T(t.to_index()),
+                None => Terminal::EOI,
+            },
+        );
 
         match action {
-            ParseAction::Shift(next) => match lookahead {
+            Shift(next) => match lookahead {
                 Some(lookahead) => {
                     self.state = ParseEngineState::Shifting(next);
                     return Ok(ParseEvent::Shifting(lookahead));
@@ -186,18 +183,18 @@ where
                 None => unreachable!(),
             },
 
-            ParseAction::Reduce(lhs, n) => {
+            Reduce(lhs, n) => {
                 self.state = ParseEngineState::Reducing(lhs, n);
                 let args = &self.symbols_stack[self.symbols_stack.len() - n..];
                 return Ok(ParseEvent::AboutToReduce(lhs, args));
             }
 
-            ParseAction::Accept => {
+            Accept => {
                 self.state = ParseEngineState::Accepted;
                 return Ok(ParseEvent::Accepted);
             }
 
-            ParseAction::Fail => {
+            Fail => {
                 self.state = ParseEngineState::HandlingError;
                 return Ok(ParseEvent::HandlingError {
                     state: current,
@@ -267,44 +264,4 @@ pub enum ParseError {
 
     #[error("already accepted")]
     AlreadyAccepted,
-}
-
-// ---- ParseAction ----
-
-enum ParseAction<TState, TSymbol> {
-    Shift(TState),
-    Reduce(TSymbol, usize),
-    Accept,
-    Fail,
-}
-
-struct ParseContext<TState, TToken, TSymbol> {
-    _marker: PhantomData<(TState, TToken, TSymbol)>,
-}
-
-impl<TState: Copy, TToken: Copy, TSymbol: Copy> crate::definition::ParseAction
-    for ParseContext<TState, TToken, TSymbol>
-{
-    type StateIndex = TState;
-    type TerminalIndex = TToken;
-    type NonterminalIndex = TSymbol;
-
-    type Ok = ParseAction<TState, TSymbol>;
-    type Error = std::convert::Infallible;
-
-    fn shift(self, next: Self::StateIndex) -> Result<Self::Ok, Self::Error> {
-        Ok(ParseAction::Shift(next))
-    }
-
-    fn reduce(self, s: Self::NonterminalIndex, n: usize) -> Result<Self::Ok, Self::Error> {
-        Ok(ParseAction::Reduce(s, n))
-    }
-
-    fn accept(self) -> Result<Self::Ok, Self::Error> {
-        Ok(ParseAction::Accept)
-    }
-
-    fn fail(self) -> Result<Self::Ok, Self::Error> {
-        Ok(ParseAction::Fail)
-    }
 }
