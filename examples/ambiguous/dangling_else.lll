@@ -1,0 +1,9 @@
+@terminal IF, THEN, ELSE, NUM;
+@nonterminal Expr;
+@start Expr;
+
+@rule Expr :=
+    | IF Expr THEN Expr ELSE Expr
+    | IF Expr THEN Expr
+    | NUM
+    ;

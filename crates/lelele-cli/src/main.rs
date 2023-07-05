@@ -29,10 +29,27 @@ fn main() -> anyhow::Result<()> {
     let automaton_file = in_file.with_extension("lll.automaton");
 
     let grammar = Grammar::from_file(&in_file)?;
-    fs::write(&expanded_file, grammar.to_string()).context("writing .grammar")?;
-
     let dfa = DFA::generate(&grammar);
-    fs::write(&automaton_file, dfa.display(&grammar).to_string()).context("writing .automaton")?;
+
+    let mut num_inconsist_states = 0;
+    for (_, node) in dfa.nodes() {
+        let mut has_inconsistent_action = false;
+        for (_terminal, action) in node.actions() {
+            has_inconsistent_action |= !action.is_consistent();
+        }
+        if has_inconsistent_action {
+            num_inconsist_states += 1;
+        }
+    }
+    if num_inconsist_states > 0 {
+        let suffix = if num_inconsist_states == 1 { "" } else { "s" };
+        println!(
+            "[warning] The automaton has {} inconsistent state{}. See {} for details.",
+            num_inconsist_states,
+            suffix,
+            automaton_file.display()
+        );
+    }
 
     let codegen = Codegen::new(&grammar, &dfa);
     let mut generated: Vec<u8> = codegen.to_string().into();
@@ -49,13 +66,17 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    fs::copy(&out_file, &backup_file).with_context(|| {
-        anyhow::anyhow!(
-            "failed to backup the output file to {}",
-            backup_file.display()
-        )
-    })?;
-
+    // dump results.
+    fs::write(&expanded_file, grammar.to_string()).context("writing .grammar")?;
+    fs::write(&automaton_file, dfa.display(&grammar).to_string()).context("writing .automaton")?;
+    if out_file.exists() {
+        fs::copy(&out_file, &backup_file).with_context(|| {
+            anyhow::anyhow!(
+                "failed to backup the output file to {}",
+                backup_file.display()
+            )
+        })?;
+    }
     fs::write(&out_file, &generated).with_context(|| {
         anyhow::anyhow!("failed to write generated parser to {}", out_file.display())
     })?;

@@ -182,6 +182,14 @@ impl Rule {
             }
         }
     }
+
+    // `"LHS := R1 R2 R3"`
+    pub fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
+        RuleDisplay {
+            grammar: g,
+            rule: self,
+        }
+    }
 }
 impl PartialEq for Rule {
     fn eq(&self, other: &Self) -> bool {
@@ -197,6 +205,27 @@ impl Hash for Rule {
 impl Borrow<RuleID> for Rule {
     fn borrow(&self) -> &RuleID {
         &self.id
+    }
+}
+
+struct RuleDisplay<'g> {
+    grammar: &'g Grammar,
+    rule: &'g Rule,
+}
+impl fmt::Display for RuleDisplay<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self { grammar, rule } = self;
+        write!(f, "{} := ", grammar.nonterminal(&rule.left()))?;
+        for (i, symbol) in rule.right().iter().enumerate() {
+            if i > 0 {
+                write!(f, " ")?;
+            }
+            match symbol {
+                Symbol::T(t) => write!(f, "{}", grammar.terminal(t))?,
+                Symbol::N(n) => write!(f, "{}", grammar.nonterminal(n))?,
+            }
+        }
+        Ok(())
     }
 }
 
@@ -263,16 +292,7 @@ impl fmt::Display for Grammar {
 
         writeln!(f, "\n## rules:")?;
         for rule in self.rules() {
-            write!(f, "{} := ", self.nonterminal(&rule.left()))?;
-            for (i, symbol) in rule.right().iter().enumerate() {
-                if i > 0 {
-                    write!(f, " ")?;
-                }
-                match symbol {
-                    Symbol::T(t) => write!(f, "{}", self.terminal(t))?,
-                    Symbol::N(n) => write!(f, "{}", self.nonterminal(n))?,
-                }
-            }
+            write!(f, "{}", rule.display(self))?;
             if let Some(prec) = &rule.precedence {
                 write!(f, " (priority={}, assoc={})", prec.priority, prec.assoc)?;
             }

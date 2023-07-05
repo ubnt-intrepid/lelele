@@ -1,0 +1,4 @@
+*.lll.automaton
+*.lll.expanded
+*.rs
+*.rs.bak

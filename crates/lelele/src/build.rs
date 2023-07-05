@@ -71,7 +71,30 @@ impl Build {
         println!("cargo:rerun-if-changed={}", in_file.display());
 
         let grammar = Grammar::from_file(&in_file)?;
+        // TODO: report grammar diganosis
+
         let dfa = DFA::generate(&grammar);
+
+        let mut num_inconsist_states = 0;
+        for (_, node) in dfa.nodes() {
+            let mut has_inconsistent_action = false;
+            for (_terminal, action) in node.actions() {
+                has_inconsistent_action |= !action.is_consistent();
+            }
+            if has_inconsistent_action {
+                num_inconsist_states += 1;
+            }
+        }
+        if num_inconsist_states > 0 {
+            let suffix = if num_inconsist_states == 1 { "" } else { "s" };
+            println!(
+                "cargo:warning=The automaton has {} inconsistent state{}. See {} for details.",
+                num_inconsist_states,
+                suffix,
+                automaton_file.display()
+            );
+        }
+
         let codegen = Codegen::new(&grammar, &dfa);
 
         fs::write(&out_file, codegen.to_string())?;

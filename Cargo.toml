@@ -5,7 +5,7 @@ members = [
     "examples/*",
 ]
 exclude = [
-    # "crates/lelele-runtime-tests",
+    "examples/ambiguous",
 ]
 
 [workspace.package]

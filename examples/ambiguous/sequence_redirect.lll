@@ -1,0 +1,23 @@
+// imported from https://www.gnu.org/software/bison/manual/html_node/Reduce_002fReduce.html
+
+@terminal WORD;
+@nonterminal Sequence, Words, Word, Redirects, Redirect;
+@start Sequence;
+
+@rule Sequence :=
+    | @empty
+    | Sequence Words
+    | Sequence Redirects
+    ;
+
+@rule Words :=
+    | @empty
+    | Words WORD
+    ;
+    
+@rule Redirects :=
+    | @empty
+    | Redirects Redirect
+    ;
+
+@rule Redirect := WORD ;

@@ -120,54 +120,32 @@ impl fmt::Display for DFADisplay<'_> {
 
             writeln!(f, "## actions")?;
             for (token, action) in &node.actions {
+                let token = grammar.terminal(token);
                 match action {
                     Action::Shift(n) => {
-                        writeln!(f, "- {} => shift({:02})", grammar.terminal(token), n)?;
+                        writeln!(f, "- {} => shift({:02})", token, n)?;
                     }
                     Action::Reduce(reduce) => {
                         let reduce = grammar.rule(reduce);
-                        write!(
-                            f,
-                            "- {} => reduce({} :=",
-                            grammar.terminal(token),
-                            grammar.nonterminal(&reduce.left())
-                        )?;
-                        for r in reduce.right() {
-                            match r {
-                                Symbol::T(t) => write!(f, " {}", grammar.terminal(t))?,
-                                Symbol::N(n) => write!(f, " {}", grammar.nonterminal(n))?,
-                            }
-                        }
-                        writeln!(f, ")")?;
+                        writeln!(f, "- {} => reduce({})", token, reduce.display(grammar))?;
                     }
                     Action::Fail => {
-                        writeln!(f, "- {} => fail", grammar.terminal(token))?;
+                        writeln!(f, "- {} => fail", token)?;
                     }
                     Action::Inconsistent {
                         reason,
                         shift,
                         reduces,
                     } => {
-                        writeln!(
-                            f,
-                            "- {} => inconsistent(reason = {:?})",
-                            grammar.terminal(token),
-                            reason
-                        )?;
-                        writeln!(f, "## conflicted actions")?;
+                        let token = grammar.terminal(token);
+                        writeln!(f, "- {} => inconsistent(reason = {:?})", token, reason)?;
+                        writeln!(f, "## conflicted actions on {}", token)?;
                         if let Some(n) = shift {
                             writeln!(f, "  - shift({:02})", n)?;
                         }
                         for reduce in reduces {
                             let reduce = grammar.rule(reduce);
-                            write!(f, "  - reduce({} :=", grammar.nonterminal(&reduce.left()))?;
-                            for r in reduce.right() {
-                                match r {
-                                    Symbol::T(t) => write!(f, " {}", grammar.terminal(t))?,
-                                    Symbol::N(n) => write!(f, " {}", grammar.nonterminal(n))?,
-                                }
-                            }
-                            writeln!(f, ")")?;
+                            writeln!(f, "  - reduce({})", reduce.display(grammar))?;
                         }
                     }
                 }
