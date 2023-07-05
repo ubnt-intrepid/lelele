@@ -2,7 +2,7 @@
 
 use crate::{
     dfa::{Action, NodeID, DFA},
-    grammar::{Grammar, RuleID, TerminalID},
+    grammar::{Grammar, TerminalID},
 };
 use std::fmt;
 
@@ -168,9 +168,6 @@ impl<'g> Codegen<'g> {
                             };
                             match action {
                                 Action::Shift(n) => write!(f, "Some(SimulatedAction::Shift(NodeID::N{}))", n)?,
-                                Action::Reduce(rule) if *rule == RuleID::ACCEPT => {
-                                    f.write_str("Some(SimulatedAction::Accept)")?
-                                }
                                 Action::Reduce(rule) => {
                                     let rule = self.grammar.rule(rule);
                                     let left = self
@@ -185,7 +182,29 @@ impl<'g> Codegen<'g> {
                                         n = rule.right().len(),
                                     )?;
                                 }
-                                _ => f.write_str("None")?,
+                                Action::Accept => f.write_str("Some(SimulatedAction::Accept)")?,
+                                Action::Fail => f.write_str("None")?,
+
+                                Action::Inconsistent { shift, reduces, .. } => {
+                                    if let Some(n) = shift {
+                                        // shift/reduce conflict(s)
+                                        write!(f, "Some(SimulatedAction::Shift(NodeID::N{}))", n)?;
+                                    } else {
+                                        // reduce/reduce conflict(s)
+                                        let rule = self.grammar.rule(&reduces[0]);
+                                        let left = self
+                                            .grammar
+                                            .nonterminal(&rule.left())
+                                            .export_name()
+                                            .unwrap();
+                                        write!(
+                                            f,
+                                            "Some(SimulatedAction::Reduce(Symbol::{left}, {n}))",
+                                            left = left,
+                                            n = rule.right().len(),
+                                        )?;
+                                    }
+                                },
                             };
                             f.write_str(",\n")?;
                         }

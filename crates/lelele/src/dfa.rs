@@ -11,6 +11,16 @@ use std::{
     fmt,
 };
 
+#[derive(Debug, thiserror::Error)]
+pub enum DFAError {
+    #[error("error during resolving conflicts")]
+    ConflictResolution(
+        #[from]
+        #[source]
+        ConflictResolutionError,
+    ),
+}
+
 #[derive(Debug)]
 pub struct Config {
     merge_mode: MergeMode,
@@ -44,7 +54,7 @@ impl Config {
         self
     }
 
-    pub fn generate(&self, grammar: &Grammar) -> DFA {
+    pub fn generate(&self, grammar: &Grammar) -> Result<DFA, DFAError> {
         let mut gen = DFAGenerator::new(grammar, self.merge_mode);
         gen.populate_nodes();
         gen.finalize()
@@ -57,7 +67,7 @@ pub struct DFA {
 }
 
 impl DFA {
-    pub fn generate(grammar: &Grammar) -> Self {
+    pub fn generate(grammar: &Grammar) -> Result<Self, DFAError> {
         Config::new().generate(grammar)
     }
 
@@ -128,6 +138,9 @@ impl fmt::Display for DFADisplay<'_> {
                     Action::Reduce(reduce) => {
                         let reduce = grammar.rule(reduce);
                         writeln!(f, "- {} => reduce({})", token, reduce.display(grammar))?;
+                    }
+                    Action::Accept => {
+                        writeln!(f, "- {} => accept", token)?;
                     }
                     Action::Fail => {
                         writeln!(f, "- {} => fail", token)?;
@@ -223,6 +236,8 @@ pub enum Action {
 
     /// Reduce to the specified production rule.
     Reduce(RuleID),
+
+    Accept,
 
     /// Reject the specified lookahead symbol.
     ///
@@ -492,7 +507,7 @@ impl<'g> DFAGenerator<'g> {
         }
     }
 
-    fn finalize(self) -> DFA {
+    fn finalize(self) -> Result<DFA, DFAError> {
         // 状態ノードの併合によってIDが飛び飛びになってる可能性があるので圧縮する
         let mut new_node_ids = IndexMap::default();
         let mut next_new_id = 0;
@@ -506,6 +521,11 @@ impl<'g> DFAGenerator<'g> {
         for (orig_id, (item_set, edges)) in self.nodes {
             let id = new_node_ids[&orig_id];
 
+            #[derive(Default)]
+            struct PendingAction {
+                shift: Option<NodeID>,
+                reduces: Vec<RuleID>,
+            }
             let mut pending_actions: IndexMap<TerminalID, PendingAction> = IndexMap::default();
             let mut gotos: IndexMap<NonterminalID, NodeID> = IndexMap::default();
             for (symbol, target) in edges {
@@ -535,14 +555,12 @@ impl<'g> DFAGenerator<'g> {
 
             let mut actions: IndexMap<TerminalID, Action> = IndexMap::default();
             for (symbol, action) in pending_actions {
-                let resolved = match resolve_conflict(self.extractor.grammar, symbol, &action) {
-                    Ok(resolved) => resolved,
-                    Err(reason) => Action::Inconsistent {
-                        reason,
-                        shift: action.shift,
-                        reduces: action.reduces,
-                    },
-                };
+                let resolved = resolve_conflict(
+                    self.extractor.grammar,
+                    symbol,
+                    action.shift,
+                    &action.reduces,
+                )?;
                 actions.insert(symbol, resolved);
             }
 
@@ -556,7 +574,7 @@ impl<'g> DFAGenerator<'g> {
             );
         }
 
-        DFA { nodes }
+        Ok(DFA { nodes })
     }
 }
 
@@ -744,70 +762,133 @@ fn nulls_set(grammar: &Grammar) -> IndexSet<NonterminalID> {
     nulls
 }
 
-#[derive(Debug, Default)]
-struct PendingAction {
-    shift: Option<NodeID>,
-    reduces: Vec<RuleID>,
+#[derive(Debug, thiserror::Error)]
+pub enum ConflictResolutionError {
+    #[error("there is no actions")]
+    EmptyActions,
+
+    #[error("detected shift/accept conflict(s)")]
+    ShiftAcceptConflict,
+
+    #[error("detected reduce/accept conflict(s)")]
+    ReduceAcceptConflict,
 }
 
 /// Attempts to resolve shift/reduce conflicts based on precedence/associativity.
 fn resolve_conflict(
     g: &Grammar,
     symbol: TerminalID,
-    action: &PendingAction,
-) -> Result<Action, ConflictReason> {
+    shift: Option<NodeID>,
+    reduces: &[RuleID],
+) -> Result<Action, ConflictResolutionError> {
     use Action::*;
 
-    match (action.shift, &action.reduces[..]) {
+    match (shift, reduces) {
         (Some(next), []) => Ok(Shift(next)),
-        (None, [reduce]) => Ok(Reduce(reduce.clone())),
+        (None, [RuleID::ACCEPT]) => Ok(Accept),
+        (None, [reduce]) => Ok(Reduce(*reduce)),
+        (None, []) => Err(ConflictResolutionError::EmptyActions),
 
-        (Some(next), [reduce, remains @ ..]) => {
-            let shift_prec = g.terminal(&symbol).precedence();
-
-            let reduce_prec = g.rule(reduce).precedence(g);
-            let resolved = resolve_shift_reduce_conflict(shift_prec, reduce_prec)?;
-
-            if matches!(resolved, Some(false)) && !remains.is_empty() {
-                return Err(ConflictReason::InconsistentShiftResolution);
+        // exactly one shift/reduce conflict
+        (Some(next), [reduce]) => {
+            if *reduce == RuleID::ACCEPT {
+                return Err(ConflictResolutionError::ShiftAcceptConflict);
             }
 
-            for reduce in remains {
+            let shift_prec = g.terminal(&symbol).precedence();
+            let reduce_prec = g.rule(reduce).precedence(g);
+
+            match compare_precs(shift_prec, reduce_prec) {
+                Some(PrecDiff::Left) => Ok(Shift(next)),
+                Some(PrecDiff::Right) => Ok(Reduce(*reduce)),
+                Some(PrecDiff::Neither) => Ok(Fail),
+                None => Ok(Inconsistent {
+                    shift,
+                    reduces: reduces.to_owned(),
+                    reason: ConflictReason::MissingPrecedence,
+                }),
+            }
+        }
+
+        // multiple shift/reduce conflicts
+        (Some(next), reduces) => {
+            let shift_prec = g.terminal(&symbol).precedence();
+
+            let mut resolved = None;
+            for reduce in reduces {
+                if *reduce == RuleID::ACCEPT {
+                    return Err(ConflictResolutionError::ShiftAcceptConflict);
+                }
                 let reduce_prec = g.rule(reduce).precedence(g);
-                let new_resolved = resolve_shift_reduce_conflict(shift_prec, reduce_prec)?;
-                if resolved != new_resolved {
-                    return Err(ConflictReason::InconsistentShiftResolution);
+                let new_resolved = match compare_precs(shift_prec, reduce_prec) {
+                    Some(diff) => diff,
+                    None => {
+                        return Ok(Inconsistent {
+                            shift,
+                            reduces: reduces.to_owned(),
+                            reason: ConflictReason::MissingPrecedence,
+                        })
+                    }
+                };
+
+                match (resolved, new_resolved) {
+                    (Some(PrecDiff::Left), PrecDiff::Left)
+                    | (Some(PrecDiff::Neither), PrecDiff::Neither) => (),
+                    (None, diff) => resolved = Some(diff),
+                    _ => {
+                        return Ok(Inconsistent {
+                            shift,
+                            reduces: reduces.to_owned(),
+                            reason: ConflictReason::InconsistentShiftResolution,
+                        })
+                    }
                 }
             }
 
             match resolved {
-                Some(true) => Ok(Shift(next)),
-                Some(false) => Ok(Reduce(reduce.clone())),
-                None => Ok(Fail),
+                Some(PrecDiff::Left) => Ok(Shift(next)),
+                Some(PrecDiff::Neither) => Ok(Fail),
+                _ => unreachable!(),
             }
         }
 
-        (None, [_, ..]) => Err(ConflictReason::MultipleReductionWithoutShift),
+        // reduce/reduce conflict(s)
+        (None, reduces) => {
+            debug_assert!(reduces.len() > 1);
+            if reduces.contains(&RuleID::ACCEPT) {
+                return Err(ConflictResolutionError::ReduceAcceptConflict);
+            }
 
-        (None, []) => unreachable!(),
+            Ok(Inconsistent {
+                shift: None,
+                reduces: reduces.to_owned(),
+                reason: ConflictReason::MultipleReductionWithoutShift,
+            })
+        }
     }
 }
 
-fn resolve_shift_reduce_conflict(
+#[derive(Copy, Clone)]
+enum PrecDiff {
+    Left,
+    Right,
+    Neither,
+}
+fn compare_precs(
     shift_prec: Option<&Precedence>,
     reduce_prec: Option<&Precedence>,
-) -> Result<Option<bool>, ConflictReason> {
+) -> Option<PrecDiff> {
     match (shift_prec, reduce_prec) {
         (Some(p1), Some(p2)) => match Ord::cmp(&p1.priority, &p2.priority) {
-            Ordering::Greater => Ok(Some(true)),
-            Ordering::Less => Ok(Some(false)),
+            Ordering::Greater => Some(PrecDiff::Left),
+            Ordering::Less => Some(PrecDiff::Right),
             Ordering::Equal => match p1.assoc {
-                Assoc::Left => Ok(Some(false)),
-                Assoc::Right => Ok(Some(true)),
-                Assoc::Nonassoc => Ok(None),
+                Assoc::Left => Some(PrecDiff::Right),
+                Assoc::Right => Some(PrecDiff::Left),
+                Assoc::Nonassoc => Some(PrecDiff::Neither),
             },
         },
-        _ => return Err(ConflictReason::MissingPrecedence), // 比較不可能
+        _ => None,
     }
 }
 
@@ -841,7 +922,7 @@ mod tests {
         .unwrap();
         eprintln!("{}", grammar);
 
-        let dfa = DFA::generate(&grammar);
+        let dfa = DFA::generate(&grammar).unwrap();
         eprintln!("DFA Nodes:\n---\n{}", dfa.display(&grammar));
     }
 
@@ -883,7 +964,7 @@ mod tests {
         .unwrap();
         eprintln!("{}", grammar);
 
-        let dfa = DFA::generate(&grammar);
+        let dfa = DFA::generate(&grammar).unwrap();
         eprintln!("DFA Nodes:\n---\n{}", dfa.display(&grammar));
     }
 }

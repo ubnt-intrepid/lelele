@@ -13,19 +13,19 @@ macro_rules! define_tests {
             eprintln!();
 
             eprintln!("DFA(canonical):");
-            let dfa = Config::new().use_canonical().generate(&grammar);
+            let dfa = Config::new().use_canonical().generate(&grammar).unwrap();
             eprintln!("num_nodes: {}", dfa.nodes().count());
             eprintln!("---\n{}\n", dfa.display(&grammar));
             eprintln!();
 
             eprintln!("DFA(PGM):");
-            let dfa = Config::new().use_pgm().generate(&grammar);
+            let dfa = Config::new().use_pgm().generate(&grammar).unwrap();
             eprintln!("num_nodes: {}", dfa.nodes().count());
             eprintln!("---\n{}\n", dfa.display(&grammar));
             eprintln!();
 
             eprintln!("DFA(LALR):");
-            let dfa = Config::new().use_lalr().generate(&grammar);
+            let dfa = Config::new().use_lalr().generate(&grammar).unwrap();
             eprintln!("num_nodes: {}", dfa.nodes().count());
             eprintln!("---\n{}\n", dfa.display(&grammar));
         }

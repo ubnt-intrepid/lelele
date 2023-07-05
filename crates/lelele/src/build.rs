@@ -73,7 +73,7 @@ impl Build {
         let grammar = Grammar::from_file(&in_file)?;
         // TODO: report grammar diganosis
 
-        let dfa = DFA::generate(&grammar);
+        let dfa = DFA::generate(&grammar).context("failed to construct LR automaton")?;
 
         let mut num_inconsist_states = 0;
         for (_, node) in dfa.nodes() {

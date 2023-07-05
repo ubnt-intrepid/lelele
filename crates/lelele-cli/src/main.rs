@@ -29,7 +29,7 @@ fn main() -> anyhow::Result<()> {
     let automaton_file = in_file.with_extension("lll.automaton");
 
     let grammar = Grammar::from_file(&in_file)?;
-    let dfa = DFA::generate(&grammar);
+    let dfa = DFA::generate(&grammar)?;
 
     let mut num_inconsist_states = 0;
     for (_, node) in dfa.nodes() {
