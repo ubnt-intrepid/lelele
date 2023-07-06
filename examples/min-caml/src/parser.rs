@@ -290,7 +290,7 @@ pub fn parse(input: &str) -> anyhow::Result<Expr<'_>> {
                 continue;
             }
 
-            ParseEvent::Accepted => {
+            ParseEvent::Accepted(..) => {
                 tracing::trace!("accepted");
                 break Ok(pop_stack!(Expr));
             }

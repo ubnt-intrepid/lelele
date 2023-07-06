@@ -20,6 +20,7 @@ where
     states_stack: Vec<TDef::StateIndex>,
     symbols_stack: Vec<Symbol<TDef, TTok>>,
     lookahead: Option<Option<TTok>>,
+    num_recovered: usize,
 }
 
 impl<TDef, TTok> fmt::Debug for ParseEngine<TDef, TTok>
@@ -37,6 +38,7 @@ where
             .field("state_stack", &self.states_stack)
             .field("item_stack", &self.symbols_stack)
             .field("lookahead", &self.lookahead)
+            .field("num_recovered", &self.num_recovered)
             .finish_non_exhaustive()
     }
 }
@@ -47,10 +49,11 @@ where
 {
     Pending,
     WaitingInput,
-    Shifting(TDef::StateIndex),
+    Shifting(TDef::StateIndex, bool),
     Reducing(TDef::NonterminalIndex, usize),
     HandlingError,
     Accepted,
+    Rejected,
 }
 
 impl<TDef> fmt::Debug for ParseEngineState<TDef>
@@ -64,10 +67,15 @@ where
         match self {
             Self::Pending => f.debug_struct("Pending").finish(),
             Self::WaitingInput => f.debug_struct("WaitingInput").finish(),
-            Self::Shifting(next) => f.debug_tuple("Shifting").field(next).finish(),
+            Self::Shifting(next, recovered) => f
+                .debug_tuple("Shifting")
+                .field(next)
+                .field(recovered)
+                .finish(),
             Self::Reducing(symbol, n) => f.debug_tuple("Reducing").field(symbol).field(n).finish(),
             Self::HandlingError => f.debug_struct("HandlingError").finish(),
             Self::Accepted => f.debug_struct("Accepted").finish(),
+            Self::Rejected => f.debug_struct("Rejected").finish(),
         }
     }
 }
@@ -86,6 +94,7 @@ where
             symbols_stack: vec![],
             state: ParseEngineState::Pending,
             lookahead: None,
+            num_recovered: 0,
         }
     }
 
@@ -124,13 +133,20 @@ where
                 return Err(ParseError::TokenNotOffered);
             }
 
-            ParseEngineState::Shifting(next) => {
-                let lookahead = self
-                    .lookahead
-                    .take()
-                    .ok_or_else(|| ParseError::TokenNotOffered)?;
-                let lookahead = lookahead.expect("shiting token must not be EOI");
-                self.symbols_stack.push(Symbol::T(lookahead));
+            ParseEngineState::Shifting(next, recovered) => {
+                let lookahead = if recovered {
+                    Symbol::ErrorToken
+                } else {
+                    let tok = self
+                        .lookahead
+                        .take()
+                        .ok_or_else(|| ParseError::TokenNotOffered)?;
+                    match tok {
+                        Some(tok) => Symbol::T(tok),
+                        None => panic!("shifting token must not be EOI"),
+                    }
+                };
+                self.symbols_stack.push(lookahead);
                 self.states_stack.push(next);
                 self.state = ParseEngineState::Pending;
             }
@@ -147,10 +163,23 @@ where
             }
 
             ParseEngineState::HandlingError => {
-                return Ok(ParseEvent::Rejected);
+                let current = self.states_stack.last().copied().unwrap();
+                let action = self.definition.action(current, Terminal::Error);
+                match action {
+                    Shift(next) => {
+                        self.num_recovered += 1;
+                        self.state = ParseEngineState::Shifting(next, true);
+                        return Ok(ParseEvent::Shifting(Terminal::Error));
+                    }
+                    Reduce(..) | Accept => unreachable!(),
+                    Fail => {
+                        self.state = ParseEngineState::Rejected;
+                        return Ok(ParseEvent::Rejected);
+                    }
+                }
             }
 
-            ParseEngineState::Accepted => {
+            ParseEngineState::Accepted | ParseEngineState::Rejected => {
                 return Err(ParseError::AlreadyAccepted);
             }
 
@@ -177,8 +206,8 @@ where
         match action {
             Shift(next) => match lookahead {
                 Some(lookahead) => {
-                    self.state = ParseEngineState::Shifting(next);
-                    return Ok(ParseEvent::Shifting(lookahead));
+                    self.state = ParseEngineState::Shifting(next, false);
+                    return Ok(ParseEvent::Shifting(Terminal::T(lookahead)));
                 }
                 None => unreachable!(),
             },
@@ -191,7 +220,7 @@ where
 
             Accept => {
                 self.state = ParseEngineState::Accepted;
-                return Ok(ParseEvent::Accepted);
+                return Ok(ParseEvent::Accepted(self.num_recovered));
             }
 
             Fail => {
@@ -213,14 +242,14 @@ where
     TTok: Token<TDef::TerminalIndex>,
 {
     InputNeeded,
-    Shifting(&'p TTok),
+    Shifting(Terminal<&'p TTok>),
     AboutToReduce(TDef::NonterminalIndex, &'p [Symbol<TDef, TTok>]),
     HandlingError {
         state: TDef::StateIndex,
         lookahead: Option<&'p TTok>,
         expected: &'p [Terminal<TDef::TerminalIndex>],
     },
-    Accepted,
+    Accepted(usize),
     Rejected,
 }
 
@@ -233,6 +262,7 @@ where
 {
     T(TTok),
     N(TDef::NonterminalIndex),
+    ErrorToken,
 
     #[doc(hidden)]
     __Empty,

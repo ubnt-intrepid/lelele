@@ -248,8 +248,11 @@ pub fn parse(source: &str) -> anyhow::Result<ast::Grammar> {
                     _ => unreachable!(),
                 }
             }
-            ParseEvent::Accepted => {
+            ParseEvent::Accepted(recovered) => {
                 tracing::trace!("accepted");
+                if recovered > 0 {
+                    tracing::trace!("accepted: recover {} token(s)", recovered);
+                }
                 let grammar = pop_stack!(Grammar);
                 tracing::trace!(" --> {:?}", grammar);
                 return Ok(grammar);

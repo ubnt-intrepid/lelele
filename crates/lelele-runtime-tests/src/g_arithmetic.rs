@@ -4,7 +4,10 @@ mod p {
 pub use p::*;
 
 #[allow(unused_imports)]
-use lelele_runtime::engine::{ParseEngine, ParseEvent::*, Symbol::*};
+use lelele_runtime::{
+    definition::Terminal,
+    engine::{ParseEngine, ParseEvent::*, Symbol::*},
+};
 
 #[allow(unused_macros)]
 macro_rules! assert_matches {
@@ -37,7 +40,7 @@ fn simple_expr() {
     // tokens: NUM PLUS NUM STAR NUM $eoi
 
     offer_input!(TokenID::NUM);
-    assert_matches!(e.resume(), Ok(Shifting(&TokenID::NUM)));
+    assert_matches!(e.resume(), Ok(Shifting(Terminal::T(&TokenID::NUM))));
 
     offer_input!(TokenID::PLUS);
     assert_matches!(
@@ -56,10 +59,10 @@ fn simple_expr() {
         e.resume(),
         Ok(AboutToReduce(Symbol::Expr, [N(Symbol::Term)]))
     );
-    assert_matches!(e.resume(), Ok(Shifting(&TokenID::PLUS)));
+    assert_matches!(e.resume(), Ok(Shifting(Terminal::T(&TokenID::PLUS))));
 
     offer_input!(TokenID::NUM);
-    assert_matches!(e.resume(), Ok(Shifting(&TokenID::NUM)));
+    assert_matches!(e.resume(), Ok(Shifting(Terminal::T(&TokenID::NUM))));
 
     offer_input!(TokenID::STAR);
     assert_matches!(
@@ -74,10 +77,10 @@ fn simple_expr() {
         e.resume(),
         Ok(AboutToReduce(Symbol::Term, [N(Symbol::Factor)]))
     );
-    assert_matches!(e.resume(), Ok(Shifting(&TokenID::STAR)));
+    assert_matches!(e.resume(), Ok(Shifting(Terminal::T(&TokenID::STAR))));
 
     offer_input!(TokenID::NUM);
-    assert_matches!(e.resume(), Ok(Shifting(&TokenID::NUM)));
+    assert_matches!(e.resume(), Ok(Shifting(Terminal::T(&TokenID::NUM))));
 
     offer_input!();
     assert_matches!(
@@ -103,7 +106,7 @@ fn simple_expr() {
         ))
     );
 
-    assert_matches!(e.resume(), Ok(Accepted));
+    assert_matches!(e.resume(), Ok(Accepted(0)));
 }
 
 #[test]
@@ -132,7 +135,7 @@ fn with_unary_minus() {
     // tokens: NUM PLUS NUM STAR MINUS NUM $eoi
 
     offer_input!(TokenID::NUM);
-    assert_matches!(e.resume(), Ok(Shifting(&TokenID::NUM)));
+    assert_matches!(e.resume(), Ok(Shifting(Terminal::T(&TokenID::NUM))));
 
     offer_input!(TokenID::PLUS);
     assert_matches!(
@@ -151,10 +154,10 @@ fn with_unary_minus() {
         e.resume(),
         Ok(AboutToReduce(Symbol::Expr, [N(Symbol::Term)]))
     );
-    assert_matches!(e.resume(), Ok(Shifting(&TokenID::PLUS)));
+    assert_matches!(e.resume(), Ok(Shifting(Terminal::T(&TokenID::PLUS))));
 
     offer_input!(TokenID::NUM);
-    assert_matches!(e.resume(), Ok(Shifting(&TokenID::NUM)));
+    assert_matches!(e.resume(), Ok(Shifting(Terminal::T(&TokenID::NUM))));
 
     offer_input!(TokenID::STAR);
     assert_matches!(
@@ -169,13 +172,13 @@ fn with_unary_minus() {
         e.resume(),
         Ok(AboutToReduce(Symbol::Term, [N(Symbol::Factor)]))
     );
-    assert_matches!(e.resume(), Ok(Shifting(&TokenID::STAR)));
+    assert_matches!(e.resume(), Ok(Shifting(Terminal::T(&TokenID::STAR))));
 
     offer_input!(TokenID::MINUS);
-    assert_matches!(e.resume(), Ok(Shifting(&TokenID::MINUS)));
+    assert_matches!(e.resume(), Ok(Shifting(Terminal::T(&TokenID::MINUS))));
 
     offer_input!(TokenID::NUM);
-    assert_matches!(e.resume(), Ok(Shifting(&TokenID::NUM)));
+    assert_matches!(e.resume(), Ok(Shifting(Terminal::T(&TokenID::NUM))));
 
     offer_input!();
     assert_matches!(
@@ -208,5 +211,5 @@ fn with_unary_minus() {
         ))
     );
 
-    assert_matches!(e.resume(), Ok(Accepted));
+    assert_matches!(e.resume(), Ok(Accepted(0)));
 }

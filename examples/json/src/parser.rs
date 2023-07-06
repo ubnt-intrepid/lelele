@@ -163,7 +163,7 @@ pub fn parse(input: &str) -> anyhow::Result<Value<'_>> {
                 continue;
             }
 
-            ParseEvent::Accepted => {
+            ParseEvent::Accepted(..) => {
                 tracing::trace!("accepted");
                 match stack.pop() {
                     Some(StackItem::Value(value)) => break Ok(value),

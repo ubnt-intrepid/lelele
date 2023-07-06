@@ -87,6 +87,11 @@ pub fn parse(input: &str) -> anyhow::Result<Box<Expr<'_>>> {
                 }));
             }
 
+            ParseEvent::AboutToReduce(Symbol::Expr, [ErrorToken]) => {
+                tracing::trace!("reduce: expr -> @error");
+                ast_stack.push(Box::new(Expr::Error));
+            }
+
             ParseEvent::AboutToReduce(..) => unreachable!(),
 
             ParseEvent::HandlingError {
@@ -94,25 +99,24 @@ pub fn parse(input: &str) -> anyhow::Result<Box<Expr<'_>>> {
                 lookahead,
                 expected,
             } => {
-                tracing::trace!(
-                    "handling error: state={:?}, lookahead={:?}, expected={:?}",
+                tracing::error!(
+                    "caught syntax error: state={:?}, lookahead={:?}, expected={:?}",
                     state,
                     lookahead,
                     expected,
                 );
-
-                continue;
+                continue; //
             }
 
-            ParseEvent::Accepted => {
-                tracing::trace!("accepted");
+            ParseEvent::Accepted(num_recovered) => {
+                tracing::trace!("accepted: recovered = {}", num_recovered);
                 let parsed = ast_stack.pop().context("unexpected stack item")?;
                 break Ok(parsed);
             }
 
             ParseEvent::Rejected => {
-                tracing::trace!("rejected");
-                anyhow::bail!("rejected");
+                tracing::error!("rejected");
+                anyhow::bail!("syntax error");
             }
         }
     }
