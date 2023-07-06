@@ -1,8 +1,8 @@
 /// imported from <todo>
 
-@terminal PLUS, STAR, A;
+@terminal PLUS STAR A;
 
-@nonterminal E, T;
+@nonterminal E T;
 @start E;
 
 @rule E :=

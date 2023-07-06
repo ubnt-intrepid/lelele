@@ -1,7 +1,7 @@
 // imported from https://www.gnu.org/software/bison/manual/html_node/Reduce_002fReduce.html
 
 @terminal WORD;
-@nonterminal Start, Sequence, Words, Word, Redirects, Redirect;
+@nonterminal Start Sequence Words Word Redirects Redirect;
 @start Start;
 
 @rule Start := Sequence ;

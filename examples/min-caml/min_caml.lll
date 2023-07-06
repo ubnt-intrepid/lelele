@@ -14,18 +14,18 @@
 @prec { assoc = left } prec_app;
 @prec { assoc = left } prec_dot;
 
-@terminal LPAREN, RPAREN, TRUE, FALSE, NOT, IF, THEN, ELSE, LET, REC, ARRAY_MAKE;
-@terminal INTEGER, FLOAT, IDENT;
-@terminal { prec = prec_add } PLUS, PLUS_DOT, MINUS, MINUS_DOT;
-@terminal { prec = prec_mul } STAR_DOT, SLASH_DOT;
-@terminal { prec = prec_cmp } EQUAL, LESS_GREATER, LESS, GREATER, LESS_EQUAL, GREATER_EQUAL;
+@terminal LPAREN RPAREN TRUE FALSE NOT IF THEN ELSE LET REC ARRAY_MAKE;
+@terminal INTEGER FLOAT IDENT;
+@terminal { prec = prec_add } PLUS PLUS_DOT MINUS MINUS_DOT;
+@terminal { prec = prec_mul } STAR_DOT SLASH_DOT;
+@terminal { prec = prec_cmp } EQUAL LESS_GREATER LESS GREATER LESS_EQUAL GREATER_EQUAL;
 @terminal { prec = prec_in } IN;
 @terminal { prec = prec_dot } DOT;
 @terminal { prec = prec_less_minus } LESS_MINUS;
 @terminal { prec = prec_comma } COMMA;
 @terminal { prec = prec_semicolon } SEMICOLON;
 
-@nonterminal SimpleExpr, Expr, FormalArgs, ActualArgs, FunDef, Pat, Elems;
+@nonterminal SimpleExpr Expr FormalArgs ActualArgs FunDef Pat Elems;
 @start Expr;
 
 @rule SimpleExpr :=

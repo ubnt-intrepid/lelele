@@ -1,9 +1,8 @@
 /// imported from https://json.org/
 
-@terminal LBRACKET, RBRACKET, LBRACE, RBRACE, COMMA, COLON,
-          NULL, TRUE, FALSE, NUMBER, STRING;
+@terminal LBRACKET RBRACKET LBRACE RBRACE COMMA COLON NULL TRUE FALSE NUMBER STRING;
 
-@nonterminal Value, Array, Object, Member, Members, Elements;
+@nonterminal Value Array Object Member Members Elements;
 @start Value;
 
 @rule Value :=

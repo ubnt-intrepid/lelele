@@ -4,9 +4,9 @@
 @prec { assoc = left } mul;
 @prec { assoc = right } neg;
 
-@terminal LPAREN, RPAREN, NUM;
-@terminal { prec = add } PLUS, MINUS;
-@terminal { prec = mul } STAR, SLASH;
+@terminal LPAREN RPAREN NUM;
+@terminal { prec = add } PLUS MINUS;
+@terminal { prec = mul } STAR SLASH;
 
 @nonterminal Expr;
 @start Expr;

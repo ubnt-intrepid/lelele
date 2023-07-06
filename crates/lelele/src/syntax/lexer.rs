@@ -136,8 +136,8 @@ mod tests {
     fn smoketest() {
         let input = "\
 @prec { assoc = left } prec1; // precedences /* block-comment in line-comment */
-@terminal FOO, BAR, BAZ; /* block comment /* nested */ */
-@nonterminal Expr, ｔｒｕｅ;
+@terminal FOO BAR BAZ; /* block comment /* nested */ */
+@nonterminal Expr ｔｒｕｅ;
 @rule Expr :=
     | FOO BAR BAZ @error
     | @{ prec = prec1 } Expr FOO
@@ -163,15 +163,12 @@ mod tests {
                 // @terminal ... ;
                 Kw(Terminal),
                 Ident("FOO"),
-                Comma,
                 Ident("BAR"),
-                Comma,
                 Ident("BAZ"),
                 Semicolon,
                 // @nonterminal ... ;
                 Kw(Nonterminal),
                 Ident("Expr"),
-                Comma,
                 Ident("ｔｒｕｅ"),
                 Semicolon,
                 // @rule ... ;

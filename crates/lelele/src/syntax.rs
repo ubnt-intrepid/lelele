@@ -218,11 +218,10 @@ pub fn parse(source: &str) -> anyhow::Result<ast::Grammar> {
                         stack.push(s::ProductionElem(ast::ProductionElem::ErrorToken));
                     }
 
-                    (Idents, [T((_, Ident(ident), _))])
-                    | (Idents, [T((_, Ident(ident), _)), T((_, Comma, _))]) => {
+                    (Idents, [T((_, Ident(ident), _))]) => {
                         stack.push(s::Idents(vec![ident.to_string()]));
                     }
-                    (Idents, [T((_, Ident(ident), _)), T((_, Comma, _)), N(Idents)]) => {
+                    (Idents, [T((_, Ident(ident), _)), N(Idents)]) => {
                         let idents = peek_stack!(Idents);
                         idents.push(ident.to_string());
                     }
@@ -291,8 +290,8 @@ mod tests {
             .init();
 
         let input = "\
-@terminal A, B, C;
-@nonterminal D, E;
+@terminal A B C;
+@nonterminal D E;
 @rule E := A B C;
 @rule E :=
     | @empty

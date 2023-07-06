@@ -1,4 +1,4 @@
-@terminal IF, THEN, ELSE, NUM;
+@terminal IF THEN ELSE NUM;
 @nonterminal Expr;
 @start Expr;
 

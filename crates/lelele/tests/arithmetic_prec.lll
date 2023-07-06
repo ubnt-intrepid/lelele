@@ -6,9 +6,9 @@
 @prec { assoc = right } neg;
 
 // Define the terminal symbols.
-@terminal LPAREN, RPAREN, NUM;
-@terminal { prec = add } PLUS, MINUS;
-@terminal { prec = mul } STAR, SLASH;
+@terminal LPAREN RPAREN NUM;
+@terminal { prec = add } PLUS MINUS;
+@terminal { prec = mul } STAR SLASH;
 
 // Define the nonterminal symbols.
 @nonterminal Expr;
