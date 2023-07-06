@@ -31,7 +31,7 @@
             "patterns": [
                 {
                     "name": "keyword.control.lelele",
-                    "match": "@(terminal|nonterminal|start|rule|prec|left|right|nonassoc)\\b"
+                    "match": "@(terminal|nonterminal|start|rule|prec|empty|error)\\b"
                 }
             ]
         },

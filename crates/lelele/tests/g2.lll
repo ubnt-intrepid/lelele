@@ -8,12 +8,12 @@
 @rule Def := ParamSpec ReturnSpec COMMA;
 
 @rule ParamSpec :=
-    | Type 
+    | Type
     | NameList COLON Type
     ;
 
 @rule ReturnSpec :=
-    | Type 
+    | Type
     | Name COLON Type
     ;
 

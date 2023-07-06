@@ -12,5 +12,5 @@
     | A
     | LPAREN E RPAREN
     ;
-    
+
 @rule O := X | @empty ;

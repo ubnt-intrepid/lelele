@@ -10,13 +10,13 @@
 
 @nonterminal Expr;
 @start Expr;
- 
+
 @rule Expr :=
     | Expr PLUS Expr
     | Expr MINUS Expr
     | Expr STAR Expr
     | Expr SLASH Expr
-    | @{ prec = neg } MINUS Expr 
+    | @{ prec = neg } MINUS Expr
     | NUM
     | LPAREN Expr RPAREN
     | @error

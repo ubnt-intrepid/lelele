@@ -10,11 +10,11 @@
     | Expr MINUS Term
     | Term
     ;
-    
+
 @rule Term :=
     | Term STAR Factor
     | Term SLASH Factor
-    | Factor 
+    | Factor
     ;
 
 @rule Factor :=

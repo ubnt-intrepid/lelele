@@ -16,7 +16,7 @@
     | @empty
     | Words WORD
     ;
-    
+
 @rule Redirects :=
     | @empty
     | Redirects Redirect

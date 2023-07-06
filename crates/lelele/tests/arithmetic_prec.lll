@@ -18,8 +18,8 @@
 @rule Expr :=
     | Expr PLUS Expr
     | Expr MINUS Expr
-    | Expr STAR Expr 
-    | Expr SLASH Expr 
+    | Expr STAR Expr
+    | Expr SLASH Expr
     | @{ prec = neg } MINUS Expr // override the precedence
     | LPAREN Expr RPAREN
     | NUM

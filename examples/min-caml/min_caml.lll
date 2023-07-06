@@ -28,7 +28,7 @@
 @nonterminal SimpleExpr, Expr, FormalArgs, ActualArgs, FunDef, Pat, Elems;
 @start Expr;
 
-@rule SimpleExpr := 
+@rule SimpleExpr :=
     | LPAREN Expr RPAREN
     | LPAREN RPAREN
     | TRUE
@@ -66,7 +66,7 @@
     | Expr SEMICOLON Expr
     | @{ prec = prec_app } ARRAY_MAKE SimpleExpr SimpleExpr
     ;
-    
+
 @rule FunDef := IDENT FormalArgs EQUAL Expr ;
 
 @rule FormalArgs :=
@@ -76,7 +76,7 @@
 
 @rule ActualArgs :=
     | @{ prec = prec_app } ActualArgs SimpleExpr
-    | @{ prec = prec_app } SimpleExpr 
+    | @{ prec = prec_app } SimpleExpr
     ;
 
 @rule Elems :=

@@ -11,6 +11,6 @@
     ;
 
 @rule T :=
-    | T STAR A 
+    | T STAR A
     | A
     ;
