@@ -136,9 +136,9 @@ mod tests {
 @terminal FOO, BAR, BAZ; /* block comment /* nested */ */
 @nonterminal Expr, ｔｒｕｅ;
 @rule Expr :=
-    { FOO BAR BAZ
+    | FOO BAR BAZ
     | @{ prec = prec1 } Expr FOO
-    };
+    ;
 ";
         let lexer = Lexer::new(input);
         let tokens = lexer
@@ -175,7 +175,7 @@ mod tests {
                 Kw(Rule),
                 Ident("Expr"),
                 ColonEq,
-                LBracket,
+                VertBar,
                 Ident("FOO"),
                 Ident("BAR"),
                 Ident("BAZ"),
@@ -187,7 +187,6 @@ mod tests {
                 RBracket,
                 Ident("Expr"),
                 Ident("FOO"),
-                RBracket,
                 Semicolon,
             ]
         ));

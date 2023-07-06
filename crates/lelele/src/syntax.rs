@@ -264,13 +264,14 @@ pub fn parse(source: &str) -> anyhow::Result<ast::Grammar> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tracing::Level;
+    use tracing_subscriber::EnvFilter;
 
     #[test]
     fn smoketest() {
         tracing_subscriber::fmt()
             .with_ansi(false)
-            .with_max_level(Level::TRACE)
+            .with_test_writer()
+            .with_env_filter(EnvFilter::from_default_env())
             .init();
 
         let input = "\
@@ -278,7 +279,7 @@ mod tests {
 @nonterminal E;
 @rule E := A B C;
 @rule E :=
-      @empty
+    | @empty
     | B C A
     | E D
     ;
