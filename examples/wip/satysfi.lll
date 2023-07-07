@@ -13,11 +13,11 @@
 @terminal VERT_CMD;
 @terminal HORZ_MACRO;
 @terminal VERT_MACRO;
-@terminal MATCH_CMD;
+@terminal MATH_CMD;
 @terminal VAR_WITH_MOD;
 @terminal HORZ_CMD_WITH_MOD;
 @terminal VERT_CMD_WITH_MOD;
-@terminal MATCH_CMD_WITH_MOD;
+@terminal MATH_CMD_WITH_MOD;
 @terminal VAR_IN_HORZ;
 @terminal VAR_IN_VERT;
 @terminal VAR_IN_MATH;
@@ -82,7 +82,7 @@
 
 @nonterminal KxTop;
 @nonterminal TypeVarList;
-@nonterminal TxFunc;
+@nonterminal TxFunc TxFuncOpts TxProd TxApp TxAppre TxBot;
 @nonterminal BinOp;
 
 @nonterminal NxRecDec NxNonRecDec NxLet NxHorzDec NxVertDec NxMathDec NxVariantDec;
@@ -112,12 +112,32 @@
 @nonterminal NxTypeEqListNonemptyLetAnd;
 @nonterminal NxTypeEq;
 
-@nonterminal Variants;
-@nonterminal TxRecord;
+@nonterminal Variant Variants;
+@nonterminal TxList TxListElem;
+@nonterminal TxRecord TxRecordElem;
 
-@nonterminal Pat PatList;
+@nonterminal Pat Pats PatAs PatTr PatTuple PatList;
 
 @nonterminal NxLetSub;
+@nonterminal NxUnsub;
+@nonterminal HCmd MCmd;
+@nonterminal Tuple;
+@nonterminal SxSep VxBlock NxListSynt NxRecordSynt;
+@nonterminal Path MathBlock;
+@nonterminal NxList;
+@nonterminal NxRecordField;
+
+@nonterminal SxList SxBlock SxBlockTerminated SxItem SxItems;
+@nonterminal MathList MathMain MathMainTerminated MathTop MathBot MathGroup MathArg MathArgList;
+@nonterminal Ih IhCmd IhText IhChar ;
+
+@nonterminal NArg;
+@nonterminal NArgList MacroArgs;
+@nonterminal SArgs SArg SArgListNonempty;
+
+@nonterminal MacroNArgs MacroNArg;
+@nonterminal VCmd;
+@nonterminal VxBot;
 
 @start Main;
 
@@ -136,6 +156,23 @@
 @rule Main :=
     | Stage Header NxToplevel
     | Stage Header NxWhl
+    ;
+
+@rule ArgList :=
+    | @empty
+    | Arg ArgList
+    ;
+
+@rule ArgListNonempty :=
+    | Arg
+    | Arg ArgList
+    ;
+
+@rule Stage :=
+    | @empty
+    | HEADER_STAGE0
+    | HEADER_STAGE1
+    | HEADER_PERSISTENT0
     ;
 
 @rule NxToplevel :=
@@ -294,11 +331,9 @@
     | BRECORD TxRecord ERECORD
     ;
 
-@rule PatList := @empty | Pat PatList ;
-
 @rule NxLet :=
-    | MATCH NxLet WITH BAR  PatList
-    | MATCH NxLet WITH /**/ PatList
+    | MATCH NxLet WITH BAR  Pats
+    | MATCH NxLet WITH /**/ Pats
     | NxLetSub
     ;
 
@@ -356,4 +391,410 @@
     | NxApp
     ;
 
-// TODO: line-815 ~
+@rule NxApp :=
+    | NxApp NxUnsub
+    | NxApp CONSTRUCTOR
+    | COMMAND HCmd
+    | NxApp OPTIONAL NxUnsub
+    | NxApp OMISSION
+    | NxUnsub
+    ;
+
+@rule NxUnsub :=
+    | UNOP_EXCLAM NxBot
+    | EXACT_AMP NxBot
+    | EXACT_TILDE NxBot
+    | NxBot
+    ;
+
+@rule NxBot :=
+    | NxBot ACCESS VAR
+    | VAR
+    | VAR_WITH_MOD
+    | INT_CONST
+    | FLOAT_CONST
+    | LENGTH_CONST
+    | TRUE
+    | FALSE
+    | LPAREN RPAREN
+    | LPAREN NxLet RPAREN
+    | LPAREN NxLet COMMA Tuple RPAREN
+    | BHORZGRP SxSep EHORZGRP
+    | BVERTGRP VxBlock EVERTGRP
+    | LITERAL
+    | POSITIONED_LITERAL
+    | NxListSynt
+    | LPAREN BinOp RPAREN
+    | NxRecordSynt
+    | BPATH Path EPATH
+    | BMATHGRP MathBlock EMATHGRP
+    | OPEN_MODULE NxLet RPAREN
+    ;
+
+@rule NxListSynt :=
+    | BLIST ELIST
+    | BLIST NxList ELIST
+    ;
+
+@nonterminal NxRecord;
+
+@rule NxRecordSynt :=
+    | BRECORD ERECORD
+    | BRECORD NxRecord ERECORD
+    | BRECORD NxBot WITH NxRecord ERECORD
+    ;
+
+@nonterminal PathSub PathComp PathCompCycle;
+
+@rule Path := | NxBot PathSub ;
+
+@rule PathSub :=
+    | PathComp PathSub
+    | PathCompCycle
+    | @empty
+    ;
+
+@rule PathComp :=
+    | PATHLINE NxBot
+    | PATHCURVE CONTROLS NxBot LET_AND NxBot PATHCURVE NxBot
+    ;
+
+@rule PathCompCycle :=
+    | PATHLINE CYCLE
+    | PATHCURVE CONTROLS NxBot LET_AND NxBot PATHCURVE CYCLE
+    ;
+
+
+@rule NxRecord :=
+    | NxRecordField
+    | NxRecordField LISTPUNCT
+    | NxRecordField LISTPUNCT NxRecord
+    ;
+
+@rule NxRecordField :=
+    | VAR DEF_EQ NxLet
+    ;
+
+@rule NxList :=
+    | NxLet
+    | NxLet LISTPUNCT
+    | NxLet LISTPUNCT NxList
+    ;
+
+@rule Variants :=
+    | Variant
+    | Variant BAR Variants
+    ;
+
+@rule Variant :=
+    | CONSTRUCTOR OF TxFunc
+    | CONSTRUCTOR
+    ;
+
+@rule TxFunc :=
+    | TxFuncOpts ARROW TxFunc
+    | TxProd
+    ;
+
+@rule TxFuncOpts :=
+    | TxProd OPTIONALARROW TxFuncOpts
+    | TxProd
+    ;
+
+@rule TxProd :=
+    | TxAppre
+    | TxAppre EXACT_TIMES TxProd
+    ;
+
+@rule TxAppre :=
+    | TxApp
+    | BLIST TxList ELIST HORZCMDTYPE
+    | BLIST TxList ELIST VERTCMDTYPE
+    | BLIST TxList ELIST MATHCMDTYPE
+    | LPAREN TxFunc RPAREN
+    | BRECORD TxRecord ERECORD
+    | TYPE_VAR
+    ;
+
+@rule TxApp :=
+    | TxBot TxApp
+    | LPAREN TxFunc RPAREN TxApp
+    | TYPE_VAR TxApp
+    | TxBot
+    ;
+
+@rule TxBot :=
+    | VAR
+    | VAR_WITH_MOD
+    ;
+
+@rule TxList :=
+    | @empty
+    | TxListElem
+    | TxListElem LISTPUNCT TxList
+    ;
+
+@rule TxListElem :=
+    | TxFunc
+    | TxAppre OPTIONALTYPE
+    ;
+
+@rule TxRecord :=
+    | TxRecordElem
+    | TxRecordElem LISTPUNCT
+    | TxRecordElem LISTPUNCT TxRecord
+    ;
+
+@rule TxRecordElem :=
+    | VAR COLON TxFunc
+    ;
+
+@rule Tuple :=
+    | NxLet
+    | NxLet COMMA Tuple
+    ;
+
+@rule Pats :=
+    //| brs=separated_nonempty_list(BAR, pat) {
+    | Pat
+    | Pat BAR Pats
+    ;
+
+@rule Pat :=
+    | PatAs ARROW NxLetSub
+    | PatAs WHEN NxLetSub ARROW NxLetSub
+    ;
+
+@rule PatAs :=
+    | PatTr AS VAR
+    | PatTr
+    ;
+
+@rule PatTr :=
+    | PatBot CONS PatTr
+    | CONSTRUCTOR PatBot
+    | CONSTRUCTOR
+    | PatBot
+    ;
+
+@rule PatBot :=
+    | INT_CONST
+    | TRUE
+    | FALSE
+    | LPAREN RPAREN
+    | WILDCARD
+    | VAR
+    | LPAREN BinOp RPAREN
+    | LITERAL
+    | BLIST ELIST
+    | BLIST PatList ELIST
+    | LPAREN PatAs RPAREN
+    | LPAREN PatAs COMMA PatTuple RPAREN
+    ;
+
+@rule PatTuple :=
+    | PatAs
+    | PatAs COMMA PatTuple
+    ;
+
+@rule PatList :=
+    | PatAs
+    | PatAs LISTPUNCT
+    | PatAs LISTPUNCT PatList
+    ;
+
+@rule BinOp :=
+    | UNOP_EXCLAM
+    | BINOP_TIMES
+    | BINOP_DIVIDES
+    | BINOP_HAT
+    | BINOP_EQ
+    | BINOP_GT
+    | BINOP_LT
+    | BINOP_AMP
+    | BINOP_BAR
+    | BINOP_PLUS
+    | BINOP_MINUS
+    | EXACT_TIMES
+    | EXACT_MINUS
+    | MOD
+    | BEFORE
+    | LNOT
+    ;
+
+@rule SxSep :=
+    | SxList
+    | SxBlock
+    | SxItems
+    ;
+
+@rule SxItems :=
+    | SxItem
+    | SxItem SxItems
+    ;
+
+@rule SxList :=
+    | @empty
+    | SxBlockTerminated SxList
+    ;
+
+@rule SxBlockTerminated := SxBlock SEP;
+
+@rule SxItem :=
+    | ITEM SxBlock
+    ;
+
+
+@rule HCmd :=
+    | HORZ_CMD
+    | HORZ_CMD_WITH_MOD
+    ;
+
+@rule MCmd :=
+    | MATH_CMD
+    | MATH_CMD_WITH_MOD
+    ;
+
+@rule MathBlock :=
+    | SEP MathList
+    | MathMain
+    ;
+
+@rule MathList :=
+    | @empty
+    | MathMainTerminated MathList
+    ;
+
+@rule MathMainTerminated := | MathMain SEP ;
+
+@rule MathMain :=
+    | @empty
+    | MathTop MathMain
+    ;
+
+@rule MathTop :=
+    | MathBot
+    | MathBot SUPERSCRIPT MathGroup
+    | MathBot SUBSCRIPT MathGroup
+    | MathBot SUBSCRIPT MathGroup SUPERSCRIPT MathGroup
+    | MathBot SUPERSCRIPT MathGroup SUBSCRIPT MathGroup
+    | MathBot PRIMES
+    | MathBot PRIMES SUPERSCRIPT MathGroup
+    | MathBot PRIMES SUBSCRIPT MathGroup
+    | MathBot PRIMES SUBSCRIPT MathGroup SUPERSCRIPT MathGroup
+    | MathBot PRIMES SUPERSCRIPT MathGroup SUBSCRIPT MathGroup
+    ;
+
+@rule MathGroup :=
+    | BMATHGRP MathMain EMATHGRP
+    | MathBot
+    ;
+
+@rule MathBot :=
+    | MATCHARS
+    | MCmd MathArgList
+    | VAR_IN_MATH
+    ;
+
+@rule MathArgList :=
+    | @empty
+    | MathArg MathArgList
+    ;
+
+@rule MathArg :=
+    | BMATHGRP MathGroup EMATHGRP
+    | BHORZGRP SxSep EHORZGRP
+    | BVERTGRP VxBlock EVERTGRP
+    | OPTIONAL BMATHGRP MathBlock EMATHGRP
+    | OPTIONAL BHORZGRP SxSep EHORZGRP
+    | OPTIONAL BVERTGRP VxBlock EVERTGRP
+    | NArg
+    ;
+
+@rule SxBlock := Ih ;
+
+@rule Ih :=
+    | IhText
+    | IhText IhCmd Ih
+    | IhCmd Ih
+    | @empty
+    ;
+
+@rule NArgList :=
+    | @empty
+    | NArg NArgList
+    ;
+
+@rule IhCmd :=
+    | HORZ_MACRO MacroArgs
+    | HCmd NArgList SArgs
+    | BMATHGRP MathBlock EMATHGRP
+    | LITERAL
+    | VAR_IN_HORZ ENDACTIVE
+    ;
+
+@rule IhText :=
+    | IhChar
+    | IhChar IhText
+    ;
+
+@rule IhChar :=
+    | CHAR
+    | SPACE
+    | BREAK
+    ;
+
+@rule MacroArgs := MacroNArgs ENDACTIVE ;
+
+@rule MacroNArgs :=
+    | @empty
+    | MacroNArg MacroNArgs
+    ;
+
+@rule MacroNArg :=
+    | LPAREN NxBot RPAREN
+    | EXACT_TILDE LPAREN NxBot RPAREN
+    ;
+
+@rule NArg :=
+    | LPAREN NxLet RPAREN
+    | LPAREN RPAREN
+    | NxRecordSynt
+    | NxListSynt
+    | OPTIONAL LPAREN NxLet RPAREN
+    | OPTIONAL LPAREN RPAREN
+    | OPTIONAL NxRecordSynt
+    | OPTIONAL NxListSynt
+    | OMISSION
+    ;
+
+@rule SArgs :=
+    | ENDACTIVE
+    | SArgListNonempty
+    ;
+
+@rule SArgListNonempty :=
+    | SArg
+    | SArg SArgListNonempty
+    ;
+
+@rule SArg :=
+    | BVERTGRP VxBlock EVERTGRP
+    | BHORZGRP SxSep EHORZGRP
+    ;
+
+@rule VCmd :=
+    | VERT_CMD
+    | VERT_CMD_WITH_MOD
+    ;
+
+@rule VxBlock :=
+    | @empty
+    | VxBot VxBlock
+    ;
+
+@rule VxBot :=
+    | VCmd NArgList SArgs
+    | VAR_IN_VERT ENDACTIVE
+    | VERT_MACRO MacroArgs
+    ;

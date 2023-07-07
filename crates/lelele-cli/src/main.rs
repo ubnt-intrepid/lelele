@@ -29,7 +29,7 @@ fn main() -> anyhow::Result<()> {
     let automaton_file = in_file.with_extension("lll.automaton");
 
     let grammar = Grammar::from_file(&in_file)?;
-    
+
     let mut empty_nonterminals = vec![];
     for nonterminal in grammar.nonterminals() {
         if grammar.rules().all(|rule| rule.left() != nonterminal.id()) {
@@ -37,7 +37,10 @@ fn main() -> anyhow::Result<()> {
         }
     }
     if !empty_nonterminals.is_empty() {
-        println!("[warning] The following nonterminals have no associated production rule: {:?}", empty_nonterminals);
+        println!(
+            "[warning] The following nonterminals have no associated production rule: {:?}",
+            empty_nonterminals
+        );
     }
 
     let dfa = DFA::generate(&grammar)?;
