@@ -298,7 +298,7 @@
 
 @rule NxLet :=
     | MATCH NxLet WITH BAR  PatList
-    | MATCH NxLet WITH      PatList
+    | MATCH NxLet WITH /**/ PatList
     | NxLetSub
     ;
 

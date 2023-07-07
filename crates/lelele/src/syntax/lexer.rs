@@ -115,10 +115,10 @@ lexgen::lexer! {
         },
         "*/" => |lexer| {
             let depth = &mut lexer.state().comment_depth;
-            if *depth == 1 {
+            *depth -= 1;
+            if *depth == 0 {
                 lexer.switch(LexerRule::Init)
             } else {
-                *depth -= 1;
                 lexer.continue_()
             }
         },
