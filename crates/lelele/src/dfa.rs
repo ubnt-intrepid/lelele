@@ -103,29 +103,14 @@ impl fmt::Display for DFADisplay<'_> {
             writeln!(f, "#### State {:02}", id)?;
             writeln!(f, "## item_sets")?;
             for (core_item, lookaheads) in &node.item_set {
-                let LRCoreItem { rule, marker } = core_item;
-                let rule = grammar.rule(rule);
-                write!(f, "- {} :=", grammar.nonterminal(&rule.left()))?;
-                for (i, prod) in rule.right().iter().enumerate() {
-                    if i == *marker {
-                        f.write_str(" .")?;
-                    }
-                    match prod {
-                        Symbol::T(t) => write!(f, " {}", grammar.terminal(t))?,
-                        Symbol::N(n) => write!(f, " {}", grammar.nonterminal(n))?,
-                    }
-                }
-                if *marker == rule.right().len() {
-                    f.write_str(" .")?;
-                }
-                write!(f, "  [")?;
+                write!(f, "- {}  [", core_item.display(grammar))?;
                 for (i, lookahead) in lookaheads.iter().enumerate() {
                     if i > 0 {
                         f.write_str(" ")?;
                     }
                     write!(f, "{}", grammar.terminal(lookahead))?;
                 }
-                writeln!(f, "]")?;
+                f.write_str("]\n")?;
             }
 
             writeln!(f, "## actions")?;
@@ -155,6 +140,16 @@ impl fmt::Display for DFADisplay<'_> {
                         writeln!(f, "## conflicted actions on {}", token)?;
                         if let Some(n) = shift {
                             writeln!(f, "  - shift({:02})", n)?;
+                            writeln!(f, "  ## corresponding items:")?;
+                            for core_item in node.item_set.keys() {
+                                let rule = self.grammar.rule(&core_item.rule);
+                                if rule.right().get(core_item.marker).map_or(
+                                    false,
+                                    |n| matches!(n, Symbol::T(t) if *t == token.id()),
+                                ) {
+                                    writeln!(f, "    - {}", core_item.display(self.grammar))?;
+                                }
+                            }
                         }
                         for reduce in reduces {
                             let reduce = grammar.rule(reduce);
@@ -209,6 +204,41 @@ struct LRCoreItem {
     rule: RuleID,
     // marker位置
     marker: usize,
+}
+impl LRCoreItem {
+    fn display<'g>(&'g self, grammar: &'g Grammar) -> impl fmt::Display + 'g {
+        LRCoreItemDisplay {
+            core_item: self,
+            grammar,
+        }
+    }
+}
+
+struct LRCoreItemDisplay<'g> {
+    core_item: &'g LRCoreItem,
+    grammar: &'g Grammar,
+}
+
+impl fmt::Display for LRCoreItemDisplay<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let LRCoreItem { rule, marker } = self.core_item;
+        let rule = self.grammar.rule(rule);
+        write!(f, "({} :=", self.grammar.nonterminal(&rule.left()))?;
+        for (i, prod) in rule.right().iter().enumerate() {
+            if i == *marker {
+                f.write_str(" .")?;
+            }
+            match prod {
+                Symbol::T(t) => write!(f, " {}", self.grammar.terminal(t))?,
+                Symbol::N(n) => write!(f, " {}", self.grammar.nonterminal(n))?,
+            }
+        }
+        if *marker == rule.right().len() {
+            f.write_str(" .")?;
+        }
+
+        f.write_str(")")
+    }
 }
 
 //  - key: core item
