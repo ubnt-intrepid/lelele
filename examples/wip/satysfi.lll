@@ -1,0 +1,359 @@
+// ref: https://github.com/gfngfn/SATySFi/blob/v0.0.9/src/frontend/parser.mly
+
+@prec { assoc = left } prec_binop_bar;
+@prec { assoc = left } prec_binop_amp;
+@prec { assoc = right } prec_binop_cmp;
+@prec { assoc = right } prec_binop_hat;
+@prec { assoc = right } prec_binop_add;
+@prec { assoc = left } prec_binop_sub;
+@prec { assoc = right } prec_binop_mul;
+
+@terminal VAR;
+@terminal HORZ_CMD;
+@terminal VERT_CMD;
+@terminal HORZ_MACRO;
+@terminal VERT_MACRO;
+@terminal MATCH_CMD;
+@terminal VAR_WITH_MOD;
+@terminal HORZ_CMD_WITH_MOD;
+@terminal VERT_CMD_WITH_MOD;
+@terminal MATCH_CMD_WITH_MOD;
+@terminal VAR_IN_HORZ;
+@terminal VAR_IN_VERT;
+@terminal VAR_IN_MATH;
+@terminal TYPE_VAR;
+@terminal CONSTRUCTOR;
+@terminal INT_CONST;
+@terminal FLOAT_CONST;
+@terminal LENGTH_CONST;
+@terminal CHAR;
+@terminal LITERAL;
+@terminal POSITIONED_LITERAL;
+@terminal SPACE BREAK;
+@terminal MATCHARS;
+@terminal PRIMES;
+@terminal SUBSCRIPT SUPERSCRIPT;
+@terminal LAMBDA ARROW COMMAND;
+@terminal LET_REC LET_NONREC DEF_EQ LET_AND IN OPEN;
+@terminal OPEN_MODULE;
+@terminal MODULE STRUCT END DIRECT SIG VAL CONSTRAINT;
+@terminal TYPE OF MATCH WITH BAR WILDCARD WHEN AS COLON;
+@terminal LET_MUTABLE OVERWRITE_EQ;
+@terminal LET_HORZ LET_VERT LET_MATH;
+@terminal IF THEN ELSE;
+@terminal UNOP_EXCLAM;
+@terminal BEFORE LNOT EXACT_AMP EXACT_TILDE;
+@terminal LPAREN RPAREN;
+@terminal BVERTGRP EVERTGRP;
+@terminal BHORZGRP EHORZGRP;
+@terminal BMATHGRP EMATHGRP;
+@terminal BPATH EPATH PATHLINE PATHCURVE CONTROLS CYCLE;
+@terminal TRUE FALSE;
+@terminal SEP ENDACTIVE COMMA;
+@terminal BLIST LISTPUNCT ELIST BRECORD ERECORD ACCESS;
+@terminal WHILE DO;
+@terminal HORZCMDTYPE VERTCMDTYPE MATHCMDTYPE;
+@terminal OPTIONAL OMISSION OPTIONALTYPE OPTIONALARROW;
+// @terminal NEWGLOBALHASH OVERWRITEGLOBALHASH RENEWGLOBALHASH;
+@terminal ITEM;
+@terminal HEADER_REQUIRE HEADER_IMPORT;
+@terminal HEADER_STAGE0 HEADER_STAGE1 HEADER_PERSISTENT0;
+
+@terminal { prec = prec_binop_bar } BINOP_BAR;
+@terminal { prec = prec_binop_amp } BINOP_AMP;
+@terminal { prec = prec_binop_cmp } BINOP_EQ BINOP_GT BINOP_LT;
+@terminal { prec = prec_binop_hat } BINOP_HAT CONS;
+@terminal { prec = prec_binop_add } BINOP_PLUS;
+@terminal { prec = prec_binop_sub } BINOP_MINUS EXACT_MINUS;
+@terminal { prec = prec_binop_mul } BINOP_TIMES EXACT_TIMES BINOP_DIVIDES MOD;
+
+@nonterminal Header;
+@nonterminal HeaderElem;
+
+@nonterminal Main;
+@nonterminal NxToplevel;
+@nonterminal NxTopSubSeq;
+@nonterminal NxSigOpt;
+@nonterminal NxSigElems;
+@nonterminal NxSigElem;
+@nonterminal Constraints;
+@nonterminal Constraint;
+@nonterminal NxStruct;
+
+@nonterminal KxTop;
+@nonterminal TypeVarList;
+@nonterminal TxFunc;
+@nonterminal BinOp;
+
+@nonterminal NxRecDec NxNonRecDec NxLet NxHorzDec NxVertDec NxMathDec NxVariantDec;
+@nonterminal NxHorzMacroDec NxVertMacroDec;
+
+@nonterminal Stage;
+@nonterminal NxWhl;
+@nonterminal NxIf;
+@nonterminal NxBfr;
+@nonterminal NxLambda;
+@nonterminal NxOp;
+@nonterminal NxApp;
+@nonterminal NxBot;
+
+@nonterminal Arg ArgList ArgListNonempty;
+@nonterminal ArgPats;
+@nonterminal MacroParam MacroParamList;
+
+@nonterminal NonRecDecArgPart;
+@nonterminal RecDecArgPart;
+
+@nonterminal PatBot PatBotList PatBotListNonempty;
+
+@nonterminal NxRecDecSub;
+@nonterminal NxRecDecPar;
+
+@nonterminal NxTypeEqListNonemptyLetAnd;
+@nonterminal NxTypeEq;
+
+@nonterminal Variants;
+@nonterminal TxRecord;
+
+@nonterminal Pat PatList;
+
+@nonterminal NxLetSub;
+
+@start Main;
+
+//-----------------------------------------------------------------------
+
+@rule Header :=
+    | @empty
+    | Header HeaderElem
+    ;
+
+@rule HeaderElem :=
+    | HEADER_REQUIRE
+    | HEADER_IMPORT
+    ;
+
+@rule Main :=
+    | Stage Header NxToplevel
+    | Stage Header NxWhl
+    ;
+
+@rule NxToplevel :=
+    | LET_REC NxRecDec NxTopSubSeq
+    | LET_NONREC NxNonRecDec NxTopSubSeq
+    | LET_MUTABLE VAR OVERWRITE_EQ NxLet NxTopSubSeq
+    | LET_HORZ NxHorzDec NxTopSubSeq
+    | LET_VERT NxVertDec NxTopSubSeq
+    | LET_MATH NxMathDec NxTopSubSeq
+    | TYPE NxVariantDec NxTopSubSeq
+    | MODULE CONSTRUCTOR NxSigOpt DEF_EQ STRUCT NxStruct NxTopSubSeq
+    | OPEN CONSTRUCTOR NxTopSubSeq
+    | LET_HORZ NxHorzMacroDec NxTopSubSeq
+    | LET_VERT NxVertMacroDec NxTopSubSeq
+    ;
+
+@rule NxTopSubSeq :=
+    | NxToplevel
+    | @empty
+    | IN NxLet
+    ;
+
+@rule NxSigOpt :=
+    | @empty
+    | COLON SIG NxSigElems END
+    ;
+
+@rule NxSigElems :=
+    | @empty
+    | NxSigElem NxSigElems
+    ;
+
+@rule NxSigElem :=
+    | TYPE TypeVarList VAR Constraints
+    | VAL VAR COLON TxFunc Constraints
+    | VAL LPAREN BinOp RPAREN COLON TxFunc Constraints
+    | VAL HORZ_CMD COLON TxFunc Constraints
+    | VAL VERT_CMD COLON TxFunc Constraints
+    | DIRECT HORZ_CMD COLON TxFunc Constraints
+    | DIRECT VERT_CMD COLON TxFunc Constraints
+    ;
+
+@rule Constraints :=
+    | @empty
+    | Constraint Constraints
+    ;
+
+@rule Constraint := CONSTRAINT TYPE_VAR CONS KxTop;
+
+@rule NxStruct :=
+    | END
+    | LET_REC NxRecDec NxStruct
+    | LET_NONREC NxNonRecDec NxStruct
+    | LET_MUTABLE VAR OVERWRITE_EQ NxLet NxStruct
+    | LET_HORZ NxHorzDec NxStruct
+    | LET_VERT NxVertDec NxStruct
+    | LET_MATH NxMathDec NxStruct
+    | TYPE NxVariantDec NxStruct
+    | MODULE CONSTRUCTOR NxSigOpt DEF_EQ STRUCT NxStruct NxStruct
+    | OPEN CONSTRUCTOR NxStruct
+    ;
+
+@rule NxHorzDec :=
+    | VAR HORZ_CMD ArgList DEF_EQ NxLet
+    | HORZ_CMD ArgPats DEF_EQ NxLet
+    ;
+
+@rule NxVertDec :=
+    | VAR VERT_CMD ArgList DEF_EQ NxLet
+    | VERT_CMD ArgPats DEF_EQ NxLet
+    ;
+
+@rule NxMathDec :=
+    | HORZ_CMD ArgList DEF_EQ NxLet
+    ;
+
+@rule MacroParamList := @empty | MacroParam MacroParamList;
+
+@rule NxHorzMacroDec :=
+    | HORZ_MACRO MacroParamList DEF_EQ NxLet
+    ;
+
+@rule NxVertMacroDec :=
+    | VERT_MACRO MacroParamList DEF_EQ NxLet
+    ;
+
+@rule MacroParam :=
+    | VAR
+    | EXACT_TILDE VAR
+    ;
+
+@rule NonRecDecArgPart :=
+    | COLON TxFunc
+    | COLON TxFunc BAR ArgListNonempty
+    ;
+
+@rule RecDecArgPart :=
+    | COLON TxFunc
+    | COLON TxFunc BAR PatBotListNonempty
+    | BAR PatBotListNonempty
+    | ArgPats
+    ;
+
+@rule Arg :=
+    | PatBot
+    | OPTIONAL VAR
+    | OPTIONAL LPAREN BinOp RPAREN
+    ;
+
+@rule PatBotList :=
+    | @empty
+    | PatBot PatBotList
+    ;
+
+@rule PatBotListNonempty :=
+    | PatBot
+    | PatBot PatBotListNonempty
+    ;
+
+@rule NxRecDecSub :=
+    | LET_AND NxRecDec
+    | @empty
+    ;
+
+
+@rule NxRecDec :=
+    | VAR RecDecArgPart DEF_EQ NxLet NxRecDecSub
+    | LPAREN BinOp RPAREN RecDecArgPart DEF_EQ NxLet NxRecDecSub
+    | VAR RecDecArgPart DEF_EQ NxLet BAR NxRecDecPar NxRecDecSub
+    | LPAREN BinOp RPAREN RecDecArgPart DEF_EQ NxLet BAR NxRecDecPar NxRecDecSub
+    ;
+
+@rule NxRecDecPar :=
+    | ArgPats DEF_EQ NxLet BAR NxRecDecPar
+    | ArgPats DEF_EQ NxLet
+    ;
+
+@rule NxNonRecDec := PatBot NonRecDecArgPart DEF_EQ NxLet ;
+
+@rule NxVariantDec := NxTypeEqListNonemptyLetAnd;
+
+@rule NxTypeEqListNonemptyLetAnd :=
+    | NxTypeEq
+    | NxTypeEq LET_AND NxTypeEqListNonemptyLetAnd
+    ;
+
+@rule TypeVarList := @empty | TYPE_VAR TypeVarList ;
+
+@rule NxTypeEq :=
+    | TypeVarList VAR DEF_EQ BAR  Variants Constraints
+    | TypeVarList VAR DEF_EQ /**/ Variants Constraints
+    | TypeVarList VAR DEF_EQ TxFunc Constraints
+    ;
+
+@rule KxTop :=
+    | BRECORD TxRecord ERECORD
+    ;
+
+@rule PatList := @empty | Pat PatList ;
+
+@rule NxLet :=
+    | MATCH NxLet WITH BAR  PatList
+    | MATCH NxLet WITH      PatList
+    | NxLetSub
+    ;
+
+@rule NxLetSub :=
+    | LET_REC NxRecDec IN NxLet
+    | LET_NONREC NxNonRecDec IN NxLet
+    | LET_MUTABLE VAR OVERWRITE_EQ NxLet IN NxLet
+    | LET_MATH NxMathDec IN NxLet
+    | OPEN CONSTRUCTOR IN NxLet
+    | NxWhl
+    ;
+
+@rule NxWhl :=
+    | WHILE NxLet NxWhl
+    | NxIf
+    ;
+
+@rule NxIf :=
+    | IF NxLet THEN NxLet ELSE NxLet
+    | NxBfr
+    ;
+
+@rule NxBfr :=
+    | NxLambda BEFORE NxBfr
+    | NxLambda
+    ;
+
+@rule NxLambda :=
+    | VAR OVERWRITE_EQ NxOp
+    | LAMBDA ArgPats ARROW NxOp
+    | NxOp
+    ;
+
+@rule ArgPats := PatBotList ;
+
+@rule NxOp :=
+    | NxOp BINOP_BAR NxOp
+    | NxOp BINOP_AMP NxOp
+    | NxOp BINOP_EQ NxOp
+    | NxOp BINOP_GT NxOp
+    | NxOp BINOP_LT NxOp
+    | NxOp BINOP_HAT NxOp
+    | NxOp BINOP_PLUS NxOp
+    | NxOp BINOP_MINUS NxOp
+    | NxOp BINOP_TIMES NxOp
+    | NxOp BINOP_DIVIDES NxOp
+    | NxOp CONS NxOp
+    | NxOp EXACT_MINUS NxOp
+    | NxOp EXACT_TIMES NxOp
+    | NxOp MOD NxOp
+    | EXACT_MINUS NxApp
+    | LNOT NxApp
+    | CONSTRUCTOR NxBot
+    | CONSTRUCTOR
+    | NxApp
+    ;
+
+// TODO: line-815 ~

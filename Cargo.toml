@@ -5,7 +5,7 @@ members = [
     "examples/*",
 ]
 exclude = [
-    "examples/ambiguous",
+    "examples/wip",
 ]
 
 [workspace.package]
