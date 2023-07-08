@@ -64,7 +64,7 @@ impl Config {
 
 #[derive(Debug)]
 pub struct DFA {
-    nodes: IndexMap<NodeID, DFANode>,
+    pub(crate) nodes: IndexMap<NodeID, DFANode>,
 }
 
 impl DFA {

@@ -256,7 +256,7 @@ impl fmt::Display for Assoc {
 /// The grammar definition used to derive the parser tables.
 #[derive(Debug)]
 pub struct Grammar {
-    terminals: IndexSet<Terminal>,
+    pub(crate) terminals: IndexSet<Terminal>,
     nonterminals: IndexSet<Nonterminal>,
     rules: IndexSet<Rule>,
     start_symbol: NonterminalID,
