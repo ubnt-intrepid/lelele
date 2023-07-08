@@ -1,6 +1,6 @@
 use anyhow::Context as _;
-use clap::Parser;
-use lelele::{codegen::Codegen, dfa::DFA, grammar::Grammar};
+use clap::{Parser, ValueEnum};
+use lelele::{codegen::Codegen, dfa, grammar::Grammar};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -10,8 +10,18 @@ use tracing_subscriber::EnvFilter;
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    #[arg(long, value_enum, default_value_t = MergeMode::PGM)]
+    merge_mode: MergeMode,
+
     /// The path of grammar definition file.
     input: Vec<PathBuf>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, ValueEnum)]
+enum MergeMode {
+    Canonical,
+    PGM,
+    LALR,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -20,7 +30,7 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     let args = Args::parse();
-    tracing::trace!("parsed CLI args = {:?}", args);
+    tracing::debug!("parsed CLI args = {:?}", args);
 
     for in_file in &args.input {
         tracing::info!("process {}", in_file.display());
@@ -31,7 +41,7 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
+fn process_file(args: &Args, in_file: &Path) -> anyhow::Result<()> {
     let in_file = fs::canonicalize(in_file) //
         .context("failed to canonicalize the input file name")?;
 
@@ -55,7 +65,13 @@ fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
         );
     }
 
-    let dfa = DFA::generate(&grammar)?;
+    let mut dfa_config = dfa::Config::new();
+    match args.merge_mode {
+        MergeMode::Canonical => dfa_config.use_canonical(),
+        MergeMode::PGM => dfa_config.use_pgm(),
+        MergeMode::LALR => dfa_config.use_lalr(),
+    };
+    let dfa = dfa_config.generate(&grammar)?;
 
     let mut num_inconsist_states = 0;
     for (_, node) in dfa.nodes() {
