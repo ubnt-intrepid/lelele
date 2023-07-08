@@ -1,6 +1,6 @@
 //! Grammar types.
 
-use crate::{syntax::ast, IndexMap, IndexSet};
+use crate::{syntax as s, IndexMap, IndexSet};
 use std::{
     borrow::{Borrow, Cow},
     fmt, fs,
@@ -401,7 +401,7 @@ impl Grammar {
 
 fn define_grammar_from_syntax(
     g: &mut GrammarDef<'_>,
-    grammar: &ast::Grammar,
+    grammar: &s::Grammar,
 ) -> Result<(), GrammarDefError> {
     let mut precedences = IndexMap::default();
     let mut next_priority = 0;
@@ -409,7 +409,7 @@ fn define_grammar_from_syntax(
 
     for desc in &grammar.stmts {
         match desc {
-            ast::Stmt::PrecDesc(ast::PrecDesc { configs, ident }) => {
+            s::Stmt::PrecDesc(s::PrecDesc { configs, ident }) => {
                 let mut assoc = None;
                 for config in configs {
                     match (&*config.key, &*config.value) {
@@ -423,7 +423,7 @@ fn define_grammar_from_syntax(
                 precedences.insert(ident.to_string(), Precedence::new(next_priority, assoc));
                 next_priority += 1;
             }
-            ast::Stmt::TerminalDesc(ast::TerminalDesc { configs, idents }) => {
+            s::Stmt::TerminalDesc(s::TerminalDesc { configs, idents }) => {
                 let mut prec = None;
                 for config in configs {
                     if config.key == "prec" {
@@ -445,14 +445,14 @@ fn define_grammar_from_syntax(
                 }
             }
 
-            ast::Stmt::NonterminalDesc(ast::NonterminalDesc { idents }) => {
+            s::Stmt::NonterminalDesc(s::NonterminalDesc { idents }) => {
                 for name in idents {
                     let symbol = g.nonterminal(&*name)?;
                     symbols.insert(name, symbol);
                 }
             }
 
-            ast::Stmt::StartDesc(ast::StartDesc { name }) => {
+            s::Stmt::StartDesc(s::StartDesc { name }) => {
                 let start_symbol = symbols
                     .get(name)
                     .copied()
@@ -460,7 +460,7 @@ fn define_grammar_from_syntax(
                 g.start_symbol(start_symbol)?;
             }
 
-            ast::Stmt::RuleDesc(ast::RuleDesc { left, productions }) => {
+            s::Stmt::RuleDesc(s::RuleDesc { left, productions }) => {
                 let left = symbols
                     .get(left)
                     .copied()
@@ -480,7 +480,7 @@ fn define_grammar_from_syntax(
 
                     let mut right = vec![];
                     for symbol in &production.elems {
-                        use ast::ProductionElem::*;
+                        use s::ProductionElem::*;
                         let symbol = match symbol {
                             Ident(symbol) => symbols
                                 .get(symbol)
