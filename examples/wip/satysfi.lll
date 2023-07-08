@@ -72,25 +72,20 @@
 @nonterminal ArgList;
 @nonterminal ArgListNonempty;
 @nonterminal ArgPats;
-@nonterminal BarOpt;
 @nonterminal BinOp;
 @nonterminal Constraint;
 @nonterminal ConstraintList;
 @nonterminal Constraints;
 @nonterminal HCmd;
 @nonterminal HeaderElem;
-@nonterminal VariantNonemptyList;
 @nonterminal HeaderElemList;
-@nonterminal TupleList;
 @nonterminal Ih;
 @nonterminal IhChar;
 @nonterminal IhCmd;
 @nonterminal IhText;
-@nonterminal IhTextChars;
 @nonterminal KxTop;
-@nonterminal ListPunctOpt;
 @nonterminal MacroNArg;
-@nonterminal MacroNArgs;
+@nonterminal MacroNArgList;
 @nonterminal MacroParam;
 @nonterminal MacroParamList;
 @nonterminal Main;
@@ -100,8 +95,8 @@
 @nonterminal MathBot;
 @nonterminal MathGroup;
 @nonterminal MathList;
-@nonterminal MathListList;
 @nonterminal MathMain;
+@nonterminal MathMainTerminated;
 @nonterminal MathTop;
 @nonterminal MCmd;
 @nonterminal NArg;
@@ -134,18 +129,11 @@
 @nonterminal NxToplevel;
 @nonterminal NxTopSubSeq;
 @nonterminal NxTypeEq;
-@nonterminal NxTypeEqListNonemptyLetAnd;
 @nonterminal NxUnsub;
 @nonterminal NxVariantDec;
 @nonterminal NxVertDec;
 @nonterminal NxVertMacroDec;
 @nonterminal NxWhl;
-@nonterminal OptTermList_LISTPUNCT_TxListElem;
-@nonterminal OptTermNonemptyList_LISTPUNCT_NxLet;
-@nonterminal OptTermNonemptyList_LISTPUNCT_NxRecordField;
-@nonterminal OptTermNonemptyList_LISTPUNCT_PatAs;
-@nonterminal OptTermNonemptyList_LISTPUNCT_TxListElem;
-@nonterminal OptTermNonemptyList_LISTPUNCT_TxRecordElem;
 @nonterminal Pat;
 @nonterminal PatAs;
 @nonterminal PatBot;
@@ -154,10 +142,8 @@
 @nonterminal Path;
 @nonterminal PathComp;
 @nonterminal PathCompCycle;
-@nonterminal PathCompCycleOpt;
 @nonterminal PathSub;
 @nonterminal PatList;
-@nonterminal PatNonemptyList;
 @nonterminal Pats;
 @nonterminal PatTr;
 @nonterminal PatTuple;
@@ -175,6 +161,7 @@
 @nonterminal Tuple;
 @nonterminal TxApp;
 @nonterminal TxAppre;
+@nonterminal TxAppreNonemptyList;
 @nonterminal TxBot;
 @nonterminal TxFunc;
 @nonterminal TxFuncOpts;
@@ -358,9 +345,9 @@
 
 
 @rule NxRecDec :=
-    | VAR RecDecArgPart DEF_EQ NxLet NxRecDecSub
+    | VAR                 RecDecArgPart DEF_EQ NxLet NxRecDecSub
     | LPAREN BinOp RPAREN RecDecArgPart DEF_EQ NxLet NxRecDecSub
-    | VAR RecDecArgPart DEF_EQ NxLet BAR NxRecDecPar NxRecDecSub
+    | VAR                 RecDecArgPart DEF_EQ NxLet BAR NxRecDecPar NxRecDecSub
     | LPAREN BinOp RPAREN RecDecArgPart DEF_EQ NxLet BAR NxRecDecPar NxRecDecSub
     ;
 
@@ -369,25 +356,24 @@
     | ArgPats DEF_EQ NxLet
     ;
 
-@rule NxNonRecDec := PatBot NonRecDecArgPart DEF_EQ NxLet ;
-
-@rule NxVariantDec := NxTypeEqListNonemptyLetAnd;
-
-@rule NxTypeEqListNonemptyLetAnd :=
-    | NxTypeEq
-    | NxTypeEq LET_AND NxTypeEqListNonemptyLetAnd
+@rule NxNonRecDec :=
+    | PatBot NonRecDecArgPart DEF_EQ NxLet
     ;
 
-@rule TypeVarList := @empty | TYPE_VAR TypeVarList ;
+@rule NxVariantDec :=
+    | NxTypeEq
+    | NxTypeEq LET_AND NxVariantDec
+    ;
 
 @rule NxTypeEq :=
-    | TypeVarList VAR DEF_EQ BarOpt Variants Constraints
-    | TypeVarList VAR DEF_EQ TxFunc Constraints
+    | TypeVarList VAR DEF_EQ BAR Variants Constraints
+    | TypeVarList VAR DEF_EQ     Variants Constraints
+    | TypeVarList VAR DEF_EQ TxFunc       Constraints
     ;
 
-@rule BarOpt :=
+@rule TypeVarList :=
     | @empty
-    | BAR
+    | TYPE_VAR TypeVarList
     ;
 
 @rule KxTop :=
@@ -395,7 +381,8 @@
     ;
 
 @rule NxLet :=
-    | MATCH NxLet WITH BarOpt Pats
+    | MATCH NxLet WITH BAR Pats
+    | MATCH NxLet WITH     Pats
     | NxLetSub
     ;
 
@@ -429,7 +416,9 @@
     | NxOp
     ;
 
-@rule ArgPats := PatBotList ;
+@rule ArgPats :=
+    | PatBotList
+    ;
 
 @rule NxOp :=
     | NxOp BINOP_BAR NxOp
@@ -498,21 +487,18 @@
     | BLIST NxList ELIST
     ;
 
-
 @rule NxRecordSynt :=
     | BRECORD ERECORD
     | BRECORD NxRecord ERECORD
     | BRECORD NxBot WITH NxRecord ERECORD
     ;
 
-@rule Path := NxBot PathSub ;
+@rule Path :=
+    | NxBot PathSub
+    ;
 
 @rule PathSub :=
     | PathComp PathSub
-    | PathCompCycleOpt
-    ;
-
-@rule PathCompCycleOpt :=
     | @empty
     | PathCompCycle
     ;
@@ -527,30 +513,25 @@
     | PATHCURVE CONTROLS NxBot LET_AND NxBot PATHCURVE CYCLE
     ;
 
-
-@rule NxRecord := OptTermNonemptyList_LISTPUNCT_NxRecordField ;
-
-@rule OptTermNonemptyList_LISTPUNCT_NxRecordField :=
-    | NxRecordField ListPunctOpt
-    | NxRecordField LISTPUNCT OptTermNonemptyList_LISTPUNCT_NxRecordField
+@rule NxRecord :=
+    | NxRecordField
+    | NxRecordField LISTPUNCT
+    | NxRecordField LISTPUNCT NxRecord
     ;
 
 @rule NxRecordField :=
     | VAR DEF_EQ NxLet
     ;
 
-@rule NxList := OptTermNonemptyList_LISTPUNCT_NxLet ;
-
-@rule OptTermNonemptyList_LISTPUNCT_NxLet :=
-    | NxLet ListPunctOpt
-    | NxLet LISTPUNCT OptTermNonemptyList_LISTPUNCT_NxLet
+@rule NxList :=
+    | NxLet
+    | NxLet LISTPUNCT
+    | NxLet LISTPUNCT NxList
     ;
 
-@rule Variants := VariantNonemptyList ;
-
-@rule VariantNonemptyList :=
+@rule Variants :=
     | Variant
-    | Variant BAR VariantNonemptyList
+    | Variant BAR Variants
     ;
 
 @rule Variant :=
@@ -569,8 +550,12 @@
     ;
 
 @rule TxProd :=
+    | TxAppreNonemptyList
+    ;
+
+@rule TxAppreNonemptyList :=
     | TxAppre
-    | TxAppre EXACT_TIMES TxProd
+    | TxAppre EXACT_TIMES TxAppreNonemptyList
     ;
 
 @rule TxAppre :=
@@ -595,24 +580,10 @@
     | VAR_WITH_MOD
     ;
 
-
-
-@rule TxList := OptTermList_LISTPUNCT_TxListElem ;
-
-@rule OptTermList_LISTPUNCT_TxListElem :=
+@rule TxList :=
     | @empty
-    | TxListElem ListPunctOpt
-    | TxListElem LISTPUNCT OptTermNonemptyList_LISTPUNCT_TxListElem
-    ;
-
-@rule ListPunctOpt :=
-    | @empty
-    | LISTPUNCT
-    ;
-
-@rule OptTermNonemptyList_LISTPUNCT_TxListElem :=
-    | TxListElem ListPunctOpt
-    | TxListElem LISTPUNCT OptTermNonemptyList_LISTPUNCT_TxListElem
+    | TxListElem
+    | TxListElem LISTPUNCT TxList
     ;
 
 @rule TxListElem :=
@@ -620,30 +591,24 @@
     | TxAppre OPTIONALTYPE
     ;
 
-@rule TxRecord := OptTermNonemptyList_LISTPUNCT_TxRecordElem ;
-
-@rule OptTermNonemptyList_LISTPUNCT_TxRecordElem :=
+@rule TxRecord :=
     | TxRecordElem
-    | TxRecordElem ListPunctOpt
-    | TxRecordElem LISTPUNCT OptTermNonemptyList_LISTPUNCT_TxRecordElem
+    | TxRecordElem LISTPUNCT
+    | TxRecordElem LISTPUNCT TxRecord
     ;
 
 @rule TxRecordElem :=
     | VAR COLON TxFunc
     ;
 
-@rule Tuple := TupleList;
-
-@rule TupleList :=
+@rule Tuple :=
     | NxLet
-    | NxLet COMMA TupleList
+    | NxLet COMMA Tuple
     ;
 
-@rule Pats := PatNonemptyList;
-
-@rule PatNonemptyList :=
+@rule Pats :=
     | Pat
-    | Pat BAR PatNonemptyList
+    | Pat BAR Pats
     ;
 
 @rule Pat :=
@@ -683,11 +648,10 @@
     | PatAs COMMA PatTuple
     ;
 
-@rule PatList := OptTermNonemptyList_LISTPUNCT_PatAs ;
-
-@rule OptTermNonemptyList_LISTPUNCT_PatAs :=
-    | PatAs ListPunctOpt
-    | PatAs LISTPUNCT OptTermNonemptyList_LISTPUNCT_PatAs
+@rule PatList :=
+    | PatAs
+    | PatAs LISTPUNCT
+    | PatAs LISTPUNCT PatList
     ;
 
 @rule BinOp :=
@@ -731,7 +695,6 @@
     | ITEM SxBlock
     ;
 
-
 @rule HCmd :=
     | HORZ_CMD
     | HORZ_CMD_WITH_MOD
@@ -747,11 +710,13 @@
     | MathMain
     ;
 
-@rule MathList := MathListList;
-
-@rule MathListList :=
+@rule MathList :=
     | @empty
-    | MathMain SEP MathList
+    | MathMainTerminated MathList
+    ;
+
+@rule MathMainTerminated :=
+    | MathMain SEP
     ;
 
 @rule MathMain :=
@@ -798,7 +763,9 @@
     | NArg
     ;
 
-@rule SxBlock := Ih ;
+@rule SxBlock :=
+    | Ih
+    ;
 
 @rule Ih :=
     | IhText
@@ -821,11 +788,9 @@
     ;
 
 
-@rule IhText := IhTextChars;
-
-@rule IhTextChars :=
+@rule IhText :=
     | IhChar
-    | IhChar IhTextChars
+    | IhChar IhText
     ;
 
 @rule IhChar :=
@@ -834,11 +799,13 @@
     | BREAK
     ;
 
-@rule MacroArgs := MacroNArgs ENDACTIVE ;
+@rule MacroArgs :=
+    | MacroNArgList ENDACTIVE
+    ;
 
-@rule MacroNArgs :=
+@rule MacroNArgList :=
     | @empty
-    | MacroNArg MacroNArgs
+    | MacroNArg MacroNArgList
     ;
 
 @rule MacroNArg :=
