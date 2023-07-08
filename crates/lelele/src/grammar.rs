@@ -316,7 +316,7 @@ impl Grammar {
 
     pub fn from_str(source: &str) -> Result<Grammar, GrammarDefError> {
         let grammar = crate::syntax::parse(source).map_err(GrammarDefError::Syntax)?;
-        Grammar::define(|g| define_grammar_from_syntax(g, &grammar))
+        Grammar::define(|g| define_grammar_from_syntax(g, grammar))
     }
 
     /// Define a grammar using the specified function.
@@ -401,8 +401,39 @@ impl Grammar {
 
 fn define_grammar_from_syntax(
     g: &mut GrammarDef<'_>,
-    grammar: &s::Grammar,
+    mut grammar: s::Grammar,
 ) -> Result<(), GrammarDefError> {
+    //
+    grammar.stmts.sort_by(|s1, s2| {
+        use std::cmp::Ordering::*;
+        let cmp = match s1 {
+            s::Stmt::PrecDesc(..) => match s2 {
+                s::Stmt::PrecDesc(..) => Equal,
+                _ => Greater,
+            },
+            s::Stmt::TerminalDesc(..) => match s2 {
+                s::Stmt::PrecDesc(..) => Less,
+                s::Stmt::TerminalDesc(..) => Equal,
+                _ => Greater,
+            },
+            s::Stmt::NonterminalDesc(..) => match s2 {
+                s::Stmt::RuleDesc(..) | s::Stmt::StartDesc(..) => Greater,
+                s::Stmt::NonterminalDesc(..) => Equal,
+                s::Stmt::TerminalDesc(..) | s::Stmt::PrecDesc(..) => Less,
+            },
+            s::Stmt::RuleDesc(..) => match s2 {
+                s::Stmt::StartDesc(..) => Greater,
+                s::Stmt::RuleDesc(..) => Equal,
+                _ => Less,
+            },
+            s::Stmt::StartDesc(..) => match s2 {
+                s::Stmt::StartDesc(..) => Equal,
+                _ => Less,
+            },
+        };
+        cmp.reverse()
+    });
+
     let mut precedences = IndexMap::default();
     let mut next_priority = 0;
     let mut symbols = IndexMap::default();
