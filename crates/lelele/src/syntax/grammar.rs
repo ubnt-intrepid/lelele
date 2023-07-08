@@ -103,20 +103,20 @@ pub enum Symbol {
     Stmts,
     /// Nonterminal `Stmt`.
     Stmt,
+    /// Nonterminal `Idents`.
+    Idents,
+    /// Nonterminal `Configs`.
+    Configs,
     /// Nonterminal `Productions`.
     Productions,
     /// Nonterminal `Production`.
     Production,
-    /// Nonterminal `Configs`.
-    Configs,
-    /// Nonterminal `Config`.
-    Config,
-    /// Nonterminal `Idents`.
-    Idents,
     /// Nonterminal `ProductionElems`.
     ProductionElems,
     /// Nonterminal `ProductionElem`.
     ProductionElem,
+    /// Nonterminal `Config`.
+    Config,
 }
 /// The generated LR(1) parser definition.
 #[derive(Debug, Default)]

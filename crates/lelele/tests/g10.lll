@@ -1,7 +1,6 @@
 // imported from <todo>
 
 @terminal A X LPAREN RPAREN;
-@nonterminal E T O;
 
 @rule E :=
     | E O T

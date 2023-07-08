@@ -1,7 +1,6 @@
 // imported from <todo>
 
 @terminal A PLUS NUM LPAREN RPAREN;
-@nonterminal E T;
 
 @rule E :=
     | E PLUS T

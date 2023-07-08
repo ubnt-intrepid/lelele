@@ -8,9 +8,6 @@
 @terminal { prec = add } PLUS MINUS;
 @terminal { prec = mul } STAR SLASH;
 
-@nonterminal Expr;
-@start Expr;
-
 @rule Expr :=
     | Expr PLUS Expr
     | Expr MINUS Expr

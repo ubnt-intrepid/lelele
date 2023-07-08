@@ -2,7 +2,6 @@
 
 @terminal COMMA COLON ID;
 
-@nonterminal Def ParamSpec ReturnSpec Type Name NameList;
 @start Def;
 
 @rule Def := ParamSpec ReturnSpec COMMA;

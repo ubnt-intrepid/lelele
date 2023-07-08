@@ -436,7 +436,8 @@ fn define_grammar_from_syntax(
 
     let mut precedences = IndexMap::default();
     let mut next_priority = 0;
-    let mut symbols = IndexMap::default();
+    let mut terminals = IndexMap::default();
+    let mut nonterminals = IndexMap::default();
 
     for desc in &grammar.stmts {
         match desc {
@@ -454,6 +455,7 @@ fn define_grammar_from_syntax(
                 precedences.insert(ident.to_string(), Precedence::new(next_priority, assoc));
                 next_priority += 1;
             }
+
             s::Stmt::TerminalDesc(s::TerminalDesc { configs, idents }) => {
                 let mut prec = None;
                 for config in configs {
@@ -472,19 +474,19 @@ fn define_grammar_from_syntax(
                 };
                 for name in idents {
                     let symbol = g.terminal(&*name, prec)?;
-                    symbols.insert(name, symbol);
+                    terminals.insert(name, symbol);
                 }
             }
 
             s::Stmt::NonterminalDesc(s::NonterminalDesc { idents }) => {
                 for name in idents {
                     let symbol = g.nonterminal(&*name)?;
-                    symbols.insert(name, symbol);
+                    nonterminals.insert(name, symbol);
                 }
             }
 
             s::Stmt::StartDesc(s::StartDesc { name }) => {
-                let start_symbol = symbols
+                let start_symbol = nonterminals
                     .get(name)
                     .copied()
                     .ok_or_else(|| format!("unknown start symbol: `{}'", name))?;
@@ -492,10 +494,16 @@ fn define_grammar_from_syntax(
             }
 
             s::Stmt::RuleDesc(s::RuleDesc { left, productions }) => {
-                let left = symbols
-                    .get(left)
-                    .copied()
-                    .ok_or_else(|| format!("unknown left symbol: `{}'", left))?;
+                let left = match nonterminals.get(left) {
+                    Some(s) => *s,
+                    None => {
+                        // 未登場の記号は非終端記号と解釈する
+                        let id = g.nonterminal(left)?;
+                        nonterminals.insert(left, id);
+                        id
+                    }
+                };
+
                 for production in productions {
                     let mut prec = None;
                     for config in &production.configs {
@@ -513,10 +521,18 @@ fn define_grammar_from_syntax(
                     for symbol in &production.elems {
                         use s::ProductionElem::*;
                         let symbol = match symbol {
-                            Ident(symbol) => symbols
-                                .get(symbol)
-                                .copied()
-                                .ok_or_else(|| format!("unknown symbol: `{}'", symbol))?,
+                            Ident(symbol) => {
+                                let s = terminals.get(symbol).or_else(|| nonterminals.get(symbol));
+                                match s {
+                                    Some(s) => *s,
+                                    None => {
+                                        // 未登場の記号は非終端記号と解釈する
+                                        let id = g.nonterminal(symbol)?;
+                                        nonterminals.insert(symbol, id);
+                                        id
+                                    }
+                                }
+                            }
                             ErrorToken => SymbolRef::error_token(),
                         };
                         right.push(symbol);

@@ -72,14 +72,12 @@
 
 //-----------------------------------------------------------------------
 
-@nonterminal Main;
 @rule Main :=
     | Stage HeaderElemList NxToplevel
     | Stage HeaderElemList NxWhl EOF
     | EOF
     ;
 
-@nonterminal Stage;
 @rule Stage :=
     | @empty
     | HEADER_STAGE0
@@ -87,19 +85,16 @@
     | HEADER_PERSISTENT0
     ;
 
-@nonterminal HeaderElem;
 @rule HeaderElem :=
     | HEADER_REQUIRE
     | HEADER_IMPORT
     ;
 
-@nonterminal HeaderElemList;
 @rule HeaderElemList :=
     | @empty
     | HeaderElem HeaderElemList
     ;
 
-@nonterminal NxToplevel;
 @rule NxToplevel :=
     | LET_REC NxRecDec NxTopSubSeq
     | LET_NONREC NxNonRecDec NxTopSubSeq
@@ -114,26 +109,22 @@
     | LET_VERT NxVertMacroDec NxTopSubSeq
     ;
 
-@nonterminal NxTopSubSeq;
 @rule NxTopSubSeq :=
     | NxToplevel
     | EOF
     | IN NxLet EOF
     ;
 
-@nonterminal NxSigOpt;
 @rule NxSigOpt :=
     | @empty
     | COLON SIG NxSigElemList END
     ;
 
-@nonterminal NxSigElemList;
 @rule NxSigElemList :=
     | @empty
     | NxSigElem NxSigElemList
     ;
 
-@nonterminal NxSigElem;
 @rule NxSigElem :=
     | TYPE TypeVarList VAR Constraints
     | VAL VAR COLON TxFunc Constraints
@@ -144,23 +135,19 @@
     | DIRECT VERT_CMD COLON TxFunc Constraints
     ;
 
-@nonterminal Constraints;
 @rule Constraints :=
     | ConstraintList
     ;
 
-@nonterminal ConstraintList;
 @rule ConstraintList :=
     | @empty
     | Constraint ConstraintList
     ;
 
-@nonterminal Constraint;
 @rule Constraint :=
     | CONSTRAINT TYPE_VAR CONS KxTop
     ;
 
-@nonterminal NxStruct;
 @rule NxStruct :=
     | END
     | LET_REC NxRecDec NxStruct
@@ -174,46 +161,38 @@
     | OPEN CONSTRUCTOR NxStruct
     ;
 
-@nonterminal NxHorzDec;
 @rule NxHorzDec :=
     | VAR HORZ_CMD ArgList DEF_EQ NxLet
     | HORZ_CMD ArgPats DEF_EQ NxLet
     ;
 
-@nonterminal NxVertDec;
 @rule NxVertDec :=
     | VAR VERT_CMD ArgList DEF_EQ NxLet
     | VERT_CMD ArgPats DEF_EQ NxLet
     ;
 
-@nonterminal NxMathDec;
 @rule NxMathDec :=
     | HORZ_CMD ArgList DEF_EQ NxLet
     ;
 
-@nonterminal MacroParamList;
 @rule MacroParamList :=
     | @empty
     | MacroParam MacroParamList
     ;
 
-@nonterminal NxHorzMacroDec;
 @rule NxHorzMacroDec :=
     | HORZ_MACRO MacroParamList DEF_EQ NxLet
     ;
 
-@nonterminal NxVertMacroDec;
 @rule NxVertMacroDec :=
     | VERT_MACRO MacroParamList DEF_EQ NxLet
     ;
 
-@nonterminal MacroParam;
 @rule MacroParam :=
     | VAR
     | EXACT_TILDE VAR
     ;
 
-@nonterminal NonRecDecArgPart;
 @rule NonRecDecArgPart :=
     | COLON TxFunc
     | COLON TxFunc BAR ArgListNonempty
@@ -221,7 +200,6 @@
     | ArgList
     ;
 
-@nonterminal RecDecArgPart;
 @rule RecDecArgPart :=
     | COLON TxFunc
     | COLON TxFunc BAR PatBotListNonempty
@@ -229,38 +207,32 @@
     | ArgPats
     ;
 
-@nonterminal Arg;
 @rule Arg :=
     | PatBot
     | OPTIONAL VAR
     | OPTIONAL LPAREN BinOp RPAREN
     ;
 
-@nonterminal ArgList;
 @rule ArgList :=
     | @empty
     | Arg ArgList
     ;
 
-@nonterminal ArgListNonempty;
 @rule ArgListNonempty :=
     | Arg
     | Arg ArgList
     ;
 
-@nonterminal PatBotList;
 @rule PatBotList :=
     | @empty
     | PatBot PatBotList
     ;
 
-@nonterminal PatBotListNonempty;
 @rule PatBotListNonempty :=
     | PatBot
     | PatBot PatBotListNonempty
     ;
 
-@nonterminal NxRecDec;
 @rule NxRecDec :=
     | VAR                 RecDecArgPart DEF_EQ NxLet NxRecDecSub
     | LPAREN BinOp RPAREN RecDecArgPart DEF_EQ NxLet NxRecDecSub
@@ -268,55 +240,46 @@
     | LPAREN BinOp RPAREN RecDecArgPart DEF_EQ NxLet BAR NxRecDecPar NxRecDecSub
     ;
 
-@nonterminal NxRecDecPar;
 @rule NxRecDecPar :=
     | ArgPats DEF_EQ NxLet BAR NxRecDecPar
     | ArgPats DEF_EQ NxLet
     ;
 
-@nonterminal NxRecDecSub;
 @rule NxRecDecSub :=
     | LET_AND NxRecDec
     | @empty
     ;
 
-@nonterminal NxNonRecDec;
 @rule NxNonRecDec :=
     | PatBot NonRecDecArgPart DEF_EQ NxLet
     ;
 
-@nonterminal NxVariantDec;
 @rule NxVariantDec :=
     | NxTypeEq
     | NxTypeEq LET_AND NxVariantDec
     ;
 
-@nonterminal NxTypeEq;
 @rule NxTypeEq :=
     | TypeVarList VAR DEF_EQ BAR Variants Constraints
     | TypeVarList VAR DEF_EQ     Variants Constraints
     | TypeVarList VAR DEF_EQ TxFunc       Constraints
     ;
 
-@nonterminal TypeVarList;
 @rule TypeVarList :=
     | @empty
     | TYPE_VAR TypeVarList
     ;
 
-@nonterminal KxTop;
 @rule KxTop :=
     | BRECORD TxRecord ERECORD
     ;
 
-@nonterminal NxLet;
 @rule NxLet :=
     | MATCH NxLet WITH BAR Pats
     | MATCH NxLet WITH     Pats
     | NxLetSub
     ;
 
-@nonterminal NxLetSub;
 @rule NxLetSub :=
     | LET_REC NxRecDec IN NxLet
     | LET_NONREC NxNonRecDec IN NxLet
@@ -326,37 +289,31 @@
     | NxWhl
     ;
 
-@nonterminal NxWhl;
 @rule NxWhl :=
     | WHILE NxLet NxWhl
     | NxIf
     ;
 
-@nonterminal NxIf;
 @rule NxIf :=
     | IF NxLet THEN NxLet ELSE NxLet
     | NxBfr
     ;
 
-@nonterminal NxBfr;
 @rule NxBfr :=
     | NxLambda BEFORE NxBfr
     | NxLambda
     ;
 
-@nonterminal NxLambda;
 @rule NxLambda :=
     | VAR OVERWRITE_EQ NxOp
     | LAMBDA ArgPats ARROW NxOp
     | NxOp
     ;
 
-@nonterminal ArgPats;
 @rule ArgPats :=
     | PatBotList
     ;
 
-@nonterminal NxOp;
 @rule NxOp :=
     | NxOp BINOP_BAR NxOp
     | NxOp BINOP_AMP NxOp
@@ -379,7 +336,6 @@
     | NxApp
     ;
 
-@nonterminal NxApp;
 @rule NxApp :=
     | NxApp NxUnsub
     | NxApp CONSTRUCTOR
@@ -389,7 +345,6 @@
     | NxUnsub
     ;
 
-@nonterminal NxUnsub;
 @rule NxUnsub :=
     | UNOP_EXCLAM NxBot
     | EXACT_AMP NxBot
@@ -397,7 +352,6 @@
     | NxBot
     ;
 
-@nonterminal NxBot;
 @rule NxBot :=
     | NxBot ACCESS VAR
     | VAR
@@ -422,98 +376,82 @@
     | OPEN_MODULE NxLet RPAREN
     ;
 
-@nonterminal NxListSynt;
 @rule NxListSynt :=
     | BLIST ELIST
     | BLIST NxList ELIST
     ;
 
-@nonterminal NxRecordSynt;
 @rule NxRecordSynt :=
     | BRECORD ERECORD
     | BRECORD NxRecord ERECORD
     | BRECORD NxBot WITH NxRecord ERECORD
     ;
 
-@nonterminal Path;
 @rule Path :=
     | NxBot PathSub
     ;
 
-@nonterminal PathSub;
 @rule PathSub :=
     | PathComp PathSub
     | @empty
     | PathCompCycle
     ;
 
-@nonterminal PathComp;
 @rule PathComp :=
     | PATHLINE NxBot
     | PATHCURVE CONTROLS NxBot LET_AND NxBot PATHCURVE NxBot
     ;
 
-@nonterminal PathCompCycle;
 @rule PathCompCycle :=
     | PATHLINE CYCLE
     | PATHCURVE CONTROLS NxBot LET_AND NxBot PATHCURVE CYCLE
     ;
 
-@nonterminal NxRecord;
 @rule NxRecord :=
     | NxRecordField
     | NxRecordField LISTPUNCT
     | NxRecordField LISTPUNCT NxRecord
     ;
 
-@nonterminal NxRecordField;
 @rule NxRecordField :=
     | VAR DEF_EQ NxLet
     ;
 
-@nonterminal NxList;
 @rule NxList :=
     | NxLet
     | NxLet LISTPUNCT
     | NxLet LISTPUNCT NxList
     ;
 
-@nonterminal Variants;
 @rule Variants :=
     | Variant
     | Variant BAR Variants
     ;
 
-@nonterminal Variant;
 @rule Variant :=
     | CONSTRUCTOR OF TxFunc
     | CONSTRUCTOR
     ;
 
-@nonterminal TxFunc;
 @rule TxFunc :=
     | TxFuncOpts ARROW TxFunc
     | TxProd
     ;
 
-@nonterminal TxFuncOpts;
 @rule TxFuncOpts :=
     | TxProd OPTIONALARROW TxFuncOpts
     | TxProd
     ;
 
-@nonterminal TxProd;
 @rule TxProd :=
     | TxAppreNonemptyList
     ;
 
-@nonterminal TxAppreNonemptyList;
 @rule TxAppreNonemptyList :=
     | TxAppre
     | TxAppre EXACT_TIMES TxAppreNonemptyList
     ;
 
-@nonterminal TxAppre;
 @rule TxAppre :=
     | TxApp
     | BLIST TxList ELIST HORZCMDTYPE
@@ -524,7 +462,6 @@
     | TYPE_VAR
     ;
 
-@nonterminal TxApp;
 @rule TxApp :=
     | TxBot TxApp
     | LPAREN TxFunc RPAREN TxApp
@@ -532,62 +469,52 @@
     | TxBot
     ;
 
-@nonterminal TxBot;
 @rule TxBot :=
     | VAR
     | VAR_WITH_MOD
     ;
 
-@nonterminal TxList;
 @rule TxList :=
     | @empty
     | TxListElem
     | TxListElem LISTPUNCT TxList
     ;
 
-@nonterminal TxListElem;
 @rule TxListElem :=
     | TxFunc
     | TxAppre OPTIONALTYPE
     ;
 
-@nonterminal TxRecord;
 @rule TxRecord :=
     | TxRecordElem
     | TxRecordElem LISTPUNCT
     | TxRecordElem LISTPUNCT TxRecord
     ;
 
-@nonterminal TxRecordElem;
 @rule TxRecordElem :=
     | VAR COLON TxFunc
     ;
 
-@nonterminal Tuple;
 @rule Tuple :=
     | NxLet
     | NxLet COMMA Tuple
     ;
 
-@nonterminal Pats;
 @rule Pats :=
     | Pat
     | Pat BAR Pats
     ;
 
-@nonterminal Pat;
 @rule Pat :=
     | PatAs ARROW NxLetSub
     | PatAs WHEN NxLetSub ARROW NxLetSub
     ;
 
-@nonterminal PatAs;
 @rule PatAs :=
     | PatTr AS VAR
     | PatTr
     ;
 
-@nonterminal PatTr;
 @rule PatTr :=
     | PatBot CONS PatTr
     | CONSTRUCTOR PatBot
@@ -595,7 +522,6 @@
     | PatBot
     ;
 
-@nonterminal PatBot;
 @rule PatBot :=
     | INT_CONST
     | TRUE
@@ -611,20 +537,17 @@
     | LPAREN PatAs COMMA PatTuple RPAREN
     ;
 
-@nonterminal PatTuple;
 @rule PatTuple :=
     | PatAs
     | PatAs COMMA PatTuple
     ;
 
-@nonterminal PatList;
 @rule PatList :=
     | PatAs
     | PatAs LISTPUNCT
     | PatAs LISTPUNCT PatList
     ;
 
-@nonterminal BinOp;
 @rule BinOp :=
     | UNOP_EXCLAM
     | BINOP_TIMES
@@ -644,66 +567,55 @@
     | LNOT
     ;
 
-@nonterminal SxSep;
 @rule SxSep :=
     | SEP SxList
     | SxBlock
     | SxItems
     ;
 
-@nonterminal SxItems;
 @rule SxItems :=
     | SxItem
     | SxItem SxItems
     ;
 
-@nonterminal SxList;
 @rule SxList :=
     | @empty
     |  SxBlock SEP SxList
     ;
 
-@nonterminal SxItem;
 @rule SxItem :=
     | ITEM SxBlock
     ;
 
-@nonterminal HCmd;
 @rule HCmd :=
     | HORZ_CMD
     | HORZ_CMD_WITH_MOD
     ;
 
-@nonterminal MCmd;
 @rule MCmd :=
     | MATH_CMD
     | MATH_CMD_WITH_MOD
     ;
 
-@nonterminal MathBlock;
 @rule MathBlock :=
     | SEP MathList
     | MathMain
     ;
 
-@nonterminal MathList;
 @rule MathList :=
     | @empty
     | MathMainTerminated MathList
     ;
 
-@nonterminal MathMainTerminated;
 @rule MathMainTerminated :=
     | MathMain SEP
     ;
 
-@nonterminal MathMain;
 @rule MathMain :=
     | @empty
     | MathTop MathMain
     ;
 
-@nonterminal MathTop;
 @rule MathTop :=
     | MathBot
     | MathBot SUPERSCRIPT MathGroup
@@ -717,26 +629,22 @@
     | MathBot PRIMES SUPERSCRIPT MathGroup SUBSCRIPT MathGroup
     ;
 
-@nonterminal MathGroup;
 @rule MathGroup :=
     | BMATHGRP MathMain EMATHGRP
     | MathBot
     ;
 
-@nonterminal MathBot;
 @rule MathBot :=
     | MATCHARS
     | MCmd MathArgList
     | VAR_IN_MATH
     ;
 
-@nonterminal MathArgList;
 @rule MathArgList :=
     | @empty
     | MathArg MathArgList
     ;
 
-@nonterminal MathArg;
 @rule MathArg :=
     | BMATHGRP MathGroup EMATHGRP
     | BHORZGRP SxSep EHORZGRP
@@ -747,12 +655,10 @@
     | NArg
     ;
 
-@nonterminal SxBlock;
 @rule SxBlock :=
     | Ih
     ;
 
-@nonterminal Ih;
 @rule Ih :=
     | IhText
     | IhText IhCmd Ih
@@ -760,13 +666,11 @@
     | @empty
     ;
 
-@nonterminal NArgList;
 @rule NArgList :=
     | @empty
     | NArg NArgList
     ;
 
-@nonterminal IhCmd;
 @rule IhCmd :=
     | HORZ_MACRO MacroArgs
     | HCmd NArgList SArgs
@@ -775,37 +679,31 @@
     | VAR_IN_HORZ ENDACTIVE
     ;
 
-@nonterminal IhText;
 @rule IhText :=
     | IhChar
     | IhChar IhText
     ;
 
-@nonterminal IhChar;
 @rule IhChar :=
     | CHAR
     | SPACE
     | BREAK
     ;
 
-@nonterminal MacroArgs;
 @rule MacroArgs :=
     | MacroNArgList ENDACTIVE
     ;
 
-@nonterminal MacroNArgList;
 @rule MacroNArgList :=
     | @empty
     | MacroNArg MacroNArgList
     ;
 
-@nonterminal MacroNArg;
 @rule MacroNArg :=
     | LPAREN NxBot RPAREN
     | EXACT_TILDE LPAREN NxBot RPAREN
     ;
 
-@nonterminal NArg;
 @rule NArg :=
     | LPAREN NxLet RPAREN
     | LPAREN RPAREN
@@ -818,37 +716,31 @@
     | OMISSION
     ;
 
-@nonterminal SArgs;
 @rule SArgs :=
     | ENDACTIVE
     | SArgListNonempty
     ;
 
-@nonterminal SArgListNonempty;
 @rule SArgListNonempty :=
     | SArg
     | SArg SArgListNonempty
     ;
 
-@nonterminal SArg;
 @rule SArg :=
     | BVERTGRP VxBlock EVERTGRP
     | BHORZGRP SxSep EHORZGRP
     ;
 
-@nonterminal VCmd;
 @rule VCmd :=
     | VERT_CMD
     | VERT_CMD_WITH_MOD
     ;
 
-@nonterminal VxBlock;
 @rule VxBlock :=
     | @empty
     | VxBot VxBlock
     ;
 
-@nonterminal VxBot;
 @rule VxBot :=
     | VCmd NArgList SArgs
     | VAR_IN_VERT ENDACTIVE

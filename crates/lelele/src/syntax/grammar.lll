@@ -4,7 +4,6 @@
 @terminal KW_TERMINAL KW_NONTERMINAL KW_START KW_RULE KW_PREC KW_EMPTY KW_ERROR;
 @terminal IDENT;
 
-@nonterminal Grammar Stmts Stmt Productions Production Configs Config Idents ProductionElems ProductionElem;
 @start Grammar;
 
 @rule Grammar := Stmts ;

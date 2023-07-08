@@ -25,7 +25,6 @@
 @terminal { prec = prec_comma } COMMA;
 @terminal { prec = prec_semicolon } SEMICOLON;
 
-@nonterminal SimpleExpr Expr FormalArgs ActualArgs FunDef Pat Elems;
 @start Expr;
 
 @rule SimpleExpr :=

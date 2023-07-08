@@ -1,7 +1,6 @@
 // imported from <todo>
 
 @terminal X Y S PLUS;
-@nonterminal a b c d e;
 
 @rule a := a b | b ;
 @rule b := c ;

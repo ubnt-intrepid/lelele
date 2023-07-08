@@ -10,10 +10,6 @@
 @terminal { prec = add } PLUS MINUS;
 @terminal { prec = mul } STAR SLASH;
 
-// Define the nonterminal symbols.
-@nonterminal Expr;
-@start Expr;
-
 // Define the production rule for `expr`.
 @rule Expr :=
     | Expr PLUS Expr
