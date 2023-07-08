@@ -1,27 +1,39 @@
 use anyhow::Context as _;
 use clap::Parser;
 use lelele::{codegen::Codegen, dfa::DFA, grammar::Grammar};
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// The path of grammar definition file.
-    input: PathBuf,
+    input: Vec<PathBuf>,
 }
 
 fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
-
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    tracing::trace!("CLI args = {:?}", args);
+    let args = Args::parse();
+    tracing::trace!("parsed CLI args = {:?}", args);
 
-    let in_file =
-        fs::canonicalize(&args.input).context("failed to canonicalize the input file name")?;
+    for in_file in &args.input {
+        tracing::info!("process {}", in_file.display());
+        process_file(&args, in_file)
+            .with_context(|| anyhow::anyhow!("errored during processing {}", in_file.display()))?;
+    }
+
+    Ok(())
+}
+
+fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
+    let in_file = fs::canonicalize(in_file) //
+        .context("failed to canonicalize the input file name")?;
 
     let out_file = in_file.with_extension("rs");
     let backup_file = in_file.with_extension("rs.bak");
