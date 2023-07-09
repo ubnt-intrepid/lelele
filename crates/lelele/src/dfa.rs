@@ -2,6 +2,7 @@
 
 use crate::{
     grammar::{Assoc, Grammar, NonterminalID, Precedence, RuleID, Symbol, TerminalID},
+    util::display_fn,
     IndexMap, IndexSet,
 };
 use std::{
@@ -80,91 +81,78 @@ impl DFA {
     }
 
     pub fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
-        DFADisplay {
-            grammar: g,
-            dfa: self,
-        }
-    }
-}
-
-struct DFADisplay<'g> {
-    grammar: &'g Grammar,
-    dfa: &'g DFA,
-}
-impl fmt::Display for DFADisplay<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Self { grammar, dfa, .. } = self;
-
-        for (i, (id, node)) in dfa.nodes().enumerate() {
-            if i > 0 {
-                writeln!(f)?;
-            }
-
-            writeln!(f, "#### State {:02}", id)?;
-            writeln!(f, "## item_sets")?;
-            for (core_item, lookaheads) in &node.item_set {
-                write!(f, "- {}  [", core_item.display(grammar))?;
-                for (i, lookahead) in lookaheads.iter().enumerate() {
-                    if i > 0 {
-                        f.write_str(" ")?;
-                    }
-                    write!(f, "{}", grammar.terminal(lookahead))?;
+        display_fn(|f| {
+            for (i, (id, node)) in self.nodes().enumerate() {
+                if i > 0 {
+                    writeln!(f)?;
                 }
-                f.write_str("]\n")?;
-            }
 
-            writeln!(f, "## actions")?;
-            for (token, action) in &node.actions {
-                let token = grammar.terminal(token);
-                match action {
-                    Action::Shift(n) => {
-                        writeln!(f, "- {} => shift({:02})", token, n)?;
+                writeln!(f, "#### State {:02}", id)?;
+                writeln!(f, "## item_sets")?;
+                for (core_item, lookaheads) in &node.item_set {
+                    write!(f, "- {}  [", core_item.display(g))?;
+                    for (i, lookahead) in lookaheads.iter().enumerate() {
+                        if i > 0 {
+                            f.write_str(" ")?;
+                        }
+                        write!(f, "{}", g.terminal(lookahead))?;
                     }
-                    Action::Reduce(reduce) => {
-                        let reduce = grammar.rule(reduce);
-                        writeln!(f, "- {} => reduce({})", token, reduce.display(grammar))?;
-                    }
-                    Action::Accept => {
-                        writeln!(f, "- {} => accept", token)?;
-                    }
-                    Action::Fail => {
-                        writeln!(f, "- {} => fail", token)?;
-                    }
-                    Action::Inconsistent {
-                        reason,
-                        shift,
-                        reduces,
-                    } => {
-                        let token = grammar.terminal(token);
-                        writeln!(f, "- {} => inconsistent(reason = {:?})", token, reason)?;
-                        writeln!(f, "## conflicted actions on {}", token)?;
-                        if let Some(n) = shift {
-                            writeln!(f, "  - shift({:02})", n)?;
-                            writeln!(f, "  ## corresponding items:")?;
-                            for core_item in node.item_set.keys() {
-                                let rule = self.grammar.rule(&core_item.rule);
-                                if rule.right().get(core_item.marker).map_or(
-                                    false,
-                                    |n| matches!(n, Symbol::T(t) if *t == token.id()),
-                                ) {
-                                    writeln!(f, "    - {}", core_item.display(self.grammar))?;
+                    f.write_str("]\n")?;
+                }
+
+                writeln!(f, "## actions")?;
+                for (token, action) in &node.actions {
+                    let token = g.terminal(token);
+                    match action {
+                        Action::Shift(n) => {
+                            writeln!(f, "- {} => shift({:02})", token, n)?;
+                        }
+                        Action::Reduce(reduce) => {
+                            let reduce = g.rule(reduce);
+                            writeln!(f, "- {} => reduce({})", token, reduce.display(g))?;
+                        }
+                        Action::Accept => {
+                            writeln!(f, "- {} => accept", token)?;
+                        }
+                        Action::Fail => {
+                            writeln!(f, "- {} => fail", token)?;
+                        }
+                        Action::Inconsistent {
+                            reason,
+                            shift,
+                            reduces,
+                        } => {
+                            let token = g.terminal(token);
+                            writeln!(f, "- {} => inconsistent(reason = {:?})", token, reason)?;
+                            writeln!(f, "## conflicted actions on {}", token)?;
+                            if let Some(n) = shift {
+                                writeln!(f, "  - shift({:02})", n)?;
+                                writeln!(f, "  ## corresponding items:")?;
+                                for core_item in node.item_set.keys() {
+                                    let rule = g.rule(&core_item.rule);
+                                    if rule.right().get(core_item.marker).map_or(
+                                        false,
+                                        |n| matches!(n, Symbol::T(t) if *t == token.id()),
+                                    ) {
+                                        writeln!(f, "    - {}", core_item.display(g))?;
+                                    }
                                 }
                             }
-                        }
-                        for reduce in reduces {
-                            let reduce = grammar.rule(reduce);
-                            writeln!(f, "  - reduce({})", reduce.display(grammar))?;
+                            for reduce in reduces {
+                                let reduce = g.rule(reduce);
+                                writeln!(f, "  - reduce({})", reduce.display(g))?;
+                            }
                         }
                     }
                 }
-            }
 
-            writeln!(f, "## gotos")?;
-            for (symbol, goto) in &node.gotos {
-                writeln!(f, "- {} => goto({:02})", grammar.nonterminal(symbol), goto)?;
+                writeln!(f, "## gotos")?;
+                for (symbol, goto) in &node.gotos {
+                    writeln!(f, "- {} => goto({:02})", g.nonterminal(symbol), goto)?;
+                }
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }
 
@@ -206,38 +194,25 @@ struct LRCoreItem {
     marker: usize,
 }
 impl LRCoreItem {
-    fn display<'g>(&'g self, grammar: &'g Grammar) -> impl fmt::Display + 'g {
-        LRCoreItemDisplay {
-            core_item: self,
-            grammar,
-        }
-    }
-}
-
-struct LRCoreItemDisplay<'g> {
-    core_item: &'g LRCoreItem,
-    grammar: &'g Grammar,
-}
-
-impl fmt::Display for LRCoreItemDisplay<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let LRCoreItem { rule, marker } = self.core_item;
-        let rule = self.grammar.rule(rule);
-        write!(f, "({} :=", self.grammar.nonterminal(&rule.left()))?;
-        for (i, prod) in rule.right().iter().enumerate() {
-            if i == *marker {
+    fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
+        display_fn(|f| {
+            let rule = g.rule(&self.rule);
+            write!(f, "({} :=", g.nonterminal(&rule.left()))?;
+            for (i, prod) in rule.right().iter().enumerate() {
+                if i == self.marker {
+                    f.write_str(" .")?;
+                }
+                match prod {
+                    Symbol::T(t) => write!(f, " {}", g.terminal(t))?,
+                    Symbol::N(n) => write!(f, " {}", g.nonterminal(n))?,
+                }
+            }
+            if self.marker == rule.right().len() {
                 f.write_str(" .")?;
             }
-            match prod {
-                Symbol::T(t) => write!(f, " {}", self.grammar.terminal(t))?,
-                Symbol::N(n) => write!(f, " {}", self.grammar.nonterminal(n))?,
-            }
-        }
-        if *marker == rule.right().len() {
-            f.write_str(" .")?;
-        }
 
-        f.write_str(")")
+            f.write_str(")")
+        })
     }
 }
 

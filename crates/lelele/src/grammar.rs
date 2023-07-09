@@ -1,6 +1,6 @@
 //! Grammar types.
 
-use crate::{syntax as s, IndexMap, IndexSet};
+use crate::{syntax as s, util::display_fn, IndexMap, IndexSet};
 use std::{
     borrow::{Borrow, Cow},
     fmt, fs,
@@ -190,10 +190,19 @@ impl Rule {
 
     // `"LHS := R1 R2 R3"`
     pub fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
-        RuleDisplay {
-            grammar: g,
-            rule: self,
-        }
+        display_fn(|f| {
+            write!(f, "{} := ", g.nonterminal(&self.left()))?;
+            for (i, symbol) in self.right().iter().enumerate() {
+                if i > 0 {
+                    write!(f, " ")?;
+                }
+                match symbol {
+                    Symbol::T(t) => write!(f, "{}", g.terminal(t))?,
+                    Symbol::N(n) => write!(f, "{}", g.nonterminal(n))?,
+                }
+            }
+            Ok(())
+        })
     }
 }
 impl PartialEq for Rule {
@@ -210,27 +219,6 @@ impl Hash for Rule {
 impl Borrow<RuleID> for Rule {
     fn borrow(&self) -> &RuleID {
         &self.id
-    }
-}
-
-struct RuleDisplay<'g> {
-    grammar: &'g Grammar,
-    rule: &'g Rule,
-}
-impl fmt::Display for RuleDisplay<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Self { grammar, rule } = self;
-        write!(f, "{} := ", grammar.nonterminal(&rule.left()))?;
-        for (i, symbol) in rule.right().iter().enumerate() {
-            if i > 0 {
-                write!(f, " ")?;
-            }
-            match symbol {
-                Symbol::T(t) => write!(f, "{}", grammar.terminal(t))?,
-                Symbol::N(n) => write!(f, "{}", grammar.nonterminal(n))?,
-            }
-        }
-        Ok(())
     }
 }
 
