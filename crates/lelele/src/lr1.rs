@@ -1,4 +1,4 @@
-//! Definition and generation of LR(1) automata.
+//! The implementation of LR(1) automaton.
 
 use crate::{
     grammar::{Assoc, Grammar, NonterminalID, Precedence, RuleID, Symbol, TerminalID},
@@ -20,6 +20,21 @@ pub enum DFAError {
         #[source]
         ConflictResolutionError,
     ),
+}
+
+#[derive(Debug, Copy, Clone)]
+enum MergeMode {
+    /// Items are equivalent in the sense of of Knuth's canonical LR(1) method,
+    /// that is, each item sets have the same LR(0) cores and their lookahead symbols
+    /// are also equal.
+    Canonical,
+
+    /// Items are weakly compatible in the sense of Pager's Practical General Method (PGM).
+    PGM,
+
+    /// Items are compatible in the sense of DeRemer's LALR(1) method, that is,
+    /// each item sets have the same LR(0) cores but different lookahead symbols.
+    LALR,
 }
 
 #[derive(Debug)]
@@ -54,12 +69,6 @@ impl Config {
         self.merge_mode = MergeMode::LALR;
         self
     }
-
-    pub fn generate(&self, grammar: &Grammar) -> Result<DFA, DFAError> {
-        let mut gen = DFAGenerator::new(grammar, self.merge_mode);
-        gen.populate_nodes();
-        gen.finalize()
-    }
 }
 
 #[derive(Debug)]
@@ -69,7 +78,13 @@ pub struct DFA {
 
 impl DFA {
     pub fn generate(grammar: &Grammar) -> Result<Self, DFAError> {
-        Config::new().generate(grammar)
+        Self::generate_with_config(grammar, &Config::new())
+    }
+
+    pub fn generate_with_config(grammar: &Grammar, config: &Config) -> Result<Self, DFAError> {
+        let mut gen = DFAGenerator::new(grammar, config);
+        gen.populate_nodes();
+        gen.finalize()
     }
 
     pub fn nodes(&self) -> impl Iterator<Item = (NodeID, &DFANode)> + '_ {
@@ -89,9 +104,9 @@ impl DFA {
 
                 writeln!(f, "#### State {:02}", id)?;
                 writeln!(f, "## item_sets")?;
-                for (core_item, lookaheads) in &node.item_set {
-                    write!(f, "- {}  [", core_item.display(g))?;
-                    for (i, lookahead) in lookaheads.iter().enumerate() {
+                for (core, ctx) in &node.item_set {
+                    write!(f, "- {}  [", core.display(g))?;
+                    for (i, lookahead) in ctx.lookaheads.iter().enumerate() {
                         if i > 0 {
                             f.write_str(" ")?;
                         }
@@ -184,16 +199,26 @@ pub struct DFANode {
     pub(crate) gotos: IndexMap<NonterminalID, NodeID>,
 }
 
+impl DFANode {
+    pub fn actions(&self) -> impl Iterator<Item = (TerminalID, &Action)> + '_ {
+        self.actions.iter().map(|(token, action)| (*token, action))
+    }
+
+    pub fn gotos(&self) -> impl Iterator<Item = (NonterminalID, NodeID)> + '_ {
+        self.gotos.iter().map(|(symbol, goto)| (*symbol, *goto))
+    }
+}
+
 // LR(1) item
 // X: Y1 Y2 ... Yn という構文規則があったとき、それにマーカ位置を付与したもの
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-struct LRCoreItem {
+struct LRItemCore {
     // grammer内におけるruleの識別子
     rule: RuleID,
     // marker位置
     marker: usize,
 }
-impl LRCoreItem {
+impl LRItemCore {
     fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
         display_fn(|f| {
             let rule = g.rule(&self.rule);
@@ -216,20 +241,15 @@ impl LRCoreItem {
     }
 }
 
+#[derive(Debug)]
+struct LRItemContext {
+    lookaheads: IndexSet<TerminalID>,
+}
+
 //  - key: core item
 //  - value: 紐付けられた先読み記号 (Eq,Hashを実装できないので別に持つ)
-type LRItemSet = BTreeMap<LRCoreItem, IndexSet<TerminalID>>;
-type LRCoreItems = BTreeSet<LRCoreItem>;
-
-impl DFANode {
-    pub fn actions(&self) -> impl Iterator<Item = (TerminalID, &Action)> + '_ {
-        self.actions.iter().map(|(token, action)| (*token, action))
-    }
-
-    pub fn gotos(&self) -> impl Iterator<Item = (NonterminalID, NodeID)> + '_ {
-        self.gotos.iter().map(|(symbol, goto)| (*symbol, *goto))
-    }
-}
+type LRItemSet = BTreeMap<LRItemCore, LRItemContext>;
+type LRItemCores = BTreeSet<LRItemCore>;
 
 /// The action that the LR automaton in a state performs on a particular
 /// lookahead symbol.
@@ -281,21 +301,6 @@ pub enum ConflictReason {
 
 // === DFAGenerator ===
 
-#[derive(Debug, Copy, Clone)]
-enum MergeMode {
-    /// Items are equivalent in the sense of of Knuth's canonical LR(1) method,
-    /// that is, each item sets have the same LR(0) cores and their lookahead symbols
-    /// are also equal.
-    Canonical,
-
-    /// Items are weakly compatible in the sense of Pager's Practical General Method (PGM).
-    PGM,
-
-    /// Items are compatible in the sense of DeRemer's LALR(1) method, that is,
-    /// each item sets have the same LR(0) cores but different lookahead symbols.
-    LALR,
-}
-
 #[derive(Debug)]
 struct PendingNodes {
     next_node_id: u64,
@@ -330,8 +335,8 @@ impl NodeExtractor<'_> {
             changed = false;
 
             // 候補の抽出
-            let mut added: IndexMap<LRCoreItem, IndexSet<TerminalID>> = IndexMap::default();
-            for (core, lookaheads) in &mut *items {
+            let mut added: IndexMap<LRItemCore, IndexSet<TerminalID>> = IndexMap::default();
+            for (core, ctx) in &mut *items {
                 let rule = self.grammar.rule(&core.rule);
 
                 // [X -> ... @ Y beta]
@@ -344,7 +349,7 @@ impl NodeExtractor<'_> {
                 // lookaheads = {x1,x2,...,xk} としたとき、
                 //   x \in First(beta x1) \cup ... \cup First(beta xk)
                 // を満たすすべての終端記号を考える
-                let x = self.first_sets.get(beta, lookaheads.iter().cloned());
+                let x = self.first_sets.get(beta, ctx.lookaheads.iter().copied());
                 for rule in self.grammar.rules() {
                     // Y: ... という形式の構文規則のみを対象にする
                     if rule.left() != *y_symbol {
@@ -352,7 +357,7 @@ impl NodeExtractor<'_> {
                     }
 
                     added
-                        .entry(LRCoreItem {
+                        .entry(LRItemCore {
                             rule: rule.id(),
                             marker: 0,
                         })
@@ -362,12 +367,14 @@ impl NodeExtractor<'_> {
             }
 
             for (core, lookaheads) in added {
-                let slot = items.entry(core).or_insert_with(|| {
+                let ctx = items.entry(core).or_insert_with(|| {
                     changed = true;
-                    IndexSet::default()
+                    LRItemContext {
+                        lookaheads: IndexSet::default(),
+                    }
                 });
                 for l in lookaheads {
-                    changed |= slot.insert(l);
+                    changed |= ctx.lookaheads.insert(l);
                 }
             }
         }
@@ -376,7 +383,7 @@ impl NodeExtractor<'_> {
     /// 指定したLRアイテム集合から遷移先のLRアイテム集合（未展開）とラベルを抽出する
     fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<Symbol, LRItemSet> {
         let mut item_sets: IndexMap<Symbol, LRItemSet> = IndexMap::default();
-        for (core, lookaheads) in items {
+        for (core, ctx) in items {
             let rule = self.grammar.rule(&core.rule);
 
             // markerが終わりまで到達していれば無視する
@@ -386,13 +393,15 @@ impl NodeExtractor<'_> {
 
             let label = &rule.right()[core.marker];
             let new_item_set = item_sets.entry(label.clone()).or_default();
-            new_item_set
-                .entry(LRCoreItem {
+            let new_ctx = new_item_set
+                .entry(LRItemCore {
                     marker: core.marker + 1,
                     ..core.clone()
                 })
-                .or_default()
-                .extend(lookaheads.iter().cloned());
+                .or_insert_with(|| LRItemContext {
+                    lookaheads: IndexSet::default(),
+                });
+            new_ctx.lookaheads.extend(ctx.lookaheads.iter().copied());
         }
         item_sets
     }
@@ -403,23 +412,25 @@ struct DFAGenerator<'g> {
     extractor: NodeExtractor<'g>,
     pending_nodes: PendingNodes,
     nodes: IndexMap<NodeID, (LRItemSet, IndexMap<Symbol, NodeID>)>,
-    same_cores: IndexMap<LRCoreItems, IndexSet<NodeID>>,
-    mode: MergeMode,
+    same_cores: IndexMap<LRItemCores, IndexSet<NodeID>>,
+    config: &'g Config,
 }
 
 impl<'g> DFAGenerator<'g> {
-    fn new(grammar: &'g Grammar, mode: MergeMode) -> Self {
+    fn new(grammar: &'g Grammar, config: &'g Config) -> Self {
         let mut pending_nodes = PendingNodes {
             next_node_id: 1,
             queue: VecDeque::new(),
         };
         let mut item_set = BTreeMap::new();
         item_set.insert(
-            LRCoreItem {
+            LRItemCore {
                 rule: RuleID::ACCEPT,
                 marker: 0,
             },
-            Some(TerminalID::EOI).into_iter().collect(),
+            LRItemContext {
+                lookaheads: Some(TerminalID::EOI).into_iter().collect(),
+            },
         );
         pending_nodes
             .queue
@@ -433,7 +444,7 @@ impl<'g> DFAGenerator<'g> {
             pending_nodes,
             nodes: IndexMap::default(),
             same_cores: IndexMap::default(),
-            mode,
+            config,
         }
     }
 
@@ -445,13 +456,13 @@ impl<'g> DFAGenerator<'g> {
             // クロージャ展開
             self.extractor.expand_closures(&mut new_item_set);
 
-            let core_items: LRCoreItems = new_item_set.keys().cloned().collect();
+            let cores: LRItemCores = new_item_set.keys().cloned().collect();
 
             // 互換性のあるノードを検索し、存在する場合はそのノードを修正し新規にノードは生成しない
-            if let Some(same_cores) = self.same_cores.get(&core_items) {
+            if let Some(same_cores) = self.same_cores.get(&cores) {
                 for &orig_id in same_cores {
                     let orig_node = &mut self.nodes[&orig_id];
-                    match compare_item_sets(self.mode, &orig_node.0, &new_item_set) {
+                    match compare_item_sets(self.config.merge_mode, &orig_node.0, &new_item_set) {
                         ItemSetDiff::Same => {
                             // 完全に一致しているので修正すら不要
                         }
@@ -459,10 +470,10 @@ impl<'g> DFAGenerator<'g> {
                         ItemSetDiff::Compatible => {
                             // 先読み記号をマージする
                             let mut modified = false;
-                            for (new_core, new_lookaheads) in &new_item_set {
-                                let lookaheads = orig_node.0.get_mut(new_core).unwrap();
-                                for l in new_lookaheads {
-                                    modified |= lookaheads.insert(l.clone());
+                            for (new_core, new_ctx) in &new_item_set {
+                                let orig_ctx = orig_node.0.get_mut(new_core).unwrap();
+                                for l in &new_ctx.lookaheads {
+                                    modified |= orig_ctx.lookaheads.insert(l.clone());
                                 }
                             }
 
@@ -505,10 +516,7 @@ impl<'g> DFAGenerator<'g> {
 
             self.nodes.insert(new_id, (new_item_set, edges));
 
-            self.same_cores
-                .entry(core_items)
-                .or_default()
-                .insert(new_id);
+            self.same_cores.entry(cores).or_default().insert(new_id);
         }
     }
 
@@ -546,15 +554,15 @@ impl<'g> DFAGenerator<'g> {
                     }
                 }
             }
-            for (core_item, lookaheads) in &item_set {
-                let rule = self.extractor.grammar.rule(&core_item.rule);
+            for (core, ctx) in &item_set {
+                let rule = self.extractor.grammar.rule(&core.rule);
                 // reduce, accept
-                if core_item.marker < rule.right().len() {
+                if core.marker < rule.right().len() {
                     continue;
                 }
-                for lookahead in lookaheads {
+                for lookahead in &ctx.lookaheads {
                     let action = pending_actions.entry(lookahead.clone()).or_default();
-                    action.reduces.push(core_item.rule.clone());
+                    action.reduces.push(core.rule.clone());
                 }
             }
 
@@ -594,7 +602,7 @@ fn compare_item_sets(mode: MergeMode, left: &LRItemSet, right: &LRItemSet) -> It
 
     let mut is_canonically_same = true;
     for (left, right) in left.values().zip(right.values()) {
-        if !left.is_superset(right) {
+        if !left.lookaheads.is_superset(&right.lookaheads) {
             is_canonically_same = false;
             break;
         }
@@ -622,7 +630,7 @@ fn is_pgm_weakly_compatible_c1(left: &LRItemSet, right: &LRItemSet) -> bool {
             if i == j {
                 continue;
             }
-            if !left.is_disjoint(right) {
+            if !left.lookaheads.is_disjoint(&right.lookaheads) {
                 return false;
             }
         }
@@ -633,7 +641,7 @@ fn is_pgm_weakly_compatible_c1(left: &LRItemSet, right: &LRItemSet) -> bool {
 fn is_pgm_weakly_compatible_c2(items: &LRItemSet) -> bool {
     for (i, c1) in items.values().enumerate() {
         for c2 in items.values().skip(i + 1) {
-            if c1.is_disjoint(c2) {
+            if c1.lookaheads.is_disjoint(&c2.lookaheads) {
                 return false;
             }
         }

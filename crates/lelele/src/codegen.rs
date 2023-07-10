@@ -1,8 +1,8 @@
 //! code generation.
 
 use crate::{
-    dfa::{Action, NodeID, DFA},
     grammar::{Grammar, TerminalID},
+    lr1::{Action, NodeID, DFA},
 };
 use std::fmt;
 

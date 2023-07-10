@@ -1,6 +1,6 @@
 //! Build script support.
 
-use crate::{codegen::Codegen, dfa::DFA, grammar::Grammar};
+use crate::{codegen::Codegen, grammar::Grammar, lr1::DFA};
 use anyhow::Context as _;
 use std::{
     env, fs,

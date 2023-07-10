@@ -1,6 +1,10 @@
 use anyhow::Context as _;
 use clap::{Parser, ValueEnum};
-use lelele::{codegen::Codegen, dfa, grammar::Grammar};
+use lelele::{
+    codegen::Codegen,
+    grammar::Grammar,
+    lr1::{self, DFA},
+};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -65,13 +69,13 @@ fn process_file(args: &Args, in_file: &Path) -> anyhow::Result<()> {
         );
     }
 
-    let mut dfa_config = dfa::Config::new();
+    let mut dfa_config = lr1::Config::new();
     match args.merge_mode {
         MergeMode::Canonical => dfa_config.use_canonical(),
         MergeMode::PGM => dfa_config.use_pgm(),
         MergeMode::LALR => dfa_config.use_lalr(),
     };
-    let dfa = dfa_config.generate(&grammar)?;
+    let dfa = DFA::generate_with_config(&grammar, &dfa_config)?;
 
     let mut num_inconsist_states = 0;
     for (_, node) in dfa.nodes() {

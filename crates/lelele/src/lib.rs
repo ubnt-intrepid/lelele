@@ -2,8 +2,8 @@
 
 pub mod build;
 pub mod codegen;
-pub mod dfa;
 pub mod grammar;
+pub mod lr1;
 pub mod reachability;
 pub mod syntax;
 pub mod util;

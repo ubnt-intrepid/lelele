@@ -1,7 +1,10 @@
 use std::{env, path::PathBuf};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use lelele::{dfa::Config, grammar::Grammar};
+use lelele::{
+    grammar::Grammar,
+    lr1::{Config, DFA},
+};
 
 criterion_main!(benches);
 criterion_group!(benches, bench_arithmetic, bench_simple_2);
@@ -32,13 +35,13 @@ fn bench_dfa_gen(c: &mut Criterion, grammar_name: &str) {
 
     let mut group = c.benchmark_group(grammar_name);
     group.bench_function("Canonical", |b| {
-        b.iter(|| Config::new().use_canonical().generate(&grammar));
+        b.iter(|| DFA::generate_with_config(&grammar, Config::new().use_canonical()));
     });
     group.bench_function("PGM", |b| {
-        b.iter(|| Config::new().use_pgm().generate(&grammar));
+        b.iter(|| DFA::generate_with_config(&grammar, Config::new().use_pgm()));
     });
     group.bench_function("LALR", |b| {
-        b.iter(|| Config::new().use_lalr().generate(&grammar));
+        b.iter(|| DFA::generate_with_config(&grammar, Config::new().use_lalr()));
     });
     group.finish();
 }

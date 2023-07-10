@@ -1,6 +1,6 @@
 use crate::{
-    dfa::{Action, NodeID, DFA},
     grammar::{Grammar, NonterminalID, Symbol, TerminalID},
+    lr1::{Action, NodeID, DFA},
     util::display_fn,
 };
 use std::{borrow::Cow, cmp::Ordering, collections::BinaryHeap, fmt};
