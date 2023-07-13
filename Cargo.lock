@@ -462,6 +462,7 @@ name = "lelele-example-min-caml"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "criterion",
  "lelele",
  "lelele-runtime",
  "logos",

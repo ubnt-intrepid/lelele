@@ -13,3 +13,11 @@ anyhow = { workspace = true }
 logos = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+lelele = { path = "../../crates/lelele" }
+
+[[bench]]
+name = "benches"
+harness = false
