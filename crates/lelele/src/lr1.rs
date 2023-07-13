@@ -241,7 +241,7 @@ impl LRItemCore {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct LRItemContext {
     lookaheads: IndexSet<TerminalID>,
 }
@@ -393,15 +393,13 @@ impl NodeExtractor<'_> {
 
             let label = &rule.right()[core.marker];
             let new_item_set = item_sets.entry(label.clone()).or_default();
-            let new_ctx = new_item_set
-                .entry(LRItemCore {
+            new_item_set.insert(
+                LRItemCore {
                     marker: core.marker + 1,
                     ..core.clone()
-                })
-                .or_insert_with(|| LRItemContext {
-                    lookaheads: IndexSet::default(),
-                });
-            new_ctx.lookaheads.extend(ctx.lookaheads.iter().copied());
+                },
+                ctx.clone(),
+            );
         }
         item_sets
     }
