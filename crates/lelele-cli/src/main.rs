@@ -1,10 +1,6 @@
 use anyhow::Context as _;
 use clap::{Parser, ValueEnum};
-use lelele::{
-    codegen::Codegen,
-    grammar::Grammar,
-    lr1::{self, DFA},
-};
+use lelele::{codegen::Codegen, grammar::Grammar, lr1::DFA};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -45,7 +41,7 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn process_file(args: &Args, in_file: &Path) -> anyhow::Result<()> {
+fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
     let in_file = fs::canonicalize(in_file) //
         .context("failed to canonicalize the input file name")?;
 
@@ -73,18 +69,12 @@ fn process_file(args: &Args, in_file: &Path) -> anyhow::Result<()> {
         );
     }
 
-    let mut dfa_config = lr1::Config::new();
-    match args.merge_mode {
-        MergeMode::Canonical => dfa_config.use_canonical(),
-        MergeMode::PGM => dfa_config.use_pgm(),
-        MergeMode::LALR => dfa_config.use_lalr(),
-    };
-    let dfa = DFA::generate_with_config(&grammar, &dfa_config)?;
+    let dfa = DFA::generate(&grammar)?;
 
     let mut num_inconsist_states = 0;
-    for (_, node) in dfa.nodes() {
+    for node in dfa.states.values() {
         let mut has_inconsistent_action = false;
-        for (_terminal, action) in node.actions() {
+        for action in node.actions.values() {
             has_inconsistent_action |= !action.is_consistent();
         }
         if has_inconsistent_action {

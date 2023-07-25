@@ -34,7 +34,7 @@ pub fn split_states(
 
     let mut ielr_states = Map::<StateID, LR0State>::default();
     let mut ielr_state_id = {
-        let mut next_state_id = 0;
+        let mut next_state_id = StateID::OFFSET;
         move || {
             let id = StateID::from_raw(next_state_id);
             next_state_id += 1;
@@ -51,14 +51,13 @@ pub fn split_states(
     }
     let mut queue = Queue::<QueueItem>::default();
     {
-        let ielr_start_id = ielr_state_id();
-        let (lr0_start_id, start) = lr0.states.get_index(0).unwrap();
+        let start = &lr0.states[&StateID::START];
         queue.push(QueueItem {
-            ielr_id: ielr_start_id,
-            lr0_id: *lr0_start_id,
+            ielr_id: StateID::START,
+            lr0_id: StateID::START,
         });
         ielr_states.insert(
-            ielr_start_id,
+            StateID::START,
             LR0State {
                 shifts: Map::default(),
                 gotos: Map::default(),
@@ -67,11 +66,11 @@ pub fn split_states(
             },
         );
         lr0_isocores
-            .entry(*lr0_start_id)
+            .entry(StateID::START)
             .or_default()
-            .insert(ielr_start_id);
+            .insert(StateID::START);
         ielr_item_lookaheads.insert(
-            ielr_start_id,
+            StateID::START,
             vec![TerminalSet::default(); start.kernels.len()],
         );
     }

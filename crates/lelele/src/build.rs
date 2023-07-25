@@ -76,9 +76,9 @@ impl Build {
         let dfa = DFA::generate(&grammar).context("failed to construct LR automaton")?;
 
         let mut num_inconsist_states = 0;
-        for (_, node) in dfa.nodes() {
+        for (_, node) in &dfa.states {
             let mut has_inconsistent_action = false;
-            for (_terminal, action) in node.actions() {
+            for action in node.actions.values() {
                 has_inconsistent_action |= !action.is_consistent();
             }
             if has_inconsistent_action {

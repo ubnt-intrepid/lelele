@@ -1,6 +1,6 @@
 use crate::{
     grammar::{Grammar, NonterminalID, SymbolID, TerminalID},
-    lr1::{Action, NodeID, DFA},
+    lr1::{Action, StateID, DFA},
     util::display_fn,
 };
 use std::{borrow::Cow, cmp::Ordering, collections::BinaryHeap, fmt};
@@ -11,8 +11,8 @@ use std::{borrow::Cow, cmp::Ordering, collections::BinaryHeap, fmt};
 //
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fact {
-    start: NodeID,
-    end: NodeID,
+    start: StateID,
+    end: StateID,
     symbols: Vec<SymbolID>,
     words: Vec<TerminalID>,
     lookahead: TerminalID,
@@ -35,7 +35,7 @@ impl Fact {
         display_fn(|f| {
             write!(
                 f,
-                "{:03} -->> {:03} [{}], ",
+                "{:?} -->> {:?} [{}], ",
                 self.start, self.end, g.terminals[&self.lookahead]
             )?;
 
@@ -79,8 +79,8 @@ impl Fact {
 //  start --(A/words)->> end [lookahead]
 #[derive(Debug, Clone)]
 pub struct EdgeFact {
-    start: NodeID,
-    end: NodeID,
+    start: StateID,
+    end: StateID,
     symbol: NonterminalID,
     words: Vec<TerminalID>,
     lookahead: TerminalID,
@@ -103,7 +103,7 @@ impl EdgeFact {
         display_fn(|f| {
             write!(
                 f,
-                "{:03} --> {:03} [{}], ",
+                "{:?} --> {:?} [{}], ",
                 self.start, self.end, g.terminals[&self.lookahead]
             )?;
             write!(f, "{}/", g.nonterminals[&self.symbol])?;
@@ -166,7 +166,7 @@ impl<'g> ReachabilityAlgorithm<'g> {
     #[tracing::instrument(skip_all)]
     pub fn process(&mut self) {
         // add fact: s -(ε/ε)->> s [z] for all s,z
-        for (node_id, _node) in self.automaton.nodes() {
+        for (&node_id, _node) in &self.automaton.states {
             for lookahead in self.grammar.terminals.values() {
                 self.pending_facts.push(PendingFact(Fact {
                     start: node_id,
@@ -179,7 +179,7 @@ impl<'g> ReachabilityAlgorithm<'g> {
         }
 
         //
-        let max_facts = self.automaton.nodes.len()
+        let max_facts = self.automaton.states.len()
             * self
                 .grammar
                 .rules
@@ -191,8 +191,9 @@ impl<'g> ReachabilityAlgorithm<'g> {
 
         let max_edge_facts = self
             .automaton
-            .nodes()
-            .fold(0usize, |acc, (_, node)| acc + node.gotos.len())
+            .states
+            .values()
+            .fold(0usize, |acc, node| acc + node.gotos.len())
             * self.grammar.terminals.len()
             * self.grammar.terminals.len();
         tracing::trace!("maximum number of edge facts = {}", max_edge_facts);
@@ -219,8 +220,8 @@ impl<'g> ReachabilityAlgorithm<'g> {
 
     #[tracing::instrument(skip_all)]
     fn step_terminal(&mut self, fact: &Fact) {
-        let node = self.automaton.node(fact.end);
-        let found = node.actions().find_map(|(t, action)| match action {
+        let node = &self.automaton.states[&fact.end];
+        let found = node.actions.iter().find_map(|(&t, action)| match action {
             Action::Shift(n) | Action::Inconsistent { shift: Some(n), .. }
                 if t == fact.lookahead =>
             {
@@ -243,8 +244,8 @@ impl<'g> ReachabilityAlgorithm<'g> {
 
     #[tracing::instrument(skip_all)]
     fn step_nonterminal_left(&mut self, fact: &Fact) {
-        let node = self.automaton.node(fact.end);
-        for (symbol, dest) in node.gotos() {
+        let node = &self.automaton.states[&fact.end];
+        for (&symbol, &dest) in &node.gotos {
             for edge_fact in &self.edge_facts {
                 if fact.end != edge_fact.start || edge_fact.symbol != symbol {
                     continue;
@@ -286,9 +287,9 @@ impl<'g> ReachabilityAlgorithm<'g> {
 
     #[tracing::instrument(skip_all)]
     fn step_reduce(&mut self, fact: &Fact) {
-        let node_start = self.automaton.node(fact.start);
-        let node_end = self.automaton.node(fact.end);
-        for (t, action) in node_end.actions() {
+        let node_start = &self.automaton.states[&fact.start];
+        let node_end = &self.automaton.states[&fact.end];
+        for (&t, action) in &node_end.actions {
             let mut reduce_ids = Cow::Borrowed(&[] as &[_]);
             match action {
                 Action::Reduce(reduce) => {
@@ -306,7 +307,7 @@ impl<'g> ReachabilityAlgorithm<'g> {
                     continue;
                 }
 
-                let Some((_, new_end)) = node_start.gotos().find(|(n, _)| *n == reduce.left()) else { continue; };
+                let Some((_, &new_end)) = node_start.gotos.iter().find(|(n, _)| **n == reduce.left()) else { continue; };
 
                 let edge_fact = EdgeFact {
                     start: fact.start,

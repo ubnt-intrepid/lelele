@@ -2,7 +2,9 @@
 resolver = "2"
 members = [
     "crates/*",
-    #"examples/*",
+    "examples/arithmetic",
+    "examples/json",
+    "examples/min-caml",
 ]
 exclude = [
     "examples/wip",

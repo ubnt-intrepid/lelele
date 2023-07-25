@@ -604,7 +604,7 @@ impl<'def> GrammarDef<'def> {
             Rule {
                 id: RuleID::ACCEPT,
                 left: NonterminalID::START,
-                right: vec![SymbolID::N(start)],
+                right: vec![SymbolID::N(start), SymbolID::T(TerminalID::EOI)],
                 precedence: None,
             },
         );

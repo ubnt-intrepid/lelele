@@ -12,8 +12,14 @@ impl fmt::Debug for StateID {
     }
 }
 impl StateID {
+    pub const START: Self = Self::from_raw(0);
+    pub(crate) const OFFSET: u16 = 1;
+
     pub const fn from_raw(raw: u16) -> Self {
         Self(raw)
+    }
+    pub const fn into_raw(self) -> u16 {
+        self.0
     }
 }
 
@@ -109,7 +115,7 @@ pub fn lr0(g: &Grammar) -> LR0Automaton {
 
     let mut states = Map::<StateID, LR0State>::default();
     let mut state_id = {
-        let mut next_state_id = 0;
+        let mut next_state_id = StateID::OFFSET;
         move || {
             let id = StateID(next_state_id);
             next_state_id += 1;
@@ -119,7 +125,7 @@ pub fn lr0(g: &Grammar) -> LR0Automaton {
 
     let mut pending_states = VecDeque::<(StateID, Vec<LR0Item>)>::new();
     pending_states.push_back((
-        state_id(),
+        StateID::START,
         Some(LR0Item {
             production: RuleID::ACCEPT,
             index: 0,

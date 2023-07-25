@@ -2,7 +2,8 @@
 
 use crate::{
     grammar::{Grammar, TerminalID},
-    lr1::{Action, NodeID, DFA},
+    ielr::lr0::StateID,
+    lr1::{Action, DFA},
 };
 use std::fmt;
 
@@ -47,8 +48,8 @@ impl<'g> Codegen<'g> {
         f.line("/// The type to identify DFA state nodes.")?;
         f.line("#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]")?;
         f.bracket("pub enum NodeID", |f| {
-            for (id, _) in self.dfa.nodes() {
-                writeln!(f, "N{},", id)?;
+            for &id in self.dfa.states.keys() {
+                writeln!(f, "N{},", id.into_raw())?;
             }
             Ok(())
         })?;
@@ -103,7 +104,7 @@ impl<'g> Codegen<'g> {
 
             f.line("#[inline]")?;
             f.bracket("fn initial_state(&self) -> Self::StateIndex", |f| {
-                writeln!(f, "NodeID::N{}", NodeID::START)
+                writeln!(f, "NodeID::N{}", StateID::START.into_raw())
             })?;
 
             f.line("#[inline]")?;
@@ -136,10 +137,10 @@ impl<'g> Codegen<'g> {
         f.line("#[allow(unreachable_patterns)]")?;
         f.bracket("const fn __action(current: NodeID, lookahead: lelele::Terminal<TokenID>) -> lelele::ParseAction<ParserDef>", |f| {
             f.bracket("match current", |f| {
-                for (id, node) in self.dfa.nodes() {
-                    write!(f, "NodeID::N{} => ", id)?;
+                for (&id, node) in &self.dfa.states {
+                    write!(f, "NodeID::N{} => ", id.into_raw())?;
                     f.bracket("match lookahead", |f| {
-                        for (lookahead, action) in node.actions() {
+                        for (&lookahead, action) in &node.actions {
                             let name = self.grammar.terminals[&lookahead].export_name();
                             match (lookahead, name) {
                                 (TerminalID::EOI, _) => f.write_str("lelele::Terminal::EOI => ")?,
@@ -148,7 +149,7 @@ impl<'g> Codegen<'g> {
                                 _ => continue,
                             };
                             match action {
-                                Action::Shift(n) => write!(f, "lelele::Shift(NodeID::N{})", n)?,
+                                Action::Shift(n) => write!(f, "lelele::Shift(NodeID::N{})", n.into_raw())?,
                                 Action::Reduce(rule) => {
                                     let rule = &self.grammar.rules[rule];
                                     let left = self
@@ -169,7 +170,7 @@ impl<'g> Codegen<'g> {
                                 Action::Inconsistent { shift, reduces, .. } => {
                                     if let Some(n) = shift {
                                         // shift/reduce conflict(s)
-                                        write!(f, "lelele::Shift(NodeID::N{})", n)?;
+                                        write!(f, "lelele::Shift(NodeID::N{})", n.into_raw())?;
                                     } else {
                                         // reduce/reduce conflict(s)
                                         let rule = &self.grammar.rules[&reduces[0]];
@@ -204,9 +205,9 @@ impl<'g> Codegen<'g> {
             "const fn __expected_terminals(current: NodeID) -> &'static [lelele::Terminal<TokenID>]",
             |f| {
                 f.bracket("match current", |f| {
-                    for (id, node) in self.dfa.nodes() {
-                        writeln!(f, "NodeID::N{} => &[", id)?;
-                        for (lookahead, _) in node.actions() {
+                    for (id, node) in &self.dfa.states {
+                        writeln!(f, "NodeID::N{} => &[", id.into_raw())?;
+                        for (&lookahead, _) in &node.actions {
                             let name = self.grammar.terminals[&lookahead].export_name();
                             match (lookahead, name) {
                                 (TerminalID::EOI, _) => write!(f, "lelele::Terminal::EOI")?,
@@ -228,17 +229,22 @@ impl<'g> Codegen<'g> {
         f.bracket(prefix, |f| {
             f.bracket("match current", |f| {
                 let mut unused_nodes = vec![];
-                for (id, node) in self.dfa.nodes() {
-                    if node.gotos().count() == 0 {
+                for (id, node) in &self.dfa.states {
+                    if node.gotos.is_empty() {
                         unused_nodes.push(id);
                         continue;
                     }
 
-                    writeln!(f, "NodeID::N{} => ", id)?;
+                    writeln!(f, "NodeID::N{} => ", id.into_raw())?;
                     f.bracket("match symbol", |f| {
-                        for (symbol, target) in node.gotos() {
+                        for (&symbol, target) in &node.gotos {
                             let symbol = self.grammar.nonterminals[&symbol].export_name().unwrap();
-                            writeln!(f, "Symbol::{} => Some(NodeID::N{}),", symbol, target)?;
+                            writeln!(
+                                f,
+                                "Symbol::{} => Some(NodeID::N{}),",
+                                symbol,
+                                target.into_raw()
+                            )?;
                         }
 
                         f.line("_ => None,")?;

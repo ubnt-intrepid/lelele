@@ -1,7 +1,4 @@
-use lelele::{
-    grammar::Grammar,
-    lr1::{Config, DFA},
-};
+use lelele::{grammar::Grammar, lr1::DFA};
 use std::{env, path::PathBuf};
 
 macro_rules! define_tests {
@@ -15,21 +12,9 @@ macro_rules! define_tests {
             eprintln!("grammar:\n{}", grammar);
             eprintln!();
 
-            eprintln!("DFA(canonical):");
-            let dfa = DFA::generate_with_config(&grammar, Config::new().use_canonical()).unwrap();
-            eprintln!("num_nodes: {}", dfa.nodes().count());
-            eprintln!("---\n{}\n", dfa.display(&grammar));
-            eprintln!();
-
-            eprintln!("DFA(PGM):");
-            let dfa = DFA::generate_with_config(&grammar,Config::new().use_pgm()).unwrap();
-            eprintln!("num_nodes: {}", dfa.nodes().count());
-            eprintln!("---\n{}\n", dfa.display(&grammar));
-            eprintln!();
-
-            eprintln!("DFA(LALR):");
-            let dfa = DFA::generate_with_config(&grammar,Config::new().use_lalr()).unwrap();
-            eprintln!("num_nodes: {}", dfa.nodes().count());
+            eprintln!("DFA(IELR):");
+            let dfa = DFA::generate(&grammar).unwrap();
+            eprintln!("num_nodes: {}", dfa.states.len());
             eprintln!("---\n{}\n", dfa.display(&grammar));
         }
 
