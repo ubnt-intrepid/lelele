@@ -60,7 +60,7 @@ impl<'g> Codegen<'g> {
         f.line("#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]")?;
         f.line("#[allow(non_camel_case_types)]")?;
         f.bracket("pub enum TokenID", |f| {
-            for terminal in self.grammar.terminals() {
+            for terminal in self.grammar.terminals.values() {
                 let export_name = match terminal.export_name() {
                     Some(name) => name,
                     None => continue,
@@ -80,7 +80,7 @@ impl<'g> Codegen<'g> {
         f.line("/// The type to identify nonterminal symbols used in generated DFA.")?;
         f.line("#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]")?;
         f.bracket("pub enum Symbol", |f| {
-            for symbol in self.grammar.nonterminals() {
+            for symbol in self.grammar.nonterminals.values() {
                 let export_name = match symbol.export_name() {
                     Some(name) => name,
                     None => continue,
@@ -140,7 +140,7 @@ impl<'g> Codegen<'g> {
                     write!(f, "NodeID::N{} => ", id)?;
                     f.bracket("match lookahead", |f| {
                         for (lookahead, action) in node.actions() {
-                            let name = self.grammar.terminal(&lookahead).export_name();
+                            let name = self.grammar.terminals[&lookahead].export_name();
                             match (lookahead, name) {
                                 (TerminalID::EOI, _) => f.write_str("lelele::Terminal::EOI => ")?,
                                 (TerminalID::ERROR, _) => f.write_str("lelele::Terminal::Error => ")?,
@@ -150,10 +150,10 @@ impl<'g> Codegen<'g> {
                             match action {
                                 Action::Shift(n) => write!(f, "lelele::Shift(NodeID::N{})", n)?,
                                 Action::Reduce(rule) => {
-                                    let rule = self.grammar.rule(rule);
+                                    let rule = &self.grammar.rules[rule];
                                     let left = self
                                         .grammar
-                                        .nonterminal(&rule.left())
+                                        .nonterminals[&rule.left()]
                                         .export_name()
                                         .unwrap();
                                     write!(
@@ -172,10 +172,10 @@ impl<'g> Codegen<'g> {
                                         write!(f, "lelele::Shift(NodeID::N{})", n)?;
                                     } else {
                                         // reduce/reduce conflict(s)
-                                        let rule = self.grammar.rule(&reduces[0]);
+                                        let rule = &self.grammar.rules[&reduces[0]];
                                         let left = self
                                             .grammar
-                                            .nonterminal(&rule.left())
+                                            .nonterminals[&rule.left()]
                                             .export_name()
                                             .unwrap();
                                         write!(
@@ -207,7 +207,7 @@ impl<'g> Codegen<'g> {
                     for (id, node) in self.dfa.nodes() {
                         writeln!(f, "NodeID::N{} => &[", id)?;
                         for (lookahead, _) in node.actions() {
-                            let name = self.grammar.terminal(&lookahead).export_name();
+                            let name = self.grammar.terminals[&lookahead].export_name();
                             match (lookahead, name) {
                                 (TerminalID::EOI, _) => write!(f, "lelele::Terminal::EOI")?,
                                 (TerminalID::ERROR, _) => write!(f, "lelele::Terminal::Error")?,
@@ -237,7 +237,7 @@ impl<'g> Codegen<'g> {
                     writeln!(f, "NodeID::N{} => ", id)?;
                     f.bracket("match symbol", |f| {
                         for (symbol, target) in node.gotos() {
-                            let symbol = self.grammar.nonterminal(&symbol).export_name().unwrap();
+                            let symbol = self.grammar.nonterminals[&symbol].export_name().unwrap();
                             writeln!(f, "Symbol::{} => Some(NodeID::N{}),", symbol, target)?;
                         }
 

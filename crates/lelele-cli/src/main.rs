@@ -57,8 +57,12 @@ fn process_file(args: &Args, in_file: &Path) -> anyhow::Result<()> {
     let grammar = Grammar::from_file(&in_file)?;
 
     let mut empty_nonterminals = vec![];
-    for nonterminal in grammar.nonterminals() {
-        if grammar.rules().all(|rule| rule.left() != nonterminal.id()) {
+    for nonterminal in grammar.nonterminals.values() {
+        if grammar
+            .rules
+            .values()
+            .all(|rule| rule.left() != nonterminal.id())
+        {
             empty_nonterminals.extend(nonterminal.export_name());
         }
     }

@@ -1,7 +1,7 @@
 //! The implementation of LR(1) automaton.
 
 use crate::{
-    grammar::{Assoc, Grammar, NonterminalID, Precedence, RuleID, Symbol, TerminalID},
+    grammar::{Assoc, Grammar, NonterminalID, Precedence, RuleID, SymbolID, TerminalID},
     types::{Map, Set},
     util::display_fn,
 };
@@ -110,20 +110,20 @@ impl DFA {
                         if i > 0 {
                             f.write_str(" ")?;
                         }
-                        write!(f, "{}", g.terminal(lookahead))?;
+                        write!(f, "{}", g.terminals[lookahead])?;
                     }
                     f.write_str("]\n")?;
                 }
 
                 writeln!(f, "## actions")?;
                 for (token, action) in &node.actions {
-                    let token = g.terminal(token);
+                    let token = &g.terminals[token];
                     match action {
                         Action::Shift(n) => {
                             writeln!(f, "- {} => shift({:02})", token, n)?;
                         }
                         Action::Reduce(reduce) => {
-                            let reduce = g.rule(reduce);
+                            let reduce = &g.rules[reduce];
                             writeln!(f, "- {} => reduce({})", token, reduce.display(g))?;
                         }
                         Action::Accept => {
@@ -137,24 +137,24 @@ impl DFA {
                             shift,
                             reduces,
                         } => {
-                            let token = g.terminal(token);
+                            let token = &g.terminals[&token.id()];
                             writeln!(f, "- {} => inconsistent(reason = {:?})", token, reason)?;
                             writeln!(f, "## conflicted actions on {}", token)?;
                             if let Some(n) = shift {
                                 writeln!(f, "  - shift({:02})", n)?;
                                 writeln!(f, "  ## corresponding items:")?;
                                 for core_item in node.item_set.keys() {
-                                    let rule = g.rule(&core_item.rule);
+                                    let rule = &g.rules[&core_item.rule];
                                     if rule.right().get(core_item.marker).map_or(
                                         false,
-                                        |n| matches!(n, Symbol::T(t) if *t == token.id()),
+                                        |n| matches!(n, SymbolID::T(t) if *t == token.id()),
                                     ) {
                                         writeln!(f, "    - {}", core_item.display(g))?;
                                     }
                                 }
                             }
                             for reduce in reduces {
-                                let reduce = g.rule(reduce);
+                                let reduce = &g.rules[reduce];
                                 writeln!(f, "  - reduce({})", reduce.display(g))?;
                             }
                         }
@@ -163,7 +163,7 @@ impl DFA {
 
                 writeln!(f, "## gotos")?;
                 for (symbol, goto) in &node.gotos {
-                    writeln!(f, "- {} => goto({:02})", g.nonterminal(symbol), goto)?;
+                    writeln!(f, "- {} => goto({:02})", g.nonterminals[symbol], goto)?;
                 }
             }
             Ok(())
@@ -221,15 +221,15 @@ struct LRItemCore {
 impl LRItemCore {
     fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
         display_fn(|f| {
-            let rule = g.rule(&self.rule);
-            write!(f, "({} :=", g.nonterminal(&rule.left()))?;
+            let rule = &g.rules[&self.rule];
+            write!(f, "({} :=", g.nonterminals[&rule.left()])?;
             for (i, prod) in rule.right().iter().enumerate() {
                 if i == self.marker {
                     f.write_str(" .")?;
                 }
                 match prod {
-                    Symbol::T(t) => write!(f, " {}", g.terminal(t))?,
-                    Symbol::N(n) => write!(f, " {}", g.nonterminal(n))?,
+                    SymbolID::T(t) => write!(f, " {}", g.terminals[t])?,
+                    SymbolID::N(n) => write!(f, " {}", g.nonterminals[n])?,
                 }
             }
             if self.marker == rule.right().len() {
@@ -337,12 +337,12 @@ impl NodeExtractor<'_> {
             // 候補の抽出
             let mut added: Map<LRItemCore, Set<TerminalID>> = Map::default();
             for (core, ctx) in &mut *items {
-                let rule = self.grammar.rule(&core.rule);
+                let rule = &self.grammar.rules[&core.rule];
 
                 // [X -> ... @ Y beta]
                 //  Y: one nonterminal symbol
                 let (y_symbol, beta) = match &rule.right()[core.marker..] {
-                    [Symbol::N(y_symbol), beta @ ..] => (y_symbol, beta),
+                    [SymbolID::N(y_symbol), beta @ ..] => (y_symbol, beta),
                     _ => continue,
                 };
 
@@ -350,7 +350,7 @@ impl NodeExtractor<'_> {
                 //   x \in First(beta x1) \cup ... \cup First(beta xk)
                 // を満たすすべての終端記号を考える
                 let x = self.first_sets.get(beta, ctx.lookaheads.iter().copied());
-                for rule in self.grammar.rules() {
+                for rule in self.grammar.rules.values() {
                     // Y: ... という形式の構文規則のみを対象にする
                     if rule.left() != *y_symbol {
                         continue;
@@ -381,10 +381,10 @@ impl NodeExtractor<'_> {
     }
 
     /// 指定したLRアイテム集合から遷移先のLRアイテム集合（未展開）とラベルを抽出する
-    fn extract_transitions(&self, items: &LRItemSet) -> Map<Symbol, LRItemSet> {
-        let mut item_sets: Map<Symbol, LRItemSet> = Map::default();
+    fn extract_transitions(&self, items: &LRItemSet) -> Map<SymbolID, LRItemSet> {
+        let mut item_sets: Map<SymbolID, LRItemSet> = Map::default();
         for (core, ctx) in items {
-            let rule = self.grammar.rule(&core.rule);
+            let rule = &self.grammar.rules[&core.rule];
 
             // markerが終わりまで到達していれば無視する
             if core.marker >= rule.right().len() {
@@ -409,7 +409,7 @@ impl NodeExtractor<'_> {
 struct DFAGenerator<'g> {
     extractor: NodeExtractor<'g>,
     pending_nodes: PendingNodes,
-    nodes: Map<NodeID, (LRItemSet, Map<Symbol, NodeID>)>,
+    nodes: Map<NodeID, (LRItemSet, Map<SymbolID, NodeID>)>,
     same_cores: Map<LRItemCores, Set<NodeID>>,
     config: &'g Config,
 }
@@ -543,17 +543,17 @@ impl<'g> DFAGenerator<'g> {
                 // shift, goto
                 let target = new_node_ids[&target];
                 match symbol {
-                    Symbol::T(t) => {
+                    SymbolID::T(t) => {
                         let action = pending_actions.entry(t).or_default();
                         action.shift.replace(target);
                     }
-                    Symbol::N(n) => {
+                    SymbolID::N(n) => {
                         gotos.insert(n, target);
                     }
                 }
             }
             for (core, ctx) in &item_set {
-                let rule = self.extractor.grammar.rule(&core.rule);
+                let rule = &self.extractor.grammar.rules[&core.rule];
                 // reduce, accept
                 if core.marker < rule.right().len() {
                     continue;
@@ -650,7 +650,7 @@ fn is_pgm_weakly_compatible_c2(items: &LRItemSet) -> bool {
 #[derive(Debug)]
 struct FirstSets {
     nulls: Set<NonterminalID>,
-    map: Map<Symbol, Set<TerminalID>>,
+    map: Map<SymbolID, Set<TerminalID>>,
 }
 
 impl FirstSets {
@@ -658,15 +658,15 @@ impl FirstSets {
         let nulls = nulls_set(grammar);
 
         // First(T) = {} と初期化する
-        let mut map: Map<Symbol, Set<TerminalID>> = Map::default();
-        for terminal in grammar.terminals() {
+        let mut map: Map<SymbolID, Set<TerminalID>> = Map::default();
+        for terminal in grammar.terminals.values() {
             map.insert(
-                Symbol::T(terminal.id()),
+                SymbolID::T(terminal.id()),
                 Some(terminal.id()).into_iter().collect(),
             );
         }
-        for symbol in grammar.nonterminals() {
-            map.insert(Symbol::N(symbol.id()), Set::default());
+        for symbol in grammar.nonterminals.values() {
+            map.insert(SymbolID::N(symbol.id()), Set::default());
         }
 
         // 制約条件の抽出
@@ -676,19 +676,19 @@ impl FirstSets {
         //  2. Yi (i=1,2,..,k) それぞれに対し First(X) \supseteq First(Yi) という制約を追加する
         #[derive(Debug)]
         struct Constraint<'g> {
-            sup: Cow<'g, Symbol>,
-            sub: &'g Symbol,
+            sup: Cow<'g, SymbolID>,
+            sub: &'g SymbolID,
         }
         let mut constraints = vec![];
-        for rule in grammar.rules() {
+        for rule in grammar.rules.values() {
             for symbol in rule.right() {
-                if !matches!(symbol, Symbol::N(n) if rule.left() == *n) {
+                if !matches!(symbol, SymbolID::N(n) if rule.left() == *n) {
                     constraints.push(Constraint {
-                        sup: Cow::Owned(Symbol::N(rule.left().clone())),
+                        sup: Cow::Owned(SymbolID::N(rule.left().clone())),
                         sub: symbol,
                     });
                 }
-                if !matches!(symbol, Symbol::N(n) if nulls.contains(n)) {
+                if !matches!(symbol, SymbolID::N(n) if nulls.contains(n)) {
                     break;
                 }
             }
@@ -718,7 +718,7 @@ impl FirstSets {
     }
 
     /// `First(prefix lookaheads)`
-    pub fn get<L>(&self, prefix: &[Symbol], lookaheads: L) -> Set<TerminalID>
+    pub fn get<L>(&self, prefix: &[SymbolID], lookaheads: L) -> Set<TerminalID>
     where
         L: IntoIterator<Item = TerminalID>,
     {
@@ -727,7 +727,7 @@ impl FirstSets {
         let mut is_end = false;
         for symbol in prefix {
             res.extend(self.map[symbol].iter().cloned());
-            if !matches!(symbol, Symbol::N(n) if self.nulls.contains(n)) {
+            if !matches!(symbol, SymbolID::N(n) if self.nulls.contains(n)) {
                 is_end = true;
                 break;
             }
@@ -745,7 +745,8 @@ impl FirstSets {
 fn nulls_set(grammar: &Grammar) -> Set<NonterminalID> {
     // ruleからnullableであることが分かっている場合は追加する
     let mut nulls: Set<NonterminalID> = grammar
-        .rules()
+        .rules
+        .values()
         .filter_map(|rule| rule.right().is_empty().then(|| rule.left()))
         .collect();
 
@@ -753,7 +754,7 @@ fn nulls_set(grammar: &Grammar) -> Set<NonterminalID> {
     let mut changed = true;
     while changed {
         changed = false;
-        for rule in grammar.rules() {
+        for rule in grammar.rules.values() {
             if nulls.contains(&rule.left()) {
                 continue;
             }
@@ -761,7 +762,7 @@ fn nulls_set(grammar: &Grammar) -> Set<NonterminalID> {
             let is_rhs_nullable = rule
                 .right()
                 .iter()
-                .all(|symbol| matches!(symbol, Symbol::N(n) if nulls.contains(n)));
+                .all(|symbol| matches!(symbol, SymbolID::N(n) if nulls.contains(n)));
             if is_rhs_nullable {
                 changed = true;
                 nulls.insert(rule.left());
@@ -806,8 +807,8 @@ fn resolve_conflict(
                 return Err(ConflictResolutionError::ShiftAcceptConflict);
             }
 
-            let shift_prec = g.terminal(&symbol).precedence();
-            let reduce_prec = g.rule(reduce).precedence(g);
+            let shift_prec = g.terminals[&symbol].precedence();
+            let reduce_prec = g.rules[reduce].precedence(g);
 
             match compare_precs(shift_prec, reduce_prec) {
                 Some(PrecDiff::Left) => Ok(Shift(next)),
@@ -823,14 +824,14 @@ fn resolve_conflict(
 
         // multiple shift/reduce conflicts
         (Some(next), reduces) => {
-            let shift_prec = g.terminal(&symbol).precedence();
+            let shift_prec = g.terminals[&symbol].precedence();
 
             let mut resolved = None;
             for reduce in reduces {
                 if *reduce == RuleID::ACCEPT {
                     return Err(ConflictResolutionError::ShiftAcceptConflict);
                 }
-                let reduce_prec = g.rule(reduce).precedence(g);
+                let reduce_prec = g.rules[reduce].precedence(g);
                 let new_resolved = match compare_precs(shift_prec, reduce_prec) {
                     Some(diff) => diff,
                     None => {
@@ -886,8 +887,8 @@ enum PrecDiff {
     Neither,
 }
 fn compare_precs(
-    shift_prec: Option<&Precedence>,
-    reduce_prec: Option<&Precedence>,
+    shift_prec: Option<Precedence>,
+    reduce_prec: Option<Precedence>,
 ) -> Option<PrecDiff> {
     match (shift_prec, reduce_prec) {
         (Some(p1), Some(p2)) => match Ord::cmp(&p1.priority, &p2.priority) {
@@ -906,6 +907,7 @@ fn compare_precs(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::grammar::SymbolID::*;
 
     #[test]
     fn smoketest1() {
@@ -921,12 +923,12 @@ mod tests {
 
             def.start_symbol(a)?;
 
-            def.rule(a, [e, equal, e], None)?;
-            def.rule(a, [ident], None)?;
-            def.rule(e, [e, plus, t], None)?;
-            def.rule(e, [t], None)?;
-            def.rule(t, [num], None)?;
-            def.rule(t, [ident], None)?;
+            def.rule(a, [N(e), T(equal), N(e)], None)?;
+            def.rule(a, [T(ident)], None)?;
+            def.rule(e, [N(e), T(plus), N(t)], None)?;
+            def.rule(e, [N(t)], None)?;
+            def.rule(t, [T(num)], None)?;
+            def.rule(t, [T(ident)], None)?;
 
             Ok(())
         })
@@ -952,21 +954,21 @@ mod tests {
 
             // declare nonterminal symbols.
             let expr = g.nonterminal("EXPR")?;
-            let factor = g.nonterminal("FACTOR")?;
             let term = g.nonterminal("TERM")?;
+            let factor = g.nonterminal("FACTOR")?;
             let _ = g.nonterminal("UNUSED_1")?;
 
             // declare syntax rules.
-            g.rule(expr, [expr, plus, factor], None)?;
-            g.rule(expr, [expr, minus, factor], None)?;
-            g.rule(expr, [factor], None)?;
+            g.rule(expr, [N(expr), T(plus), N(term)], None)?;
+            g.rule(expr, [N(expr), T(minus), N(term)], None)?;
+            g.rule(expr, [N(term)], None)?;
 
-            g.rule(factor, [factor, star, term], None)?;
-            g.rule(factor, [factor, slash, term], None)?;
-            g.rule(factor, [term], None)?;
+            g.rule(term, [N(term), T(star), N(factor)], None)?;
+            g.rule(term, [N(term), T(slash), N(factor)], None)?;
+            g.rule(term, [N(factor)], None)?;
 
-            g.rule(term, [num], None)?;
-            g.rule(term, [lparen, expr, rparen], None)?;
+            g.rule(factor, [T(num)], None)?;
+            g.rule(factor, [T(lparen), N(expr), T(rparen)], None)?;
 
             g.start_symbol(expr)?;
 

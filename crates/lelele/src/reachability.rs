@@ -1,5 +1,5 @@
 use crate::{
-    grammar::{Grammar, NonterminalID, Symbol, TerminalID},
+    grammar::{Grammar, NonterminalID, SymbolID, TerminalID},
     lr1::{Action, NodeID, DFA},
     util::display_fn,
 };
@@ -13,7 +13,7 @@ use std::{borrow::Cow, cmp::Ordering, collections::BinaryHeap, fmt};
 pub struct Fact {
     start: NodeID,
     end: NodeID,
-    symbols: Vec<Symbol>,
+    symbols: Vec<SymbolID>,
     words: Vec<TerminalID>,
     lookahead: TerminalID,
 }
@@ -36,9 +36,7 @@ impl Fact {
             write!(
                 f,
                 "{:03} -->> {:03} [{}], ",
-                self.start,
-                self.end,
-                g.terminal(&self.lookahead)
+                self.start, self.end, g.terminals[&self.lookahead]
             )?;
 
             if self.symbols.is_empty() {
@@ -50,8 +48,8 @@ impl Fact {
                         write!(f, " ")?;
                     }
                     match s {
-                        Symbol::T(t) => write!(f, "{}", g.terminal(t))?,
-                        Symbol::N(n) => write!(f, "{}", g.nonterminal(n))?,
+                        SymbolID::T(t) => write!(f, "{}", g.terminals[t])?,
+                        SymbolID::N(n) => write!(f, "{}", g.nonterminals[n])?,
                     }
                 }
                 write!(f, "]")?;
@@ -67,7 +65,7 @@ impl Fact {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{}", g.terminal(t))?;
+                    write!(f, "{}", g.terminals[t])?;
                 }
                 write!(f, "]")?;
             }
@@ -106,11 +104,9 @@ impl EdgeFact {
             write!(
                 f,
                 "{:03} --> {:03} [{}], ",
-                self.start,
-                self.end,
-                g.terminal(&self.lookahead)
+                self.start, self.end, g.terminals[&self.lookahead]
             )?;
-            write!(f, "{}/", g.nonterminal(&self.symbol))?;
+            write!(f, "{}/", g.nonterminals[&self.symbol])?;
             if self.words.is_empty() {
                 write!(f, "ε")?;
             } else {
@@ -119,7 +115,7 @@ impl EdgeFact {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{}", g.terminal(t))?;
+                    write!(f, "{}", g.terminals[t])?;
                 }
                 write!(f, "]")?;
             }
@@ -171,7 +167,7 @@ impl<'g> ReachabilityAlgorithm<'g> {
     pub fn process(&mut self) {
         // add fact: s -(ε/ε)->> s [z] for all s,z
         for (node_id, _node) in self.automaton.nodes() {
-            for lookahead in self.grammar.terminals() {
+            for lookahead in self.grammar.terminals.values() {
                 self.pending_facts.push(PendingFact(Fact {
                     start: node_id,
                     end: node_id,
@@ -186,7 +182,8 @@ impl<'g> ReachabilityAlgorithm<'g> {
         let max_facts = self.automaton.nodes.len()
             * self
                 .grammar
-                .rules()
+                .rules
+                .values()
                 .fold(0usize, |acc, r| acc + r.right().len())
             * self.grammar.terminals.len()
             * self.grammar.terminals.len();
@@ -232,10 +229,10 @@ impl<'g> ReachabilityAlgorithm<'g> {
             _ => None,
         });
         if let Some(next) = found {
-            for terminal in self.grammar.terminals() {
+            for terminal in self.grammar.terminals.values() {
                 let mut new_fact = fact.clone();
                 new_fact.end = next;
-                new_fact.symbols.push(Symbol::T(fact.lookahead));
+                new_fact.symbols.push(SymbolID::T(fact.lookahead));
                 new_fact.words.push(fact.lookahead);
                 new_fact.lookahead = terminal.id();
 
@@ -258,7 +255,7 @@ impl<'g> ReachabilityAlgorithm<'g> {
 
                 let mut new_fact = fact.clone();
                 new_fact.end = dest;
-                new_fact.symbols.push(Symbol::N(symbol));
+                new_fact.symbols.push(SymbolID::N(symbol));
                 new_fact.words.extend_from_slice(&edge_fact.words[..]);
                 new_fact.lookahead = edge_fact.lookahead;
 
@@ -280,7 +277,7 @@ impl<'g> ReachabilityAlgorithm<'g> {
                 words: fact.words.clone(),
                 lookahead: edge_fact.lookahead,
             };
-            new_fact.symbols.push(Symbol::N(edge_fact.symbol));
+            new_fact.symbols.push(SymbolID::N(edge_fact.symbol));
             new_fact.words.extend_from_slice(&edge_fact.words[..]);
 
             self.pending_facts.push(PendingFact(new_fact));
@@ -304,7 +301,7 @@ impl<'g> ReachabilityAlgorithm<'g> {
             }
 
             for reduce in &*reduce_ids {
-                let reduce = self.grammar.rule(reduce);
+                let reduce = &self.grammar.rules[reduce];
                 if reduce.right() != fact.symbols || t != fact.lookahead {
                     continue;
                 }
