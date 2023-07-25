@@ -1,6 +1,6 @@
 //! Context-Free Grammars.
 
-use super::types::{Map, Set};
+use crate::types::{Map, Set};
 use std::fmt;
 
 // ==== Context-Free Grammars =====

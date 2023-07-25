@@ -2,8 +2,8 @@
 
 use crate::{
     grammar::{Assoc, Grammar, NonterminalID, Precedence, RuleID, Symbol, TerminalID},
+    types::{Map, Set},
     util::display_fn,
-    IndexMap, IndexSet,
 };
 use std::{
     borrow::{Borrow, Cow},
@@ -73,7 +73,7 @@ impl Config {
 
 #[derive(Debug)]
 pub struct DFA {
-    pub(crate) nodes: IndexMap<NodeID, DFANode>,
+    pub(crate) nodes: Map<NodeID, DFANode>,
 }
 
 impl DFA {
@@ -195,8 +195,8 @@ impl fmt::Display for NodeID {
 #[derive(Debug)]
 pub struct DFANode {
     item_set: LRItemSet,
-    pub(crate) actions: IndexMap<TerminalID, Action>,
-    pub(crate) gotos: IndexMap<NonterminalID, NodeID>,
+    pub(crate) actions: Map<TerminalID, Action>,
+    pub(crate) gotos: Map<NonterminalID, NodeID>,
 }
 
 impl DFANode {
@@ -243,7 +243,7 @@ impl LRItemCore {
 
 #[derive(Debug, Clone)]
 struct LRItemContext {
-    lookaheads: IndexSet<TerminalID>,
+    lookaheads: Set<TerminalID>,
 }
 
 //  - key: core item
@@ -335,7 +335,7 @@ impl NodeExtractor<'_> {
             changed = false;
 
             // 候補の抽出
-            let mut added: IndexMap<LRItemCore, IndexSet<TerminalID>> = IndexMap::default();
+            let mut added: Map<LRItemCore, Set<TerminalID>> = Map::default();
             for (core, ctx) in &mut *items {
                 let rule = self.grammar.rule(&core.rule);
 
@@ -370,7 +370,7 @@ impl NodeExtractor<'_> {
                 let ctx = items.entry(core).or_insert_with(|| {
                     changed = true;
                     LRItemContext {
-                        lookaheads: IndexSet::default(),
+                        lookaheads: Set::default(),
                     }
                 });
                 for l in lookaheads {
@@ -381,8 +381,8 @@ impl NodeExtractor<'_> {
     }
 
     /// 指定したLRアイテム集合から遷移先のLRアイテム集合（未展開）とラベルを抽出する
-    fn extract_transitions(&self, items: &LRItemSet) -> IndexMap<Symbol, LRItemSet> {
-        let mut item_sets: IndexMap<Symbol, LRItemSet> = IndexMap::default();
+    fn extract_transitions(&self, items: &LRItemSet) -> Map<Symbol, LRItemSet> {
+        let mut item_sets: Map<Symbol, LRItemSet> = Map::default();
         for (core, ctx) in items {
             let rule = self.grammar.rule(&core.rule);
 
@@ -409,8 +409,8 @@ impl NodeExtractor<'_> {
 struct DFAGenerator<'g> {
     extractor: NodeExtractor<'g>,
     pending_nodes: PendingNodes,
-    nodes: IndexMap<NodeID, (LRItemSet, IndexMap<Symbol, NodeID>)>,
-    same_cores: IndexMap<LRItemCores, IndexSet<NodeID>>,
+    nodes: Map<NodeID, (LRItemSet, Map<Symbol, NodeID>)>,
+    same_cores: Map<LRItemCores, Set<NodeID>>,
     config: &'g Config,
 }
 
@@ -440,8 +440,8 @@ impl<'g> DFAGenerator<'g> {
                 first_sets: FirstSets::new(grammar),
             },
             pending_nodes,
-            nodes: IndexMap::default(),
-            same_cores: IndexMap::default(),
+            nodes: Map::default(),
+            same_cores: Map::default(),
             config,
         }
     }
@@ -506,7 +506,7 @@ impl<'g> DFAGenerator<'g> {
             }
 
             // 遷移先のitems setを生成し、ノード生成のキューに登録する
-            let mut edges = IndexMap::default();
+            let mut edges = Map::default();
             for (symbol, new_item_set) in self.extractor.extract_transitions(&new_item_set) {
                 let id = self.pending_nodes.enqueue(new_item_set, Some(new_id));
                 edges.insert(symbol, id);
@@ -520,7 +520,7 @@ impl<'g> DFAGenerator<'g> {
 
     fn finalize(self) -> Result<DFA, DFAError> {
         // 状態ノードの併合によってIDが飛び飛びになってる可能性があるので圧縮する
-        let mut new_node_ids = IndexMap::default();
+        let mut new_node_ids = Map::default();
         let mut next_new_id = 0;
         for &orig_id in self.nodes.keys() {
             let new_id = NodeID::new(next_new_id);
@@ -528,7 +528,7 @@ impl<'g> DFAGenerator<'g> {
             new_node_ids.insert(orig_id, new_id);
         }
 
-        let mut nodes = IndexMap::default();
+        let mut nodes = Map::default();
         for (orig_id, (item_set, edges)) in self.nodes {
             let id = new_node_ids[&orig_id];
 
@@ -537,8 +537,8 @@ impl<'g> DFAGenerator<'g> {
                 shift: Option<NodeID>,
                 reduces: Vec<RuleID>,
             }
-            let mut pending_actions: IndexMap<TerminalID, PendingAction> = IndexMap::default();
-            let mut gotos: IndexMap<NonterminalID, NodeID> = IndexMap::default();
+            let mut pending_actions: Map<TerminalID, PendingAction> = Map::default();
+            let mut gotos: Map<NonterminalID, NodeID> = Map::default();
             for (symbol, target) in edges {
                 // shift, goto
                 let target = new_node_ids[&target];
@@ -564,7 +564,7 @@ impl<'g> DFAGenerator<'g> {
                 }
             }
 
-            let mut actions: IndexMap<TerminalID, Action> = IndexMap::default();
+            let mut actions: Map<TerminalID, Action> = Map::default();
             for (symbol, action) in pending_actions {
                 let resolved = resolve_conflict(
                     self.extractor.grammar,
@@ -649,8 +649,8 @@ fn is_pgm_weakly_compatible_c2(items: &LRItemSet) -> bool {
 
 #[derive(Debug)]
 struct FirstSets {
-    nulls: IndexSet<NonterminalID>,
-    map: IndexMap<Symbol, IndexSet<TerminalID>>,
+    nulls: Set<NonterminalID>,
+    map: Map<Symbol, Set<TerminalID>>,
 }
 
 impl FirstSets {
@@ -658,7 +658,7 @@ impl FirstSets {
         let nulls = nulls_set(grammar);
 
         // First(T) = {} と初期化する
-        let mut map: IndexMap<Symbol, IndexSet<TerminalID>> = IndexMap::default();
+        let mut map: Map<Symbol, Set<TerminalID>> = Map::default();
         for terminal in grammar.terminals() {
             map.insert(
                 Symbol::T(terminal.id()),
@@ -666,7 +666,7 @@ impl FirstSets {
             );
         }
         for symbol in grammar.nonterminals() {
-            map.insert(Symbol::N(symbol.id()), IndexSet::default());
+            map.insert(Symbol::N(symbol.id()), Set::default());
         }
 
         // 制約条件の抽出
@@ -718,11 +718,11 @@ impl FirstSets {
     }
 
     /// `First(prefix lookaheads)`
-    pub fn get<L>(&self, prefix: &[Symbol], lookaheads: L) -> IndexSet<TerminalID>
+    pub fn get<L>(&self, prefix: &[Symbol], lookaheads: L) -> Set<TerminalID>
     where
         L: IntoIterator<Item = TerminalID>,
     {
-        let mut res = IndexSet::default();
+        let mut res = Set::default();
 
         let mut is_end = false;
         for symbol in prefix {
@@ -742,9 +742,9 @@ impl FirstSets {
 }
 
 /// Calculate the set of nullable symbols in this grammar.
-fn nulls_set(grammar: &Grammar) -> IndexSet<NonterminalID> {
+fn nulls_set(grammar: &Grammar) -> Set<NonterminalID> {
     // ruleからnullableであることが分かっている場合は追加する
-    let mut nulls: IndexSet<NonterminalID> = grammar
+    let mut nulls: Set<NonterminalID> = grammar
         .rules()
         .filter_map(|rule| rule.right().is_empty().then(|| rule.left()))
         .collect();

@@ -13,8 +13,8 @@
 use super::{
     grammar::{Grammar, NonterminalID, ProductionID, SymbolID, TerminalSet},
     lr0::{LR0Automaton, StateID},
-    types::{Map, Queue, Set},
 };
+use crate::types::{Map, Queue, Set};
 use std::fmt;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]

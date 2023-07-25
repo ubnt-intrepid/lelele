@@ -4,8 +4,8 @@ use super::{
     grammar::{Grammar, ProductionID, SymbolID, TerminalID},
     lalr::{Goto, LALRData, Reduce},
     lr0::{LR0Automaton, StateID},
-    types::{Map, Queue, Set},
 };
+use crate::types::{Map, Queue, Set};
 use bit_set::BitSet;
 use std::{fmt, iter, mem};
 

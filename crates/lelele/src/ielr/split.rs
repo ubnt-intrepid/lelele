@@ -3,8 +3,8 @@ use super::{
     grammar::{Assoc, Grammar, Precedence, SymbolID, TerminalID, TerminalSet},
     lalr::{Goto, LALRData},
     lr0::{LR0Automaton, LR0State, StateID},
-    types::{Map, Queue, Set},
 };
+use crate::types::{Map, Queue, Set};
 use bit_set::BitSet;
 use std::cmp::Ordering;
 

@@ -1,6 +1,10 @@
 //! Grammar types.
 
-use crate::{syntax as s, util::display_fn, IndexMap, IndexSet};
+use crate::{
+    syntax as s,
+    types::{Map, Set},
+    util::display_fn,
+};
 use std::{
     borrow::{Borrow, Cow},
     fmt, fs,
@@ -256,9 +260,9 @@ impl fmt::Display for Assoc {
 /// The grammar definition used to derive the parser tables.
 #[derive(Debug)]
 pub struct Grammar {
-    pub(crate) terminals: IndexSet<Terminal>,
-    nonterminals: IndexSet<Nonterminal>,
-    rules: IndexSet<Rule>,
+    pub(crate) terminals: Set<Terminal>,
+    nonterminals: Set<Nonterminal>,
+    rules: Set<Rule>,
     start_symbol: NonterminalID,
     accept_rule: Rule,
 }
@@ -313,9 +317,9 @@ impl Grammar {
         F: FnOnce(&mut GrammarDef) -> Result<(), GrammarDefError>,
     {
         let mut def = GrammarDef {
-            terminals: IndexSet::default(),
-            nonterminals: IndexSet::default(),
-            rules: IndexSet::default(),
+            terminals: Set::default(),
+            nonterminals: Set::default(),
+            rules: Set::default(),
             start: None,
             next_terminal_id: TERMINAL_ID_OFFSET,
             next_nonterminal_id: NONTERMINAL_ID_OFFSET,
@@ -422,10 +426,10 @@ fn define_grammar_from_syntax(
         cmp.reverse()
     });
 
-    let mut precedences = IndexMap::default();
+    let mut precedences = Map::default();
     let mut next_priority = 0;
-    let mut terminals = IndexMap::default();
-    let mut nonterminals = IndexMap::default();
+    let mut terminals = Map::default();
+    let mut nonterminals = Map::default();
 
     for desc in &grammar.stmts {
         match desc {
@@ -538,9 +542,9 @@ fn define_grammar_from_syntax(
 /// The contextural values for building a `Grammar`.
 #[derive(Debug)]
 pub struct GrammarDef<'def> {
-    terminals: IndexSet<Terminal>,
-    nonterminals: IndexSet<Nonterminal>,
-    rules: IndexSet<Rule>,
+    terminals: Set<Terminal>,
+    nonterminals: Set<Nonterminal>,
+    rules: Set<Rule>,
     start: Option<NonterminalID>,
     next_terminal_id: u64,
     next_nonterminal_id: u64,

@@ -1,4 +1,4 @@
-use super::types::Map;
+use crate::types::Map;
 use indexmap::map::Slice;
 use std::{cmp, hash::Hash};
 
@@ -6,7 +6,7 @@ pub trait Set {
     fn union_with(&mut self, other: &Self);
 }
 
-impl<T> Set for super::types::Set<T>
+impl<T> Set for crate::types::Set<T>
 where
     T: Clone + Eq + Hash,
 {

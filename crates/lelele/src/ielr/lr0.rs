@@ -1,7 +1,5 @@
-use super::{
-    grammar::{Grammar, NonterminalID, ProductionID, SymbolID, TerminalID},
-    types::{Map, Set},
-};
+use super::grammar::{Grammar, NonterminalID, ProductionID, SymbolID, TerminalID};
+use crate::types::{Map, Set};
 use std::{collections::VecDeque, fmt};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]

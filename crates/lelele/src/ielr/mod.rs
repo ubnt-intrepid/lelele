@@ -6,8 +6,6 @@ pub mod grammar;
 pub mod lalr;
 pub mod lr0;
 pub mod split;
-pub mod types;
-pub mod util;
 
 use self::{grammar::Grammar, lalr::LALRData, lr0::LR0Automaton};
 
