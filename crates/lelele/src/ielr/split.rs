@@ -1,10 +1,13 @@
 use super::{
     annotation::{Action, Annotation, AnnotationDesc},
-    grammar::{Assoc, Grammar, Precedence, SymbolID, TerminalID, TerminalSet},
     lalr::{Goto, LALRData},
     lr0::{LR0Automaton, LR0State, StateID},
+    TerminalSet,
 };
-use crate::types::{Map, Queue, Set};
+use crate::{
+    grammar::{Assoc, Grammar, Precedence, SymbolID, TerminalID},
+    types::{Map, Queue, Set},
+};
 use bit_set::BitSet;
 use std::cmp::Ordering;
 
@@ -91,13 +94,13 @@ pub fn split_states(
                 .enumerate()
             {
                 let lookaheads = &mut propagated_lookaheads[k];
-                let prod_k = g.production(kernel_k.production);
+                let prod_k = &g.rules[&kernel_k.production];
                 match kernel_k.index {
                     0 => unreachable!(),
                     1 => {
                         let goto = Goto {
                             from: lr0_id,
-                            symbol: prod_k.left,
+                            symbol: prod_k.left(),
                         };
                         let item_lookaheads = &ielr_item_lookaheads[&ielr_id];
                         if let Some(follow) = follow_kernel_items.get(&goto) {
@@ -242,12 +245,12 @@ fn resolve_conflict(g: &Grammar, token: TerminalID, actions: &[Action]) -> Optio
         Some((Action::Shift, [head, tail @ ..])) => {
             // shift/reduce conflict
             let Action::Reduce(reduce) = head else { unreachable!() };
-            let shift_prec = g.terminals[&token].precedence;
-            let reduce_prec = g.productions[reduce].precedence;
+            let shift_prec = g.terminals[&token].precedence();
+            let reduce_prec = g.rules[reduce].precedence(&g);
             let resolved = compare_precedences(&shift_prec, &reduce_prec);
             for r in tail {
                 let Action::Reduce(r) = r else { unreachable!() };
-                let prec = g.productions[r].precedence;
+                let prec = g.rules[r].precedence(&g);
                 if resolved != compare_precedences(&shift_prec, &prec) {
                     return None;
                 }

@@ -1,6 +1,10 @@
 //! Grammar types.
 
-use crate::{syntax as s, types::Map, util::display_fn};
+use crate::{
+    syntax as s,
+    types::{Map, Set},
+    util::display_fn,
+};
 use std::{borrow::Cow, fmt, fs, hash::Hash, io, marker::PhantomData, path::Path};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -10,16 +14,21 @@ pub struct TerminalID {
 }
 impl TerminalID {
     /// Reserved symbol used as a terminal symbol that means the end of input.
-    pub const EOI: Self = Self::new(0);
+    pub const EOI: Self = Self::from_raw(0);
 
     /// Reserved symbol used as an error token.
-    pub const ERROR: Self = Self::new(1);
+    pub const ERROR: Self = Self::from_raw(1);
 
     const OFFSET: u16 = 2;
 
     #[inline]
-    const fn new(raw: u16) -> Self {
+    pub const fn from_raw(raw: u16) -> Self {
         Self { raw }
+    }
+
+    #[inline]
+    pub const fn into_raw(self) -> u16 {
+        self.raw
     }
 }
 
@@ -205,6 +214,7 @@ pub struct Grammar {
     pub nonterminals: Map<NonterminalID, Nonterminal>,
     pub rules: Map<RuleID, Rule>,
     pub start_symbol: NonterminalID,
+    pub nullables: Set<NonterminalID>,
 }
 
 impl fmt::Display for Grammar {
@@ -486,7 +496,7 @@ impl<'def> GrammarDef<'def> {
             }
         }
 
-        let id = TerminalID::new(self.next_terminal_id);
+        let id = TerminalID::from_raw(self.next_terminal_id);
         self.next_terminal_id += 1;
 
         self.terminals.insert(
@@ -599,11 +609,28 @@ impl<'def> GrammarDef<'def> {
             },
         );
 
+        let mut nullables = Set::default();
+        loop {
+            let mut changed = false;
+            for p in self.rules.values() {
+                if p.right
+                    .iter()
+                    .all(|s| matches!(s, SymbolID::N(n) if nullables.contains(n)))
+                {
+                    changed |= nullables.insert(p.left);
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+
         Ok(Grammar {
             terminals: self.terminals,
             nonterminals: self.nonterminals,
             rules: self.rules,
             start_symbol: start,
+            nullables,
         })
     }
 }

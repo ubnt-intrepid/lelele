@@ -1,11 +1,13 @@
 //! Calculatation of IELR(1) annotation list.
 
 use super::{
-    grammar::{Grammar, ProductionID, SymbolID, TerminalID},
     lalr::{Goto, LALRData, Reduce},
     lr0::{LR0Automaton, StateID},
 };
-use crate::types::{Map, Queue, Set};
+use crate::{
+    grammar::{Grammar, RuleID, SymbolID, TerminalID},
+    types::{Map, Queue, Set},
+};
 use bit_set::BitSet;
 use std::{fmt, iter, mem};
 
@@ -19,7 +21,7 @@ pub struct AnnotationDesc {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Action {
     Shift,
-    Reduce(ProductionID),
+    Reduce(RuleID),
 }
 
 pub struct Annotation {
@@ -194,12 +196,12 @@ pub fn annotation_lists(
             let mut annotation = Annotation::new(desc.actions.len(), state.kernels.len());
             for (i, action) in desc.actions.iter().enumerate() {
                 if let Action::Reduce(r) = action {
-                    let production = g.production(*r);
-                    if production.right.is_empty() {
+                    let production = &g.rules[r];
+                    if production.right().is_empty() {
                         // compute_lhs_contributions
                         let goto = Goto {
                             from: *state_id,
-                            symbol: production.left,
+                            symbol: production.left(),
                         };
                         if !lalr.always_follows[&goto].contains(desc.token) {
                             for (j, _kernel) in state.kernels.iter().enumerate() {
@@ -213,7 +215,7 @@ pub fn annotation_lists(
                     } else {
                         for (j, kernel) in state.kernels.iter().enumerate() {
                             if kernel.production == *r
-                                && usize::from(kernel.index) == production.right.len()
+                                && usize::from(kernel.index) == production.right().len()
                             {
                                 annotation.set(i, j);
                             }
@@ -257,10 +259,10 @@ pub fn annotation_lists(
                 }
 
                 if next_state.kernels.iter().enumerate().any(|(j, kernel)| {
-                    let production = g.production(kernel.production);
+                    let production = &g.rules[&kernel.production];
                     let goto = Goto {
                         from: current,
-                        symbol: production.left,
+                        symbol: production.left(),
                     };
                     row.is_set(j)
                         && kernel.index == 1
@@ -288,10 +290,10 @@ pub fn annotation_lists(
                             return false;
                         }
 
-                        let production = g.production(kernel_k.production);
+                        let production = &g.rules[&kernel_k.production];
                         let goto = Goto {
                             from: current,
-                            symbol: production.left,
+                            symbol: production.left(),
                         };
                         if lalr.always_follows[&goto].contains(desc.token) {
                             return false;
@@ -344,8 +346,8 @@ pub fn follow_kernel_items(g: &Grammar, lr0: &LR0Automaton, lalr: &LALRData) -> 
         let state = &lr0.states[&key.from];
         let mut kernels = BitSet::default();
         for (k, kernel) in state.kernels.iter().enumerate() {
-            let production = g.production(kernel.production);
-            match production.right.get(usize::from(kernel.index)..) {
+            let production = &g.rules[&kernel.production];
+            match production.right().get(usize::from(kernel.index)..) {
                 Some([SymbolID::N(rho_d), gamma @ ..]) => {
                     if key.symbol == *rho_d
                         && gamma

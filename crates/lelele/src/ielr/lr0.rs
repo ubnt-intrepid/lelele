@@ -1,5 +1,7 @@
-use super::grammar::{Grammar, NonterminalID, ProductionID, SymbolID, TerminalID};
-use crate::types::{Map, Set};
+use crate::{
+    grammar::{Grammar, NonterminalID, RuleID, SymbolID, TerminalID},
+    types::{Map, Set},
+};
 use std::{collections::VecDeque, fmt};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -18,15 +20,15 @@ impl StateID {
 /// The LR(0) item, a.k.a. LR item core.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct LR0Item {
-    pub production: ProductionID,
+    pub production: RuleID,
     pub index: u16,
 }
 impl LR0Item {
     pub fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
         crate::util::display_fn(|f| {
-            let production = g.production(self.production);
-            write!(f, "{} -> [ ", g.nonterminals[&production.left])?;
-            for (i, r) in production.right.iter().enumerate() {
+            let production = &g.rules[&self.production];
+            write!(f, "{} -> [ ", g.nonterminals[&production.left()])?;
+            for (i, r) in production.right().iter().enumerate() {
                 if i > 0 {
                     f.write_str(" ")?;
                 }
@@ -34,11 +36,11 @@ impl LR0Item {
                     f.write_str(". ")?;
                 }
                 match r {
-                    SymbolID::N(n) => f.write_str(&*g.nonterminals[n])?,
-                    SymbolID::T(t) => f.write_str(&*g.terminals[t].name)?,
+                    SymbolID::N(n) => write!(f, "{}", g.nonterminals[n])?,
+                    SymbolID::T(t) => write!(f, "{}", g.terminals[t])?,
                 }
             }
-            if production.right.len() == self.index as usize {
+            if production.right().len() == self.index as usize {
                 write!(f, " .")?;
             }
             write!(f, " ]")
@@ -51,7 +53,7 @@ pub struct LR0State {
     pub kernels: Vec<LR0Item>,
     pub shifts: Map<TerminalID, StateID>,
     pub gotos: Map<NonterminalID, StateID>,
-    pub reduces: Set<ProductionID>,
+    pub reduces: Set<RuleID>,
     pub predecessors: Map<StateID, SymbolID>,
 }
 
@@ -65,7 +67,7 @@ impl LR0State {
             if !self.shifts.is_empty() {
                 writeln!(f, "## shifts:")?;
                 for (t, to) in &self.shifts {
-                    writeln!(f, "- {} => {:?}", g.terminals[t].name, to)?;
+                    writeln!(f, "- {} => {:?}", g.terminals[t], to)?;
                 }
             }
             if !self.gotos.is_empty() {
@@ -77,17 +79,18 @@ impl LR0State {
             if !self.reduces.is_empty() {
                 writeln!(f, "## reduces:")?;
                 for reduce in &self.reduces {
-                    writeln!(f, "- {}", g.production(*reduce).display(g))?;
+                    writeln!(f, "- {}", g.rules[reduce].display(g))?;
                 }
             }
             if !self.predecessors.is_empty() {
                 writeln!(f, "## predecessors:")?;
                 for (next, sym) in &self.predecessors {
-                    let sym = match sym {
-                        SymbolID::T(t) => g.terminals[t].name.as_str(),
-                        SymbolID::N(n) => g.nonterminals[n].as_str(),
-                    };
-                    writeln!(f, "- {:?} --({})-->", next, sym)?;
+                    write!(f, "- {:?} --(", next)?;
+                    match sym {
+                        SymbolID::T(t) => write!(f, "{}", g.terminals[t])?,
+                        SymbolID::N(n) => write!(f, "{}", g.nonterminals[n])?,
+                    }
+                    writeln!(f, ")-->")?;
                 }
             }
             Ok(())
@@ -118,7 +121,7 @@ pub fn lr0(g: &Grammar) -> LR0Automaton {
     pending_states.push_back((
         state_id(),
         Some(LR0Item {
-            production: ProductionID::ACCEPT,
+            production: RuleID::ACCEPT,
             index: 0,
         })
         .into_iter()
@@ -133,8 +136,8 @@ pub fn lr0(g: &Grammar) -> LR0Automaton {
         items.clear();
         for kernel in &kernels {
             items.insert(*kernel);
-            let production = g.production(kernel.production);
-            if let Some(SymbolID::N(n)) = production.right.get::<usize>(kernel.index.into()) {
+            let production = &g.rules[&kernel.production];
+            if let Some(SymbolID::N(n)) = production.right().get::<usize>(kernel.index.into()) {
                 items.extend(&nonkernels[n]);
             }
         }
@@ -142,8 +145,8 @@ pub fn lr0(g: &Grammar) -> LR0Automaton {
         let mut reduces = Set::default();
         new_kernels.clear();
         for item in items.drain(..) {
-            let production = g.production(item.production);
-            match production.right.get::<usize>(item.index.into()) {
+            let production = &g.rules[&item.production];
+            match production.right().get::<usize>(item.index.into()) {
                 Some(sym) => {
                     let new_kernel = new_kernels.entry(*sym).or_default();
                     new_kernel.insert(LR0Item {
@@ -204,8 +207,8 @@ fn nonkernels(g: &Grammar) -> Map<NonterminalID, Set<LR0Item>> {
     let mut nonkernels: Map<NonterminalID, Set<LR0Item>> = Map::default();
     for &n in g.nonterminals.keys() {
         let mut items = Set::default();
-        for (id, p) in &g.productions {
-            if p.left != n {
+        for (id, p) in &g.rules {
+            if p.left() != n {
                 continue;
             }
             items.insert(LR0Item {
@@ -218,10 +221,10 @@ fn nonkernels(g: &Grammar) -> Map<NonterminalID, Set<LR0Item>> {
         loop {
             added.clear();
             for item in &items {
-                let production = g.production(item.production);
-                if let Some(SymbolID::N(n)) = production.right.get(0) {
-                    for (id, p) in &g.productions {
-                        if p.left != *n {
+                let production = &g.rules[&item.production];
+                if let Some(SymbolID::N(n)) = production.right().get(0) {
+                    for (id, p) in &g.rules {
+                        if p.left() != *n {
                             continue;
                         }
                         added.insert(LR0Item {

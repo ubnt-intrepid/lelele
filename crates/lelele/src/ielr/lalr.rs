@@ -11,10 +11,13 @@
 //!       <https://www.sciencedirect.com/science/article/pii/S0167642309001191>
 
 use super::{
-    grammar::{Grammar, NonterminalID, ProductionID, SymbolID, TerminalSet},
     lr0::{LR0Automaton, StateID},
+    TerminalSet,
 };
-use crate::types::{Map, Queue, Set};
+use crate::{
+    grammar::{Grammar, NonterminalID, RuleID, SymbolID},
+    types::{Map, Queue, Set},
+};
 use std::fmt;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -32,7 +35,7 @@ impl fmt::Debug for Goto {
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Reduce {
     pub state: StateID,
-    pub production: ProductionID,
+    pub production: RuleID,
 }
 
 impl fmt::Debug for Reduce {
@@ -154,7 +157,7 @@ fn item_lookaheads(
         let state = &lr0.states[&id];
         let mut lookaheads = vec![TerminalSet::default(); state.kernels.len()];
         for (k, kernel) in state.kernels.iter().enumerate() {
-            let production = g.production(kernel.production);
+            let production = &g.rules[&kernel.production];
             match kernel.index {
                 0 => {
                     // Only if the production is #Start -> S #EOI`.
@@ -165,7 +168,7 @@ fn item_lookaheads(
                     //  => \bigcup { Follow(p,A) | p is predecessor }
                     for &from in state.predecessors.keys() {
                         for &symbol in lr0.states[&from].gotos.keys() {
-                            if symbol != production.left {
+                            if symbol != production.left() {
                                 continue;
                             }
                             lookaheads[k].union_with(&follows[&Goto { from, symbol }]);
@@ -230,24 +233,24 @@ fn calc_includes(
 
     for a_key in gotos.keys() {
         for b_key in gotos.keys() {
-            'outer: for p in g.productions.values() {
+            'outer: for p in g.rules.values() {
                 // B -> β A γ and γ =>* ε
-                if p.left != b_key.symbol {
+                if p.left() != b_key.symbol {
                     continue;
                 }
                 let beta = match p
-                    .right
+                    .right()
                     .iter()
                     .position(|s| matches!(s, SymbolID::N(n) if *n == a_key.symbol))
                 {
                     Some(i) => {
-                        let is_gamma_nullable = p.right[i + 1..]
+                        let is_gamma_nullable = p.right()[i + 1..]
                             .iter()
                             .all(|s| matches!(s, SymbolID::N(n) if g.nullables.contains(n)));
                         if !is_gamma_nullable {
                             continue;
                         }
-                        &p.right[..i]
+                        &p.right()[..i]
                     }
                     None => continue,
                 };
@@ -283,9 +286,9 @@ fn calc_lookbacks(g: &Grammar, lr0: &LR0Automaton) -> Map<Reduce, Set<Goto>> {
     let mut lookbacks = Map::<Reduce, Set<Goto>>::default();
 
     for &from in lr0.states.keys() {
-        for (&p_id, p) in &g.productions {
+        for (&p_id, p) in &g.rules {
             let mut current = from;
-            let mut right = &p.right[..];
+            let mut right = &p.right()[..];
             while !right.is_empty() {
                 let next = match &right[0] {
                     SymbolID::T(t) => lr0.states[&current].shifts.get(t),
@@ -306,7 +309,7 @@ fn calc_lookbacks(g: &Grammar, lr0: &LR0Automaton) -> Map<Reduce, Set<Goto>> {
                 };
                 lookbacks.entry(reduce).or_default().insert(Goto {
                     from,
-                    symbol: p.left,
+                    symbol: p.left(),
                 });
             }
         }
