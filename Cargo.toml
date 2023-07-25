@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "crates/*",
-    "examples/*",
+    #"examples/*",
 ]
 exclude = [
     "examples/wip",
@@ -15,9 +15,11 @@ rust-version = "1.70.0"
 
 [workspace.dependencies]
 anyhow = "1"
+bit-set = "0.5"
+bit-vec = "0.6"
 clap = { version = "4", features = ["derive"] }
 criterion = "0.5"
-indexmap = "1"
+indexmap = "2"
 lexgen = "0.14"
 lexgen_util = "0.14"
 logos = "0.13"
