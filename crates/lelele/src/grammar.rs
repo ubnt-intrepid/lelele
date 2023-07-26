@@ -3,15 +3,15 @@
 use crate::{
     syntax as s,
     types::{Map, Set},
-    util::display_fn,
 };
-use std::{borrow::Cow, fmt, fs, hash::Hash, io, marker::PhantomData, path::Path};
+use std::{borrow::Cow, fs, hash::Hash, io, marker::PhantomData, path::Path};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct TerminalID {
     raw: u16,
 }
+
 impl TerminalID {
     /// Reserved symbol used as a terminal symbol that means the end of input.
     pub const EOI: Self = Self::from_raw(0);
@@ -34,14 +34,11 @@ impl TerminalID {
 
 #[derive(Debug)]
 pub struct Terminal {
-    id: TerminalID,
     export_name: Option<Cow<'static, str>>,
     precedence: Option<Precedence>,
 }
+
 impl Terminal {
-    pub fn id(&self) -> TerminalID {
-        self.id
-    }
     pub fn export_name(&self) -> Option<&str> {
         self.export_name.as_deref()
     }
@@ -50,21 +47,13 @@ impl Terminal {
         self.precedence
     }
 }
-impl fmt::Display for Terminal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.id {
-            TerminalID::EOI => f.write_str("$eoi"),
-            TerminalID::ERROR => f.write_str("$error"),
-            _ => f.write_str(self.export_name().unwrap_or("<unknown>")),
-        }
-    }
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct NonterminalID {
     raw: u16,
 }
+
 impl NonterminalID {
     pub const START: Self = Self::new(0);
     const OFFSET: u16 = 1;
@@ -77,23 +66,12 @@ impl NonterminalID {
 
 #[derive(Debug)]
 pub struct Nonterminal {
-    id: NonterminalID,
     export_name: Option<Cow<'static, str>>,
 }
+
 impl Nonterminal {
-    pub fn id(&self) -> NonterminalID {
-        self.id
-    }
     pub fn export_name(&self) -> Option<&str> {
         self.export_name.as_deref()
-    }
-}
-impl fmt::Display for Nonterminal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.id {
-            NonterminalID::START => f.write_str("$start"),
-            _ => f.write_str(self.export_name().unwrap_or("<unknown>")),
-        }
     }
 }
 
@@ -123,16 +101,12 @@ impl RuleID {
 /// The type that represents a production rule in grammar.
 #[derive(Debug)]
 pub struct Rule {
-    id: RuleID,
     left: NonterminalID,
     right: Vec<SymbolID>,
     precedence: Option<Precedence>,
 }
-impl Rule {
-    pub fn id(&self) -> RuleID {
-        self.id
-    }
 
+impl Rule {
     /// Return the left-hand side of this production.
     pub fn left(&self) -> NonterminalID {
         self.left
@@ -155,23 +129,6 @@ impl Rule {
                 None
             }
         }
-    }
-
-    // `"LHS := R1 R2 R3"`
-    pub fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
-        display_fn(|f| {
-            write!(f, "{} := ", g.nonterminals[&self.left()])?;
-            for (i, symbol) in self.right().iter().enumerate() {
-                if i > 0 {
-                    write!(f, " ")?;
-                }
-                match symbol {
-                    SymbolID::T(t) => write!(f, "{}", g.terminals[t])?,
-                    SymbolID::N(n) => write!(f, "{}", g.nonterminals[n])?,
-                }
-            }
-            Ok(())
-        })
     }
 }
 
@@ -196,16 +153,6 @@ pub enum Assoc {
     Nonassoc,
 }
 
-impl fmt::Display for Assoc {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Left => write!(f, "left"),
-            Self::Right => write!(f, "right"),
-            Self::Nonassoc => write!(f, "nonassoc"),
-        }
-    }
-}
-
 /// The grammar definition used to derive the parser tables.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -215,39 +162,6 @@ pub struct Grammar {
     pub rules: Map<RuleID, Rule>,
     pub start_symbol: NonterminalID,
     pub nullables: Set<NonterminalID>,
-}
-
-impl fmt::Display for Grammar {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "## terminals:")?;
-        for terminal in self.terminals.values() {
-            write!(f, "{}", terminal)?;
-            if let Some(prec) = terminal.precedence() {
-                write!(f, " (priority={}, assoc={})", prec.priority, prec.assoc)?;
-            }
-            writeln!(f)?;
-        }
-
-        writeln!(f, "\n## nonterminals:")?;
-        for nonterminal in self.nonterminals.values() {
-            write!(f, "{}", nonterminal)?;
-            if nonterminal.id() == self.start_symbol {
-                write!(f, " (start)")?;
-            }
-            writeln!(f)?;
-        }
-
-        writeln!(f, "\n## rules:")?;
-        for rule in self.rules.values() {
-            write!(f, "{}", rule.display(self))?;
-            if let Some(prec) = &rule.precedence {
-                write!(f, " (priority={}, assoc={})", prec.priority, prec.assoc)?;
-            }
-            writeln!(f)?;
-        }
-
-        Ok(())
-    }
 }
 
 impl Grammar {
@@ -280,7 +194,6 @@ impl Grammar {
         def.terminals.insert(
             TerminalID::EOI,
             Terminal {
-                id: TerminalID::EOI,
                 export_name: None,
                 precedence: None,
             },
@@ -288,19 +201,13 @@ impl Grammar {
         def.terminals.insert(
             TerminalID::ERROR,
             Terminal {
-                id: TerminalID::ERROR,
                 export_name: None,
                 precedence: None,
             },
         );
 
-        def.nonterminals.insert(
-            NonterminalID::START,
-            Nonterminal {
-                id: NonterminalID::START,
-                export_name: None,
-            },
-        );
+        def.nonterminals
+            .insert(NonterminalID::START, Nonterminal { export_name: None });
 
         f(&mut def)?;
 
@@ -502,7 +409,6 @@ impl<'def> GrammarDef<'def> {
         self.terminals.insert(
             id,
             Terminal {
-                id,
                 export_name: Some(export_name.to_owned().into()),
                 precedence,
             },
@@ -536,7 +442,6 @@ impl<'def> GrammarDef<'def> {
         self.nonterminals.insert(
             id,
             Nonterminal {
-                id,
                 export_name: Some(export_name.to_owned().into()),
             },
         );
@@ -568,7 +473,6 @@ impl<'def> GrammarDef<'def> {
         self.rules.insert(
             id,
             Rule {
-                id,
                 left,
                 right: right_,
                 precedence,
@@ -602,7 +506,6 @@ impl<'def> GrammarDef<'def> {
         self.rules.insert(
             RuleID::ACCEPT,
             Rule {
-                id: RuleID::ACCEPT,
                 left: NonterminalID::START,
                 right: vec![SymbolID::N(start), SymbolID::T(TerminalID::EOI)],
                 precedence: None,

@@ -5,9 +5,8 @@ use crate::{
     grammar::{Assoc, Grammar, NonterminalID, Precedence, RuleID, TerminalID},
     ielr::{lalr::Reduce, lr0::StateID},
     types::Map,
-    util::display_fn,
 };
-use std::{cmp::Ordering, fmt};
+use std::cmp::Ordering;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DFAError {
@@ -22,61 +21,6 @@ pub enum DFAError {
 #[derive(Debug)]
 pub struct ParseTable {
     pub states: Map<StateID, ParseTableRow>,
-}
-
-impl ParseTable {
-    pub fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
-        display_fn(|f| {
-            for (i, (id, node)) in self.states.iter().enumerate() {
-                if i > 0 {
-                    writeln!(f)?;
-                }
-
-                writeln!(f, "#### State {:?}", id)?;
-                writeln!(f, "## actions")?;
-                for (token, action) in &node.actions {
-                    let token = &g.terminals[token];
-                    match action {
-                        Action::Shift(n) => {
-                            writeln!(f, "- {} => shift({:?})", token, n)?;
-                        }
-                        Action::Reduce(reduce) => {
-                            let reduce = &g.rules[reduce];
-                            writeln!(f, "- {} => reduce({})", token, reduce.display(g))?;
-                        }
-                        Action::Accept => {
-                            writeln!(f, "- {} => accept", token)?;
-                        }
-                        Action::Fail => {
-                            writeln!(f, "- {} => fail", token)?;
-                        }
-                        Action::Inconsistent {
-                            reason,
-                            shift,
-                            reduces,
-                        } => {
-                            let token = &g.terminals[&token.id()];
-                            writeln!(f, "- {} => inconsistent(reason = {:?})", token, reason)?;
-                            writeln!(f, "## conflicted actions on {}", token)?;
-                            if let Some(n) = shift {
-                                writeln!(f, "  - shift({:?})", n)?;
-                            }
-                            for reduce in reduces {
-                                let reduce = &g.rules[reduce];
-                                writeln!(f, "  - reduce({})", reduce.display(g))?;
-                            }
-                        }
-                    }
-                }
-
-                writeln!(f, "## gotos")?;
-                for (symbol, goto) in &node.gotos {
-                    writeln!(f, "- {} => goto({:?})", g.nonterminals[symbol], goto)?;
-                }
-            }
-            Ok(())
-        })
-    }
 }
 
 #[derive(Debug)]

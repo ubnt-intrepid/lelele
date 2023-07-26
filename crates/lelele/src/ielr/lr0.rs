@@ -29,30 +29,6 @@ pub struct LR0Item {
     pub production: RuleID,
     pub index: u16,
 }
-impl LR0Item {
-    pub fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
-        crate::util::display_fn(|f| {
-            let production = &g.rules[&self.production];
-            write!(f, "{} -> [ ", g.nonterminals[&production.left()])?;
-            for (i, r) in production.right().iter().enumerate() {
-                if i > 0 {
-                    f.write_str(" ")?;
-                }
-                if i == self.index as usize {
-                    f.write_str(". ")?;
-                }
-                match r {
-                    SymbolID::N(n) => write!(f, "{}", g.nonterminals[n])?,
-                    SymbolID::T(t) => write!(f, "{}", g.terminals[t])?,
-                }
-            }
-            if production.right().len() == self.index as usize {
-                write!(f, " .")?;
-            }
-            write!(f, " ]")
-        })
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct LR0State {
@@ -60,36 +36,6 @@ pub struct LR0State {
     pub shifts: Map<TerminalID, StateID>,
     pub gotos: Map<NonterminalID, StateID>,
     pub reduces: Set<RuleID>,
-}
-
-impl LR0State {
-    pub fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
-        crate::util::display_fn(|f| {
-            writeln!(f, "## kernels:")?;
-            for kernel in &self.kernels {
-                writeln!(f, "- {}", kernel.display(g))?;
-            }
-            if !self.shifts.is_empty() {
-                writeln!(f, "## shifts:")?;
-                for (t, to) in &self.shifts {
-                    writeln!(f, "- {} => {:?}", g.terminals[t], to)?;
-                }
-            }
-            if !self.gotos.is_empty() {
-                writeln!(f, "## gotos:")?;
-                for (n, to) in &self.gotos {
-                    writeln!(f, "- {} => {:?}", g.nonterminals[n], to)?;
-                }
-            }
-            if !self.reduces.is_empty() {
-                writeln!(f, "## reduces:")?;
-                for reduce in &self.reduces {
-                    writeln!(f, "- {}", g.rules[reduce].display(g))?;
-                }
-            }
-            Ok(())
-        })
-    }
 }
 
 #[derive(Debug)]

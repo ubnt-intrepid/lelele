@@ -2,11 +2,8 @@ use super::{
     lr0::StateID,
     table::{Action, ParseTable},
 };
-use crate::{
-    grammar::{Grammar, NonterminalID, SymbolID, TerminalID},
-    util::display_fn,
-};
-use std::{borrow::Cow, cmp::Ordering, collections::BinaryHeap, fmt};
+use crate::grammar::{Grammar, NonterminalID, SymbolID, TerminalID};
+use std::{borrow::Cow, cmp::Ordering, collections::BinaryHeap};
 
 // The fact that the LR state `start` is reachable to `end` on the specified lookahead symbol.
 //
@@ -20,6 +17,7 @@ pub struct Fact {
     words: Vec<TerminalID>,
     lookahead: TerminalID,
 }
+
 impl Fact {
     fn first_word(&self) -> &TerminalID {
         self.words.first().unwrap_or(&self.lookahead)
@@ -33,49 +31,6 @@ impl Fact {
             && self.first_word() == fact.first_word()
             && self.words.len() <= fact.words.len()
     }
-
-    fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
-        display_fn(|f| {
-            write!(
-                f,
-                "{:?} -->> {:?} [{}], ",
-                self.start, self.end, g.terminals[&self.lookahead]
-            )?;
-
-            if self.symbols.is_empty() {
-                write!(f, "ε")?;
-            } else {
-                write!(f, "[")?;
-                for (i, s) in self.symbols.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, " ")?;
-                    }
-                    match s {
-                        SymbolID::T(t) => write!(f, "{}", g.terminals[t])?,
-                        SymbolID::N(n) => write!(f, "{}", g.nonterminals[n])?,
-                    }
-                }
-                write!(f, "]")?;
-            }
-
-            write!(f, "/")?;
-
-            if self.words.is_empty() {
-                write!(f, "ε")?;
-            } else {
-                write!(f, "[")?;
-                for (i, t) in self.words.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, " ")?;
-                    }
-                    write!(f, "{}", g.terminals[t])?;
-                }
-                write!(f, "]")?;
-            }
-
-            Ok(())
-        })
-    }
 }
 
 // The edge fact:
@@ -88,6 +43,7 @@ pub struct EdgeFact {
     words: Vec<TerminalID>,
     lookahead: TerminalID,
 }
+
 impl EdgeFact {
     fn first_word(&self) -> &TerminalID {
         self.words.first().unwrap_or(&self.lookahead)
@@ -100,30 +56,6 @@ impl EdgeFact {
             && self.lookahead == edge_fact.lookahead
             && self.first_word() == edge_fact.first_word()
             && self.words.len() <= edge_fact.words.len()
-    }
-
-    fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
-        display_fn(|f| {
-            write!(
-                f,
-                "{:?} --> {:?} [{}], ",
-                self.start, self.end, g.terminals[&self.lookahead]
-            )?;
-            write!(f, "{}/", g.nonterminals[&self.symbol])?;
-            if self.words.is_empty() {
-                write!(f, "ε")?;
-            } else {
-                write!(f, "[")?;
-                for (i, t) in self.words.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, " ")?;
-                    }
-                    write!(f, "{}", g.terminals[t])?;
-                }
-                write!(f, "]")?;
-            }
-            Ok(())
-        })
     }
 }
 
@@ -170,13 +102,13 @@ impl<'g> ReachabilityAlgorithm<'g> {
     pub fn process(&mut self) {
         // add fact: s -(ε/ε)->> s [z] for all s,z
         for (&node_id, _node) in &self.automaton.states {
-            for lookahead in self.grammar.terminals.values() {
+            for &lookahead in self.grammar.terminals.keys() {
                 self.pending_facts.push(PendingFact(Fact {
                     start: node_id,
                     end: node_id,
                     symbols: vec![],
                     words: vec![],
-                    lookahead: lookahead.id(),
+                    lookahead,
                 }));
             }
         }
@@ -212,7 +144,6 @@ impl<'g> ReachabilityAlgorithm<'g> {
             }
 
             if self.facts.iter().all(|f| !f.is_subsumed_by(&fact)) {
-                tracing::trace!("add fact: {}", fact.display(self.grammar));
                 self.facts.push(fact.clone());
                 self.step_terminal(&fact);
                 self.step_nonterminal_left(&fact);
@@ -233,12 +164,12 @@ impl<'g> ReachabilityAlgorithm<'g> {
             _ => None,
         });
         if let Some(next) = found {
-            for terminal in self.grammar.terminals.values() {
+            for &terminal in self.grammar.terminals.keys() {
                 let mut new_fact = fact.clone();
                 new_fact.end = next;
                 new_fact.symbols.push(SymbolID::T(fact.lookahead));
                 new_fact.words.push(fact.lookahead);
-                new_fact.lookahead = terminal.id();
+                new_fact.lookahead = terminal;
 
                 self.pending_facts.push(PendingFact(new_fact));
             }
@@ -325,7 +256,6 @@ impl<'g> ReachabilityAlgorithm<'g> {
                     .iter()
                     .all(|e| !e.is_subsumed_by(&edge_fact))
                 {
-                    tracing::trace!("add edge_fact: {}", edge_fact.display(self.grammar));
                     self.edge_facts.push(edge_fact.clone());
                     self.step_nonterminal_right(&edge_fact);
                 }

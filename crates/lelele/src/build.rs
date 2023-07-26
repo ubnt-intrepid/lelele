@@ -97,10 +97,7 @@ impl Build {
         }
 
         let codegen = Codegen::new(&grammar, &table);
-
         fs::write(&out_file, codegen.to_string())?;
-        fs::write(&expanded_file, grammar.to_string())?;
-        fs::write(&automaton_file, table.display(&grammar).to_string())?;
 
         Ok(())
     }

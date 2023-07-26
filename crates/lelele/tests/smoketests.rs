@@ -9,17 +9,9 @@ macro_rules! define_tests {
                 &PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
                     .join(concat!("tests/", stringify!($name), ".lll"))
             ).unwrap();
-            eprintln!("grammar:\n{}", grammar);
-            eprintln!();
-
-            eprintln!("DFA(IELR):");
-            let dfa = lelele::ielr::compute(&grammar, Default::default()).unwrap();
-            eprintln!("num_nodes: {}", dfa.states.len());
-            eprintln!("---\n{}\n", dfa.display(&grammar));
+            let _table = lelele::ielr::compute(&grammar, Default::default()).unwrap();
         }
-
     )*};
-
 }
 
 define_tests! {

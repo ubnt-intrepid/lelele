@@ -124,10 +124,7 @@ mod tests {
             Ok(())
         })
         .unwrap();
-        eprintln!("{}", grammar);
-
-        let table = compute(&grammar, Default::default()).unwrap();
-        eprintln!("table:\n---\n{}", table.display(&grammar));
+        let _table = compute(&grammar, Default::default()).unwrap();
     }
 
     #[test]
@@ -166,9 +163,6 @@ mod tests {
             Ok(())
         })
         .unwrap();
-        eprintln!("{}", grammar);
-
-        let table = compute(&grammar, Default::default()).unwrap();
-        eprintln!("table:\n---\n{}", table.display(&grammar));
+        let _table = compute(&grammar, Default::default()).unwrap();
     }
 }
