@@ -1,4 +1,4 @@
-use lelele::{grammar::Grammar, lr1::DFA};
+use lelele::grammar::Grammar;
 use std::{env, path::PathBuf};
 
 macro_rules! define_tests {
@@ -13,7 +13,7 @@ macro_rules! define_tests {
             eprintln!();
 
             eprintln!("DFA(IELR):");
-            let dfa = DFA::generate(&grammar).unwrap();
+            let dfa = lelele::ielr::compute(&grammar).unwrap();
             eprintln!("num_nodes: {}", dfa.states.len());
             eprintln!("---\n{}\n", dfa.display(&grammar));
         }

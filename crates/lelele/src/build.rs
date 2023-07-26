@@ -1,6 +1,6 @@
 //! Build script support.
 
-use crate::{codegen::Codegen, grammar::Grammar, lr1::DFA};
+use crate::{codegen::Codegen, grammar::Grammar};
 use anyhow::Context as _;
 use std::{
     env, fs,
@@ -73,10 +73,10 @@ impl Build {
         let grammar = Grammar::from_file(&in_file)?;
         // TODO: report grammar diganosis
 
-        let dfa = DFA::generate(&grammar).context("failed to construct LR automaton")?;
+        let table = crate::ielr::compute(&grammar).context("failed to construct LR automaton")?;
 
         let mut num_inconsist_states = 0;
-        for (_, node) in &dfa.states {
+        for (_, node) in &table.states {
             let mut has_inconsistent_action = false;
             for action in node.actions.values() {
                 has_inconsistent_action |= !action.is_consistent();
@@ -95,11 +95,11 @@ impl Build {
             );
         }
 
-        let codegen = Codegen::new(&grammar, &dfa);
+        let codegen = Codegen::new(&grammar, &table);
 
         fs::write(&out_file, codegen.to_string())?;
         fs::write(&expanded_file, grammar.to_string())?;
-        fs::write(&automaton_file, dfa.display(&grammar).to_string())?;
+        fs::write(&automaton_file, table.display(&grammar).to_string())?;
 
         Ok(())
     }

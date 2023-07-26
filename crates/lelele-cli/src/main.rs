@@ -1,6 +1,6 @@
 use anyhow::Context as _;
 use clap::{Parser, ValueEnum};
-use lelele::{codegen::Codegen, grammar::Grammar, lr1::DFA};
+use lelele::{codegen::Codegen, grammar::Grammar};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -69,10 +69,10 @@ fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
         );
     }
 
-    let dfa = DFA::generate(&grammar)?;
+    let table = lelele::ielr::compute(&grammar)?;
 
     let mut num_inconsist_states = 0;
-    for node in dfa.states.values() {
+    for node in table.states.values() {
         let mut has_inconsistent_action = false;
         for action in node.actions.values() {
             has_inconsistent_action |= !action.is_consistent();
@@ -91,7 +91,7 @@ fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
         );
     }
 
-    let codegen = Codegen::new(&grammar, &dfa);
+    let codegen = Codegen::new(&grammar, &table);
     let mut generated: Vec<u8> = codegen.to_string().into();
 
     // attempt to apply rustfmt to generated code.
@@ -108,7 +108,8 @@ fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
 
     // dump results.
     fs::write(&expanded_file, grammar.to_string()).context("writing .grammar")?;
-    fs::write(&automaton_file, dfa.display(&grammar).to_string()).context("writing .automaton")?;
+    fs::write(&automaton_file, table.display(&grammar).to_string())
+        .context("writing .automaton")?;
     if out_file.exists() {
         fs::copy(&out_file, &backup_file).with_context(|| {
             anyhow::anyhow!(

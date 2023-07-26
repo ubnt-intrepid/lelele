@@ -1,6 +1,9 @@
+use super::{
+    lr0::StateID,
+    table::{Action, ParseTable},
+};
 use crate::{
     grammar::{Grammar, NonterminalID, SymbolID, TerminalID},
-    lr1::{Action, StateID, DFA},
     util::display_fn,
 };
 use std::{borrow::Cow, cmp::Ordering, collections::BinaryHeap, fmt};
@@ -146,14 +149,14 @@ impl Ord for PendingFact {
 #[derive(Debug)]
 pub struct ReachabilityAlgorithm<'g> {
     grammar: &'g Grammar,
-    automaton: &'g DFA,
+    automaton: &'g ParseTable,
     pending_facts: BinaryHeap<PendingFact>,
     pub facts: Vec<Fact>,
     pub edge_facts: Vec<EdgeFact>,
 }
 
 impl<'g> ReachabilityAlgorithm<'g> {
-    pub fn new(grammar: &'g Grammar, automaton: &'g DFA) -> Self {
+    pub fn new(grammar: &'g Grammar, automaton: &'g ParseTable) -> Self {
         Self {
             grammar,
             automaton,

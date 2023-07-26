@@ -1,7 +1,7 @@
 use std::{env, path::PathBuf};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use lelele::{grammar::Grammar, lr1::DFA};
+use lelele::grammar::Grammar;
 
 criterion_main!(benches);
 criterion_group!(benches, bench_grammar_gen);
@@ -14,7 +14,7 @@ fn bench_grammar_gen(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("MinCaml");
     group.bench_function("IELR", |b| {
-        b.iter(|| DFA::generate(&grammar));
+        b.iter(|| lelele::ielr::compute(&grammar));
     });
     group.finish();
 }

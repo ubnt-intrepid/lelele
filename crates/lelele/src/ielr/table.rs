@@ -1,10 +1,9 @@
-//! The implementation of LR(1) automaton.
+//! Calculation of LR(1) parse table with conflict resolution.
 
-pub use crate::ielr::lr0::StateID;
-
+use super::{lalr::LALRData, lr0::LR0Automaton};
 use crate::{
     grammar::{Assoc, Grammar, NonterminalID, Precedence, RuleID, TerminalID},
-    ielr::lalr::Reduce,
+    ielr::{lalr::Reduce, lr0::StateID},
     types::Map,
     util::display_fn,
 };
@@ -21,60 +20,11 @@ pub enum DFAError {
 }
 
 #[derive(Debug)]
-pub struct DFA {
-    pub states: Map<StateID, DFANode>,
+pub struct ParseTable {
+    pub states: Map<StateID, ParseTableRow>,
 }
 
-impl DFA {
-    pub fn generate(g: &Grammar) -> Result<Self, DFAError> {
-        let (lr0, lalr) = crate::ielr::compute(g);
-
-        let mut states = Map::default();
-        for (&id, lr0_state) in &lr0.states {
-            #[derive(Default)]
-            struct PendingAction {
-                shift: Option<StateID>,
-                reduces: Vec<RuleID>,
-            }
-            let mut pending_actions = Map::<TerminalID, PendingAction>::default();
-            for (&t, &next) in &lr0_state.shifts {
-                let action = pending_actions.entry(t).or_default();
-                if t == TerminalID::EOI {
-                    action.reduces.push(RuleID::ACCEPT);
-                } else {
-                    action.shift.replace(next);
-                }
-            }
-            for &reduce in &lr0_state.reduces {
-                if reduce != RuleID::ACCEPT {
-                    let key = Reduce {
-                        state: id,
-                        production: reduce,
-                    };
-                    for t in lalr.lookaheads[&key].iter() {
-                        let action = pending_actions.entry(t).or_default();
-                        action.reduces.push(reduce);
-                    }
-                }
-            }
-
-            let mut actions: Map<TerminalID, Action> = Map::default();
-            for (symbol, action) in pending_actions {
-                let resolved = resolve_conflict(g, symbol, action.shift, &action.reduces)?;
-                actions.insert(symbol, resolved);
-            }
-
-            let mut gotos = Map::default();
-            for (&n, &next) in &lr0_state.gotos {
-                gotos.insert(n, next);
-            }
-
-            states.insert(id, DFANode { actions, gotos });
-        }
-
-        Ok(Self { states })
-    }
-
+impl ParseTable {
     pub fn display<'g>(&'g self, g: &'g Grammar) -> impl fmt::Display + 'g {
         display_fn(|f| {
             for (i, (id, node)) in self.states.iter().enumerate() {
@@ -131,7 +81,7 @@ impl DFA {
 
 #[derive(Debug)]
 #[non_exhaustive]
-pub struct DFANode {
+pub struct ParseTableRow {
     pub actions: Map<TerminalID, Action>,
     pub gotos: Map<NonterminalID, StateID>,
 }
@@ -194,6 +144,53 @@ pub enum ConflictResolutionError {
 
     #[error("detected reduce/accept conflict(s)")]
     ReduceAcceptConflict,
+}
+
+pub fn generate(g: &Grammar, lr0: &LR0Automaton, lalr: &LALRData) -> Result<ParseTable, DFAError> {
+    let mut states = Map::default();
+    for (&id, lr0_state) in &lr0.states {
+        #[derive(Default)]
+        struct PendingAction {
+            shift: Option<StateID>,
+            reduces: Vec<RuleID>,
+        }
+        let mut pending_actions = Map::<TerminalID, PendingAction>::default();
+        for (&t, &next) in &lr0_state.shifts {
+            let action = pending_actions.entry(t).or_default();
+            if t == TerminalID::EOI {
+                action.reduces.push(RuleID::ACCEPT);
+            } else {
+                action.shift.replace(next);
+            }
+        }
+        for &reduce in &lr0_state.reduces {
+            if reduce != RuleID::ACCEPT {
+                let key = Reduce {
+                    state: id,
+                    production: reduce,
+                };
+                for t in lalr.lookaheads[&key].iter() {
+                    let action = pending_actions.entry(t).or_default();
+                    action.reduces.push(reduce);
+                }
+            }
+        }
+
+        let mut actions: Map<TerminalID, Action> = Map::default();
+        for (symbol, action) in pending_actions {
+            let resolved = resolve_conflict(g, symbol, action.shift, &action.reduces)?;
+            actions.insert(symbol, resolved);
+        }
+
+        let mut gotos = Map::default();
+        for (&n, &next) in &lr0_state.gotos {
+            gotos.insert(n, next);
+        }
+
+        states.insert(id, ParseTableRow { actions, gotos });
+    }
+
+    Ok(ParseTable { states })
 }
 
 /// Attempts to resolve shift/reduce conflicts based on precedence/associativity.
@@ -311,83 +308,5 @@ fn compare_precs(
             },
         },
         _ => None,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::grammar::SymbolID::*;
-
-    #[test]
-    fn smoketest1() {
-        let grammar = Grammar::define(|def| {
-            let equal = def.terminal("EQUAL", None)?;
-            let plus = def.terminal("PLUS", None)?;
-            let ident = def.terminal("ID", None)?;
-            let num = def.terminal("NUM", None)?;
-
-            let a = def.nonterminal("A")?;
-            let e = def.nonterminal("E")?;
-            let t = def.nonterminal("T")?;
-
-            def.start_symbol(a)?;
-
-            def.rule(a, [N(e), T(equal), N(e)], None)?;
-            def.rule(a, [T(ident)], None)?;
-            def.rule(e, [N(e), T(plus), N(t)], None)?;
-            def.rule(e, [N(t)], None)?;
-            def.rule(t, [T(num)], None)?;
-            def.rule(t, [T(ident)], None)?;
-
-            Ok(())
-        })
-        .unwrap();
-        eprintln!("{}", grammar);
-
-        let dfa = DFA::generate(&grammar).unwrap();
-        eprintln!("DFA Nodes:\n---\n{}", dfa.display(&grammar));
-    }
-
-    #[test]
-    fn smoketest2() {
-        let grammar = Grammar::define(|g| {
-            // declare terminal symbols.
-            let lparen = g.terminal("LPAREN", None)?;
-            let rparen = g.terminal("RPAREN", None)?;
-            let plus = g.terminal("PLUS", None)?;
-            let minus = g.terminal("MINUS", None)?;
-            let star = g.terminal("STAR", None)?;
-            let slash = g.terminal("SLASH", None)?;
-            let num = g.terminal("NUM", None)?;
-            let _ = g.terminal("UNUSED_0", None)?;
-
-            // declare nonterminal symbols.
-            let expr = g.nonterminal("EXPR")?;
-            let term = g.nonterminal("TERM")?;
-            let factor = g.nonterminal("FACTOR")?;
-            let _ = g.nonterminal("UNUSED_1")?;
-
-            // declare syntax rules.
-            g.rule(expr, [N(expr), T(plus), N(term)], None)?;
-            g.rule(expr, [N(expr), T(minus), N(term)], None)?;
-            g.rule(expr, [N(term)], None)?;
-
-            g.rule(term, [N(term), T(star), N(factor)], None)?;
-            g.rule(term, [N(term), T(slash), N(factor)], None)?;
-            g.rule(term, [N(factor)], None)?;
-
-            g.rule(factor, [T(num)], None)?;
-            g.rule(factor, [T(lparen), N(expr), T(rparen)], None)?;
-
-            g.start_symbol(expr)?;
-
-            Ok(())
-        })
-        .unwrap();
-        eprintln!("{}", grammar);
-
-        let dfa = DFA::generate(&grammar).unwrap();
-        eprintln!("DFA Nodes:\n---\n{}", dfa.display(&grammar));
     }
 }
