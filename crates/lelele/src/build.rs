@@ -73,7 +73,8 @@ impl Build {
         let grammar = Grammar::from_file(&in_file)?;
         // TODO: report grammar diganosis
 
-        let table = crate::ielr::compute(&grammar).context("failed to construct LR automaton")?;
+        let table = crate::ielr::compute(&grammar, Default::default())
+            .context("failed to construct LR automaton")?;
 
         let mut num_inconsist_states = 0;
         for (_, node) in &table.states {

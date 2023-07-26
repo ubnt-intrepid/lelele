@@ -69,7 +69,7 @@ fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
         );
     }
 
-    let table = lelele::ielr::compute(&grammar)?;
+    let table = lelele::ielr::compute(&grammar, Default::default())?;
 
     let mut num_inconsist_states = 0;
     for node in table.states.values() {

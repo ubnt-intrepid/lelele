@@ -13,7 +13,7 @@ macro_rules! define_tests {
             eprintln!();
 
             eprintln!("DFA(IELR):");
-            let dfa = lelele::ielr::compute(&grammar).unwrap();
+            let dfa = lelele::ielr::compute(&grammar, Default::default()).unwrap();
             eprintln!("num_nodes: {}", dfa.states.len());
             eprintln!("---\n{}\n", dfa.display(&grammar));
         }

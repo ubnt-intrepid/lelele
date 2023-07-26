@@ -1,6 +1,6 @@
 use super::{
-    annotation::{Action, Annotation, AnnotationDesc},
-    lalr::{Goto, LALRData},
+    annotation::{Action, AnnotationList},
+    lalr::{Goto, LASet},
     lr0::{LR0Automaton, LR0State, StateID},
     TerminalSet,
 };
@@ -8,21 +8,19 @@ use crate::{
     grammar::{Assoc, Grammar, Precedence, SymbolID, TerminalID},
     types::{Map, Queue, Set},
 };
-use bit_set::BitSet;
 use std::cmp::Ordering;
 
 pub fn split_states(
     g: &Grammar,
     lr0: &LR0Automaton,
-    lalr: &LALRData,
-    follow_kernel_items: &Map<Goto, BitSet>,
-    annotation_lists: &Map<StateID, Map<AnnotationDesc, Annotation>>,
+    lalr: &LASet,
+    annotation_list: &AnnotationList,
 ) -> LR0Automaton {
     let mut lookahead_set_filters = Map::<StateID, Vec<TerminalSet>>::default();
     for (&id, state) in &lr0.states {
         let mut filters = vec![TerminalSet::default(); state.kernels.len()];
         for (j, _kernel) in state.kernels.iter().enumerate() {
-            let Some(annotations) = annotation_lists.get(&id) else { continue };
+            let Some(annotations) = annotation_list.annotations.get(&id) else { continue };
             for (desc, annot) in annotations {
                 if annot.rows().any(|row| row.is_set(j)) {
                     filters[j].insert(desc.token);
@@ -61,7 +59,6 @@ pub fn split_states(
             LR0State {
                 shifts: Map::default(),
                 gotos: Map::default(),
-                predecessors: Map::default(),
                 ..(*start).clone()
             },
         );
@@ -102,7 +99,7 @@ pub fn split_states(
                             symbol: prod_k.left(),
                         };
                         let item_lookaheads = &ielr_item_lookaheads[&ielr_id];
-                        if let Some(follow) = follow_kernel_items.get(&goto) {
+                        if let Some(follow) = annotation_list.follow_kernel_items.get(&goto) {
                             for k in follow {
                                 lookaheads.union_with(&item_lookaheads[k]);
                             }
@@ -134,7 +131,7 @@ pub fn split_states(
                 for ielr_next in isocores {
                     // check compatibility
                     let mut is_compatible = true;
-                    if let Some(annotations) = annotation_lists.get(&lr0_next) {
+                    if let Some(annotations) = annotation_list.annotations.get(&lr0_next) {
                         is_compatible = annotations.iter().all(|(desc, annot)| {
                             let dominant_contribution = |item_lookaheads: &Vec<TerminalSet>| {
                                 let contributions: Vec<_> = desc
@@ -209,7 +206,6 @@ pub fn split_states(
                 LR0State {
                     shifts: Map::default(),
                     gotos: Map::default(),
-                    predecessors: Map::default(),
                     ..lr0_next_state.clone()
                 },
             );

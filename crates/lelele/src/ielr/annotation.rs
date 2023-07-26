@@ -1,8 +1,9 @@
 //! Calculatation of IELR(1) annotation list.
 
 use super::{
-    lalr::{Goto, LALRData, Reduce},
+    lalr::{Goto, LASet, Reduce},
     lr0::{LR0Automaton, StateID},
+    TerminalSet,
 };
 use crate::{
     grammar::{Grammar, RuleID, SymbolID, TerminalID},
@@ -137,12 +138,17 @@ impl fmt::Debug for Row<'_> {
     }
 }
 
-pub fn annotation_lists(
-    g: &Grammar,
-    lr0: &LR0Automaton,
-    lalr: &LALRData,
-    follow_kernel_items: &Map<Goto, BitSet>,
-) -> Map<StateID, Map<AnnotationDesc, Annotation>> {
+#[derive(Debug)]
+pub struct AnnotationList {
+    pub annotations: Map<StateID, Map<AnnotationDesc, Annotation>>,
+    pub follow_kernel_items: Map<Goto, BitSet>,
+}
+
+pub fn annotation_lists(g: &Grammar, lr0: &LR0Automaton, lalr: &LASet) -> AnnotationList {
+    let predecessors = lr0.predecessors();
+    let follow_kernel_items = follow_kernel_items(&g, &lr0, &lalr);
+    let item_lookaheads = item_lookaheads(g, &lr0, &lalr.follows, &predecessors);
+
     // Collect inadequacy manifestation descriptions:
     //   inadequacy_lists[s] = { ni = (s, t, Γ(t,s)) | |Γ(t,s)| > 2 }
     let mut inadequacy_lists = Map::<StateID, Set<AnnotationDesc>>::default();
@@ -182,7 +188,10 @@ pub fn annotation_lists(
     }
 
     if inadequacy_lists.is_empty() {
-        return Map::default();
+        return AnnotationList {
+            annotations: Map::default(),
+            follow_kernel_items,
+        };
     }
 
     let mut annotation_lists = Map::<StateID, Map<AnnotationDesc, Annotation>>::default();
@@ -206,7 +215,7 @@ pub fn annotation_lists(
                         if !lalr.always_follows[&goto].contains(desc.token) {
                             for (j, _kernel) in state.kernels.iter().enumerate() {
                                 if follow_kernel_items[&goto].contains(j)
-                                    && lalr.item_lookaheads[state_id][j].contains(desc.token)
+                                    && item_lookaheads[state_id][j].contains(desc.token)
                                 {
                                     annotation.set(i, j);
                                 }
@@ -230,8 +239,10 @@ pub fn annotation_lists(
                 .insert(desc.clone(), annotation);
         }
 
-        for &prev in state.predecessors.keys() {
-            pending_states.push((prev, *state_id));
+        if let Some(predecessors) = predecessors.get(state_id) {
+            for &prev in predecessors {
+                pending_states.push((prev, *state_id));
+            }
         }
     }
 
@@ -281,7 +292,7 @@ pub fn annotation_lists(
 
                         if kernel_j.production == kernel_k.production
                             && kernel_j.index == kernel_k.index - 1
-                            && lalr.item_lookaheads[&current][j].contains(desc.token)
+                            && item_lookaheads[&current][j].contains(desc.token)
                         {
                             return true;
                         }
@@ -299,7 +310,7 @@ pub fn annotation_lists(
                             return false;
                         }
                         follow_kernel_items[&goto].contains(j)
-                            && lalr.item_lookaheads[&current][j].contains(desc.token)
+                            && item_lookaheads[&current][j].contains(desc.token)
                     }) {
                         new_annotation.set(i, j);
                     }
@@ -331,15 +342,20 @@ pub fn annotation_lists(
             continue;
         }
 
-        for &prev in current_state.predecessors.keys() {
-            pending_states.push((prev, current));
+        if let Some(predecessors) = predecessors.get(&current) {
+            for &prev in predecessors {
+                pending_states.push((prev, current));
+            }
         }
     }
 
-    annotation_lists
+    AnnotationList {
+        annotations: annotation_lists,
+        follow_kernel_items,
+    }
 }
 
-pub fn follow_kernel_items(g: &Grammar, lr0: &LR0Automaton, lalr: &LALRData) -> Map<Goto, BitSet> {
+fn follow_kernel_items(g: &Grammar, lr0: &LR0Automaton, lalr: &LASet) -> Map<Goto, BitSet> {
     let mut follow_kernel_items = Map::<Goto, BitSet>::default();
 
     for key in lalr.gotos.keys() {
@@ -363,7 +379,80 @@ pub fn follow_kernel_items(g: &Grammar, lr0: &LR0Automaton, lalr: &LALRData) -> 
         follow_kernel_items.insert(*key, kernels);
     }
 
-    super::digraph::digraph(&mut follow_kernel_items, |a, b| lalr.always_includes(a, b));
+    super::digraph::digraph(&mut follow_kernel_items, |a, b| {
+        lalr.includes.get(a).map_or(false, |i| match i.get(b) {
+            Some(is_beta_empty) => *is_beta_empty,
+            None => false,
+        })
+    });
 
     follow_kernel_items
+}
+
+fn item_lookaheads(
+    g: &Grammar,
+    lr0: &LR0Automaton,
+    follows: &Map<Goto, TerminalSet>,
+    predecessors: &Map<StateID, Set<StateID>>,
+) -> Map<StateID, Vec<TerminalSet>> {
+    let mut item_lookaheads = Map::<StateID, Vec<TerminalSet>>::default();
+
+    let mut pending_states: Queue<StateID> = lr0.states.keys().copied().collect();
+    'queue: while let Some(id) = pending_states.pop() {
+        if item_lookaheads.contains_key(&id) {
+            continue;
+        }
+
+        let state = &lr0.states[&id];
+        let mut lookaheads = vec![TerminalSet::default(); state.kernels.len()];
+        for (k, kernel) in state.kernels.iter().enumerate() {
+            let production = &g.rules[&kernel.production];
+            match kernel.index {
+                0 => {
+                    // Only if the production is #Start -> S #EOI`.
+                    // The lookhead sets should be empty by definition.
+                }
+                1 => {
+                    // X -> [ A . beta ]
+                    //  => \bigcup { Follow(p,A) | p is predecessor }
+                    if let Some(predecessors) = predecessors.get(&id) {
+                        for &from in predecessors {
+                            for &symbol in lr0.states[&from].gotos.keys() {
+                                if symbol != production.left() {
+                                    continue;
+                                }
+                                lookaheads[k].union_with(&follows[&Goto { from, symbol }]);
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    // X -> [ ... A . beta ]
+                    //  => same as the LA set of X -> [ ... . A beta ] in predecessor
+                    if let Some(predecessors) = predecessors.get(&id) {
+                        'outer: for &from in predecessors {
+                            let from_s = &lr0.states[&from];
+                            for (j, from_kernel) in from_s.kernels.iter().enumerate() {
+                                if from_kernel.production != kernel.production
+                                    || from_kernel.index != kernel.index - 1
+                                {
+                                    continue;
+                                }
+                                let Some(added) = item_lookaheads.get(&from) else {
+                                    pending_states.push(from);
+                                    pending_states.push(id);
+                                    continue 'queue;
+                                };
+                                lookaheads[k].union_with(&added[j]);
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item_lookaheads.insert(id, lookaheads);
+    }
+
+    item_lookaheads
 }

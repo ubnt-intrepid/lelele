@@ -8,7 +8,7 @@ pub mod reachability;
 pub mod split;
 pub mod table;
 
-use self::{lalr::LALRData, lr0::LR0Automaton, table::ParseTable};
+use self::{lalr::LASet, lr0::LR0Automaton, table::ParseTable};
 use crate::grammar::{Grammar, TerminalID};
 
 #[derive(Debug, Default, Clone)]
@@ -58,36 +58,40 @@ impl digraph::Set for TerminalSet {
     }
 }
 
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Mode {
+    LALR,
+    #[default]
+    IELR,
+    // Canonical,
+}
+
 /// Compute the IELR(1) automaton from the specified grammar.
-pub fn compute(g: &Grammar) -> Result<ParseTable, table::DFAError> {
-    let (lr0, lalr) = compute_automaton(g);
+pub fn compute(g: &Grammar, mode: Mode) -> Result<ParseTable, table::DFAError> {
+    let (lr0, lalr) = compute_automaton(g, mode);
     table::generate(g, &lr0, &lalr)
 }
 
-fn compute_automaton(g: &Grammar) -> (LR0Automaton, LALRData) {
+fn compute_automaton(g: &Grammar, mode: Mode) -> (LR0Automaton, LASet) {
     let lr0 = lr0::lr0(&g);
+    let la_set = lalr::lalr(&g, &lr0);
+    if mode == Mode::LALR {
+        return (lr0, la_set);
+    }
 
-    let lalr_lookaheads = lalr::lalr(&g, &lr0);
-    let follow_kernel_items = annotation::follow_kernel_items(&g, &lr0, &lalr_lookaheads);
-    let annotation_lists =
-        annotation::annotation_lists(&g, &lr0, &lalr_lookaheads, &follow_kernel_items);
-
-    if annotation_lists
+    let annotation_list = annotation::annotation_lists(&g, &lr0, &la_set);
+    if annotation_list
+        .annotations
         .iter()
         .all(|(_id, annotations)| annotations.is_empty())
     {
         // The grammar is LALR(1) and hence state state splitting is not required.
-        return (lr0, lalr_lookaheads);
+        return (lr0, la_set);
     }
 
-    let ielr = split::split_states(
-        &g,
-        &lr0,
-        &lalr_lookaheads,
-        &follow_kernel_items,
-        &annotation_lists,
-    );
+    let ielr = split::split_states(&g, &lr0, &la_set, &annotation_list);
     let ielr_lookaheads = lalr::lalr(&g, &ielr);
+
     (ielr, ielr_lookaheads)
 }
 
@@ -122,7 +126,7 @@ mod tests {
         .unwrap();
         eprintln!("{}", grammar);
 
-        let table = compute(&grammar).unwrap();
+        let table = compute(&grammar, Default::default()).unwrap();
         eprintln!("table:\n---\n{}", table.display(&grammar));
     }
 
@@ -164,7 +168,7 @@ mod tests {
         .unwrap();
         eprintln!("{}", grammar);
 
-        let table = compute(&grammar).unwrap();
+        let table = compute(&grammar, Default::default()).unwrap();
         eprintln!("table:\n---\n{}", table.display(&grammar));
     }
 }

@@ -60,7 +60,6 @@ pub struct LR0State {
     pub shifts: Map<TerminalID, StateID>,
     pub gotos: Map<NonterminalID, StateID>,
     pub reduces: Set<RuleID>,
-    pub predecessors: Map<StateID, SymbolID>,
 }
 
 impl LR0State {
@@ -88,17 +87,6 @@ impl LR0State {
                     writeln!(f, "- {}", g.rules[reduce].display(g))?;
                 }
             }
-            if !self.predecessors.is_empty() {
-                writeln!(f, "## predecessors:")?;
-                for (next, sym) in &self.predecessors {
-                    write!(f, "- {:?} --(", next)?;
-                    match sym {
-                        SymbolID::T(t) => write!(f, "{}", g.terminals[t])?,
-                        SymbolID::N(n) => write!(f, "{}", g.nonterminals[n])?,
-                    }
-                    writeln!(f, ")-->")?;
-                }
-            }
             Ok(())
         })
     }
@@ -107,6 +95,18 @@ impl LR0State {
 #[derive(Debug)]
 pub struct LR0Automaton {
     pub states: Map<StateID, LR0State>,
+}
+
+impl LR0Automaton {
+    pub fn predecessors(&self) -> Map<StateID, Set<StateID>> {
+        let mut predecessors = Map::<StateID, Set<StateID>>::default();
+        for (&current, state) in &self.states {
+            for &next in state.shifts.values().chain(state.gotos.values()) {
+                predecessors.entry(next).or_default().insert(current);
+            }
+        }
+        predecessors
+    }
 }
 
 /// Calculate the LR(0) automaton based on the specified grammar.
@@ -197,13 +197,8 @@ pub fn lr0(g: &Grammar) -> LR0Automaton {
                 shifts,
                 gotos,
                 reduces,
-                predecessors: Map::default(),
             },
         );
-    }
-
-    for (id, predecessors) in predecessors {
-        states[&id].predecessors = predecessors;
     }
 
     LR0Automaton { states }

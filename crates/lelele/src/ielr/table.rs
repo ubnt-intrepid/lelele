@@ -1,6 +1,6 @@
 //! Calculation of LR(1) parse table with conflict resolution.
 
-use super::{lalr::LALRData, lr0::LR0Automaton};
+use super::{lalr::LASet, lr0::LR0Automaton};
 use crate::{
     grammar::{Assoc, Grammar, NonterminalID, Precedence, RuleID, TerminalID},
     ielr::{lalr::Reduce, lr0::StateID},
@@ -146,7 +146,7 @@ pub enum ConflictResolutionError {
     ReduceAcceptConflict,
 }
 
-pub fn generate(g: &Grammar, lr0: &LR0Automaton, lalr: &LALRData) -> Result<ParseTable, DFAError> {
+pub fn generate(g: &Grammar, lr0: &LR0Automaton, lalr: &LASet) -> Result<ParseTable, DFAError> {
     let mut states = Map::default();
     for (&id, lr0_state) in &lr0.states {
         #[derive(Default)]

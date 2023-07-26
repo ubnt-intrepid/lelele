@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     grammar::{Grammar, NonterminalID, RuleID, SymbolID},
-    types::{Map, Queue, Set},
+    types::{Map, Set},
 };
 use std::fmt;
 
@@ -45,25 +45,18 @@ impl fmt::Debug for Reduce {
 }
 
 #[derive(Debug)]
-pub struct LALRData {
+pub struct LASet {
     pub gotos: Map<Goto, StateID>,
     pub lookaheads: Map<Reduce, TerminalSet>,
-    pub item_lookaheads: Map<StateID, Vec<TerminalSet>>,
+    pub follows: Map<Goto, TerminalSet>,
     pub always_follows: Map<Goto, TerminalSet>,
     pub reads: Map<Goto, Set<Goto>>,
     pub includes: Map<Goto, Map<Goto, bool>>,
-}
-
-impl LALRData {
-    pub fn always_includes(&self, a: &Goto, b: &Goto) -> bool {
-        self.includes
-            .get(a)
-            .map_or(false, |i| i.get(b).copied().unwrap_or(false))
-    }
+    pub lookbacks: Map<Reduce, Set<Goto>>,
 }
 
 /// Compute the look-ahead sets corresponding to the reductions in the provided LR automaton.
-pub fn lalr(g: &Grammar, lr0: &LR0Automaton) -> LALRData {
+pub fn lalr(g: &Grammar, lr0: &LR0Automaton) -> LASet {
     // Step 0: extract goto transitions and their direct-read sets.
     //
     // The direct-read set on the goto transition (p,A) (p: StateID, A: NonterminalID) is defined as follows:
@@ -128,80 +121,15 @@ pub fn lalr(g: &Grammar, lr0: &LR0Automaton) -> LALRData {
         }
     }
 
-    // Step 4: calculate lookahead sets for LR(0) kernel items.
-    let item_lookaheads = item_lookaheads(g, lr0, &follows);
-
-    LALRData {
+    LASet {
         gotos,
         lookaheads,
-        item_lookaheads,
+        follows,
         always_follows,
         reads,
         includes,
+        lookbacks,
     }
-}
-
-fn item_lookaheads(
-    g: &Grammar,
-    lr0: &LR0Automaton,
-    follows: &Map<Goto, TerminalSet>,
-) -> Map<StateID, Vec<TerminalSet>> {
-    let mut item_lookaheads = Map::<StateID, Vec<TerminalSet>>::default();
-
-    let mut pending_states: Queue<StateID> = lr0.states.keys().copied().collect();
-    'queue: while let Some(id) = pending_states.pop() {
-        if item_lookaheads.contains_key(&id) {
-            continue;
-        }
-
-        let state = &lr0.states[&id];
-        let mut lookaheads = vec![TerminalSet::default(); state.kernels.len()];
-        for (k, kernel) in state.kernels.iter().enumerate() {
-            let production = &g.rules[&kernel.production];
-            match kernel.index {
-                0 => {
-                    // Only if the production is #Start -> S #EOI`.
-                    // The lookhead sets should be empty by definition.
-                }
-                1 => {
-                    // X -> [ A . beta ]
-                    //  => \bigcup { Follow(p,A) | p is predecessor }
-                    for &from in state.predecessors.keys() {
-                        for &symbol in lr0.states[&from].gotos.keys() {
-                            if symbol != production.left() {
-                                continue;
-                            }
-                            lookaheads[k].union_with(&follows[&Goto { from, symbol }]);
-                        }
-                    }
-                }
-                _ => {
-                    // X -> [ ... A . beta ]
-                    //  => same as the LA set of X -> [ ... . A beta ] in predecessor
-                    'outer: for &from in state.predecessors.keys() {
-                        let from_s = &lr0.states[&from];
-                        for (j, from_kernel) in from_s.kernels.iter().enumerate() {
-                            if from_kernel.production != kernel.production
-                                || from_kernel.index != kernel.index - 1
-                            {
-                                continue;
-                            }
-                            let Some(added) = item_lookaheads.get(&from) else {
-                                pending_states.push(from);
-                                pending_states.push(id);
-                                continue 'queue;
-                            };
-                            lookaheads[k].union_with(&added[j]);
-                            break 'outer;
-                        }
-                    }
-                }
-            }
-        }
-        item_lookaheads.insert(id, lookaheads);
-    }
-
-    item_lookaheads
 }
 
 fn calc_reads(g: &Grammar, lr0: &LR0Automaton, gotos: &Map<Goto, StateID>) -> Map<Goto, Set<Goto>> {
