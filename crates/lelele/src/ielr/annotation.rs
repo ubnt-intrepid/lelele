@@ -1,14 +1,12 @@
 //! Calculatation of IELR(1) annotation list.
 
 use super::{
+    cfg::{Grammar, RuleID, SymbolID, TerminalID},
     lalr::{Goto, LASet, Reduce},
     lr0::{LR0Automaton, StateID},
     TerminalSet,
 };
-use crate::{
-    grammar::{Grammar, RuleID, SymbolID, TerminalID},
-    types::{Map, Queue, Set},
-};
+use crate::types::{Map, Queue, Set};
 use bit_set::BitSet;
 use std::{fmt, iter, mem};
 
@@ -206,11 +204,11 @@ pub fn annotation_lists(g: &Grammar, lr0: &LR0Automaton, lalr: &LASet) -> Annota
             for (i, action) in desc.actions.iter().enumerate() {
                 if let Action::Reduce(r) = action {
                     let production = &g.rules[r];
-                    if production.right().is_empty() {
+                    if production.right.is_empty() {
                         // compute_lhs_contributions
                         let goto = Goto {
                             from: *state_id,
-                            symbol: production.left(),
+                            symbol: production.left,
                         };
                         if !lalr.always_follows[&goto].contains(desc.token) {
                             for (j, _kernel) in state.kernels.iter().enumerate() {
@@ -224,7 +222,7 @@ pub fn annotation_lists(g: &Grammar, lr0: &LR0Automaton, lalr: &LASet) -> Annota
                     } else {
                         for (j, kernel) in state.kernels.iter().enumerate() {
                             if kernel.production == *r
-                                && usize::from(kernel.index) == production.right().len()
+                                && usize::from(kernel.index) == production.right.len()
                             {
                                 annotation.set(i, j);
                             }
@@ -273,7 +271,7 @@ pub fn annotation_lists(g: &Grammar, lr0: &LR0Automaton, lalr: &LASet) -> Annota
                     let production = &g.rules[&kernel.production];
                     let goto = Goto {
                         from: current,
-                        symbol: production.left(),
+                        symbol: production.left,
                     };
                     row.is_set(j)
                         && kernel.index == 1
@@ -304,7 +302,7 @@ pub fn annotation_lists(g: &Grammar, lr0: &LR0Automaton, lalr: &LASet) -> Annota
                         let production = &g.rules[&kernel_k.production];
                         let goto = Goto {
                             from: current,
-                            symbol: production.left(),
+                            symbol: production.left,
                         };
                         if lalr.always_follows[&goto].contains(desc.token) {
                             return false;
@@ -363,7 +361,7 @@ fn follow_kernel_items(g: &Grammar, lr0: &LR0Automaton, lalr: &LASet) -> Map<Got
         let mut kernels = BitSet::default();
         for (k, kernel) in state.kernels.iter().enumerate() {
             let production = &g.rules[&kernel.production];
-            match production.right().get(usize::from(kernel.index)..) {
+            match production.right.get(usize::from(kernel.index)..) {
                 Some([SymbolID::N(rho_d), gamma @ ..]) => {
                     if key.symbol == *rho_d
                         && gamma
@@ -418,7 +416,7 @@ fn item_lookaheads(
                     if let Some(predecessors) = predecessors.get(&id) {
                         for &from in predecessors {
                             for &symbol in lr0.states[&from].gotos.keys() {
-                                if symbol != production.left() {
+                                if symbol != production.left {
                                     continue;
                                 }
                                 lookaheads[k].union_with(&follows[&Goto { from, symbol }]);

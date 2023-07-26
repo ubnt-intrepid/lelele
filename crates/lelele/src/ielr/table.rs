@@ -1,8 +1,11 @@
 //! Calculation of LR(1) parse table with conflict resolution.
 
-use super::{lalr::LASet, lr0::LR0Automaton};
+use super::{
+    cfg::{Assoc, Grammar, NonterminalID, Precedence, RuleID, TerminalID},
+    lalr::LASet,
+    lr0::LR0Automaton,
+};
 use crate::{
-    grammar::{Assoc, Grammar, NonterminalID, Precedence, RuleID, TerminalID},
     ielr::{lalr::Reduce, lr0::StateID},
     types::Map,
 };
@@ -158,7 +161,7 @@ fn resolve_conflict(
                 return Err(ConflictResolutionError::ShiftAcceptConflict);
             }
 
-            let shift_prec = g.terminals[&symbol].precedence();
+            let shift_prec = g.terminals[&symbol].precedence;
             let reduce_prec = g.rules[reduce].precedence(g);
 
             match compare_precs(shift_prec, reduce_prec) {
@@ -175,7 +178,7 @@ fn resolve_conflict(
 
         // multiple shift/reduce conflicts
         (Some(next), reduces) => {
-            let shift_prec = g.terminals[&symbol].precedence();
+            let shift_prec = g.terminals[&symbol].precedence;
 
             let mut resolved = None;
             for reduce in reduces {

@@ -1,6 +1,7 @@
 //! The implementation of IELR(1) method and related algorithms.
 
 pub mod annotation;
+pub mod cfg;
 pub mod digraph;
 pub mod lalr;
 pub mod lr0;
@@ -8,8 +9,12 @@ pub mod reachability;
 pub mod split;
 pub mod table;
 
-use self::{lalr::LASet, lr0::LR0Automaton, table::ParseTable};
-use crate::grammar::{Grammar, TerminalID};
+use self::{
+    cfg::{Grammar, TerminalID},
+    lalr::LASet,
+    lr0::LR0Automaton,
+    table::ParseTable,
+};
 
 #[derive(Debug, Default, Clone)]
 pub struct TerminalSet {
@@ -97,20 +102,20 @@ fn compute_automaton(g: &Grammar, mode: Mode) -> (LR0Automaton, LASet) {
 
 #[cfg(test)]
 mod tests {
+    use super::cfg::SymbolID::*;
     use super::*;
-    use crate::grammar::SymbolID::*;
 
     #[test]
     fn smoketest1() {
         let grammar = Grammar::define(|def| {
-            let equal = def.terminal("EQUAL", None)?;
-            let plus = def.terminal("PLUS", None)?;
-            let ident = def.terminal("ID", None)?;
-            let num = def.terminal("NUM", None)?;
+            let equal = def.terminal(None)?;
+            let plus = def.terminal(None)?;
+            let ident = def.terminal(None)?;
+            let num = def.terminal(None)?;
 
-            let a = def.nonterminal("A")?;
-            let e = def.nonterminal("E")?;
-            let t = def.nonterminal("T")?;
+            let a = def.nonterminal()?;
+            let e = def.nonterminal()?;
+            let t = def.nonterminal()?;
 
             def.start_symbol(a)?;
 
@@ -131,20 +136,20 @@ mod tests {
     fn smoketest2() {
         let grammar = Grammar::define(|g| {
             // declare terminal symbols.
-            let lparen = g.terminal("LPAREN", None)?;
-            let rparen = g.terminal("RPAREN", None)?;
-            let plus = g.terminal("PLUS", None)?;
-            let minus = g.terminal("MINUS", None)?;
-            let star = g.terminal("STAR", None)?;
-            let slash = g.terminal("SLASH", None)?;
-            let num = g.terminal("NUM", None)?;
-            let _ = g.terminal("UNUSED_0", None)?;
+            let lparen = g.terminal(None)?;
+            let rparen = g.terminal(None)?;
+            let plus = g.terminal(None)?;
+            let minus = g.terminal(None)?;
+            let star = g.terminal(None)?;
+            let slash = g.terminal(None)?;
+            let num = g.terminal(None)?;
+            let _ = g.terminal(None)?;
 
             // declare nonterminal symbols.
-            let expr = g.nonterminal("EXPR")?;
-            let term = g.nonterminal("TERM")?;
-            let factor = g.nonterminal("FACTOR")?;
-            let _ = g.nonterminal("UNUSED_1")?;
+            let expr = g.nonterminal()?;
+            let term = g.nonterminal()?;
+            let factor = g.nonterminal()?;
+            let _ = g.nonterminal()?;
 
             // declare syntax rules.
             g.rule(expr, [N(expr), T(plus), N(term)], None)?;

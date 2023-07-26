@@ -11,13 +11,11 @@
 //!       <https://www.sciencedirect.com/science/article/pii/S0167642309001191>
 
 use super::{
+    cfg::{Grammar, NonterminalID, RuleID, SymbolID},
     lr0::{LR0Automaton, StateID},
     TerminalSet,
 };
-use crate::{
-    grammar::{Grammar, NonterminalID, RuleID, SymbolID},
-    types::{Map, Set},
-};
+use crate::types::{Map, Set};
 use std::fmt;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -163,22 +161,22 @@ fn calc_includes(
         for b_key in gotos.keys() {
             'outer: for p in g.rules.values() {
                 // B -> β A γ and γ =>* ε
-                if p.left() != b_key.symbol {
+                if p.left != b_key.symbol {
                     continue;
                 }
                 let beta = match p
-                    .right()
+                    .right
                     .iter()
                     .position(|s| matches!(s, SymbolID::N(n) if *n == a_key.symbol))
                 {
                     Some(i) => {
-                        let is_gamma_nullable = p.right()[i + 1..]
+                        let is_gamma_nullable = p.right[i + 1..]
                             .iter()
                             .all(|s| matches!(s, SymbolID::N(n) if g.nullables.contains(n)));
                         if !is_gamma_nullable {
                             continue;
                         }
-                        &p.right()[..i]
+                        &p.right[..i]
                     }
                     None => continue,
                 };
@@ -216,7 +214,7 @@ fn calc_lookbacks(g: &Grammar, lr0: &LR0Automaton) -> Map<Reduce, Set<Goto>> {
     for &from in lr0.states.keys() {
         for (&p_id, p) in &g.rules {
             let mut current = from;
-            let mut right = &p.right()[..];
+            let mut right = &p.right[..];
             while !right.is_empty() {
                 let next = match &right[0] {
                     SymbolID::T(t) => lr0.states[&current].shifts.get(t),
@@ -237,7 +235,7 @@ fn calc_lookbacks(g: &Grammar, lr0: &LR0Automaton) -> Map<Reduce, Set<Goto>> {
                 };
                 lookbacks.entry(reduce).or_default().insert(Goto {
                     from,
-                    symbol: p.left(),
+                    symbol: p.left,
                 });
             }
         }

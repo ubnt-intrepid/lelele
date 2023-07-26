@@ -1,4 +1,5 @@
 use super::{
+    ast,
     grammar::{ParserDef, Symbol},
     lexer::{Keyword, Lexer, Token},
 };
@@ -9,19 +10,19 @@ use Symbol::*;
 use Token::*;
 
 enum StackItem {
-    Grammar(super::Grammar),
-    Descs(Vec<super::Stmt>),
-    Desc(super::Stmt),
-    Productions(Vec<super::Production>),
-    Production(super::Production),
-    ProductionElems(Vec<super::ProductionElem>),
-    ProductionElem(super::ProductionElem),
+    Grammar(ast::File),
+    Descs(Vec<ast::Stmt>),
+    Desc(ast::Stmt),
+    Productions(Vec<ast::Production>),
+    Production(ast::Production),
+    ProductionElems(Vec<ast::ProductionElem>),
+    ProductionElem(ast::ProductionElem),
     Idents(Vec<String>),
-    Configs(Vec<super::Config>),
-    Config(super::Config),
+    Configs(Vec<ast::Config>),
+    Config(ast::Config),
 }
 
-pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
+pub fn parse(source: &str) -> anyhow::Result<ast::File> {
     let span = tracing::trace_span!("parse");
     let _entered = span.enter();
 
@@ -78,7 +79,7 @@ pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
                 match (lhs, args) {
                     (Grammar, [N(Stmts)]) => {
                         let descs = pop_stack!(Descs);
-                        stack.push(s::Grammar(super::Grammar { stmts: descs }));
+                        stack.push(s::Grammar(ast::File { stmts: descs }));
                     }
 
                     (Stmts, []) => {
@@ -93,7 +94,7 @@ pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
                     (Stmt, [T((_, Kw(Terminal), _)), N(Idents)]) => {
                         let mut idents = pop_stack!(Idents);
                         idents.reverse();
-                        stack.push(s::Desc(super::Stmt::TerminalDesc(super::TerminalDesc {
+                        stack.push(s::Desc(ast::Stmt::TerminalDesc(ast::TerminalDesc {
                             configs: vec![],
                             idents,
                         })));
@@ -106,7 +107,7 @@ pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
                         idents.reverse();
                         let mut configs = pop_stack!(Configs);
                         configs.reverse();
-                        stack.push(s::Desc(super::Stmt::TerminalDesc(super::TerminalDesc {
+                        stack.push(s::Desc(ast::Stmt::TerminalDesc(ast::TerminalDesc {
                             configs,
                             idents,
                         })));
@@ -115,9 +116,9 @@ pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
                     (Stmt, [T((_, Kw(Nonterminal), _)), N(Idents)]) => {
                         let mut idents = pop_stack!(Idents);
                         idents.reverse();
-                        stack.push(s::Desc(super::Stmt::NonterminalDesc(
-                            super::NonterminalDesc { idents },
-                        )));
+                        stack.push(s::Desc(ast::Stmt::NonterminalDesc(ast::NonterminalDesc {
+                            idents,
+                        })));
                     }
 
                     (
@@ -125,7 +126,7 @@ pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
                         [T((_, Kw(Rule), _)), T((_, Ident(left), _)), T((_, ColonEq, _)), N(Productions)],
                     ) => {
                         let productions = pop_stack!(Productions);
-                        stack.push(s::Desc(super::Stmt::RuleDesc(super::RuleDesc {
+                        stack.push(s::Desc(ast::Stmt::RuleDesc(ast::RuleDesc {
                             left: left.to_string(),
                             productions,
                         })));
@@ -135,14 +136,14 @@ pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
                         [T((_, Kw(Rule), _)), T((_, Ident(left), _)), T((_, ColonEq, _)), T((_, VertBar, _)), N(Productions)],
                     ) => {
                         let productions = pop_stack!(Productions);
-                        stack.push(s::Desc(super::Stmt::RuleDesc(super::RuleDesc {
+                        stack.push(s::Desc(ast::Stmt::RuleDesc(ast::RuleDesc {
                             left: left.to_string(),
                             productions,
                         })));
                     }
 
                     (Stmt, [T((_, Kw(Start), _)), T((_, Ident(name), _))]) => {
-                        stack.push(s::Desc(super::Stmt::StartDesc(super::StartDesc {
+                        stack.push(s::Desc(ast::Stmt::StartDesc(ast::StartDesc {
                             name: name.to_string(),
                         })));
                     }
@@ -153,7 +154,7 @@ pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
                     ) => {
                         let mut configs = pop_stack!(Configs);
                         configs.reverse();
-                        stack.push(s::Desc(super::Stmt::PrecDesc(super::PrecDesc {
+                        stack.push(s::Desc(ast::Stmt::PrecDesc(ast::PrecDesc {
                             configs,
                             ident: ident.to_string(),
                         })));
@@ -170,7 +171,7 @@ pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
                     }
 
                     (Production, [T((_, Kw(Empty), _))]) => {
-                        stack.push(s::Production(super::Production {
+                        stack.push(s::Production(ast::Production {
                             configs: vec![],
                             elems: vec![],
                         }));
@@ -178,7 +179,7 @@ pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
                     (Production, [N(ProductionElems)]) => {
                         let mut elems = pop_stack!(ProductionElems);
                         elems.reverse();
-                        stack.push(s::Production(super::Production {
+                        stack.push(s::Production(ast::Production {
                             configs: vec![],
                             elems,
                         }));
@@ -191,7 +192,7 @@ pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
                         elems.reverse();
                         let mut configs = pop_stack!(Configs);
                         configs.reverse();
-                        stack.push(s::Production(super::Production { configs, elems }));
+                        stack.push(s::Production(ast::Production { configs, elems }));
                     }
 
                     (ProductionElems, [N(ProductionElem)]) => {
@@ -206,12 +207,12 @@ pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
                     }
 
                     (ProductionElem, [T((_, Ident(ident), _))]) => {
-                        stack.push(s::ProductionElem(super::ProductionElem::Ident(
+                        stack.push(s::ProductionElem(ast::ProductionElem::Ident(
                             ident.to_string(),
                         )));
                     }
                     (ProductionElem, [T((_, Kw(Keyword::Error), _))]) => {
-                        stack.push(s::ProductionElem(super::ProductionElem::ErrorToken));
+                        stack.push(s::ProductionElem(ast::ProductionElem::ErrorToken));
                     }
 
                     (Idents, [T((_, Ident(ident), _))]) => {
@@ -234,7 +235,7 @@ pub fn parse(source: &str) -> anyhow::Result<super::Grammar> {
                     }
 
                     (Config, [T((_, Ident(key), _)), T((_, Eq, _)), T((_, Ident(value), _))]) => {
-                        stack.push(s::Config(super::Config {
+                        stack.push(s::Config(ast::Config {
                             key: key.to_string(),
                             value: value.to_string(),
                         }));

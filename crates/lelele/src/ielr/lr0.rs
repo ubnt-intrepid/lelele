@@ -1,7 +1,5 @@
-use crate::{
-    grammar::{Grammar, NonterminalID, RuleID, SymbolID, TerminalID},
-    types::{Map, Set},
-};
+use super::cfg::{Grammar, NonterminalID, RuleID, SymbolID, TerminalID};
+use crate::types::{Map, Set};
 use std::{collections::VecDeque, fmt};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -89,7 +87,7 @@ pub fn lr0(g: &Grammar) -> LR0Automaton {
         for kernel in &kernels {
             items.insert(*kernel);
             let production = &g.rules[&kernel.production];
-            if let Some(SymbolID::N(n)) = production.right().get::<usize>(kernel.index.into()) {
+            if let Some(SymbolID::N(n)) = production.right.get::<usize>(kernel.index.into()) {
                 items.extend(&nonkernels[n]);
             }
         }
@@ -98,7 +96,7 @@ pub fn lr0(g: &Grammar) -> LR0Automaton {
         new_kernels.clear();
         for item in items.drain(..) {
             let production = &g.rules[&item.production];
-            match production.right().get::<usize>(item.index.into()) {
+            match production.right.get::<usize>(item.index.into()) {
                 Some(sym) => {
                     let new_kernel = new_kernels.entry(*sym).or_default();
                     new_kernel.insert(LR0Item {
@@ -155,7 +153,7 @@ fn nonkernels(g: &Grammar) -> Map<NonterminalID, Set<LR0Item>> {
     for &n in g.nonterminals.keys() {
         let mut items = Set::default();
         for (id, p) in &g.rules {
-            if p.left() != n {
+            if p.left != n {
                 continue;
             }
             items.insert(LR0Item {
@@ -169,9 +167,9 @@ fn nonkernels(g: &Grammar) -> Map<NonterminalID, Set<LR0Item>> {
             added.clear();
             for item in &items {
                 let production = &g.rules[&item.production];
-                if let Some(SymbolID::N(n)) = production.right().get(0) {
+                if let Some(SymbolID::N(n)) = production.right.get(0) {
                     for (id, p) in &g.rules {
-                        if p.left() != *n {
+                        if p.left != *n {
                             continue;
                         }
                         added.insert(LR0Item {

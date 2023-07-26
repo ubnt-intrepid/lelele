@@ -1,13 +1,11 @@
 use super::{
     annotation::{Action, AnnotationList},
+    cfg::{Assoc, Grammar, Precedence, SymbolID, TerminalID},
     lalr::{Goto, LASet},
     lr0::{LR0Automaton, LR0State, StateID},
     TerminalSet,
 };
-use crate::{
-    grammar::{Assoc, Grammar, Precedence, SymbolID, TerminalID},
-    types::{Map, Queue, Set},
-};
+use crate::types::{Map, Queue, Set};
 use std::cmp::Ordering;
 
 pub fn split_states(
@@ -96,7 +94,7 @@ pub fn split_states(
                     1 => {
                         let goto = Goto {
                             from: lr0_id,
-                            symbol: prod_k.left(),
+                            symbol: prod_k.left,
                         };
                         let item_lookaheads = &ielr_item_lookaheads[&ielr_id];
                         if let Some(follow) = annotation_list.follow_kernel_items.get(&goto) {
@@ -240,7 +238,7 @@ fn resolve_conflict(g: &Grammar, token: TerminalID, actions: &[Action]) -> Optio
         Some((Action::Shift, [head, tail @ ..])) => {
             // shift/reduce conflict
             let Action::Reduce(reduce) = head else { unreachable!() };
-            let shift_prec = g.terminals[&token].precedence();
+            let shift_prec = g.terminals[&token].precedence;
             let reduce_prec = g.rules[reduce].precedence(&g);
             let resolved = compare_precedences(&shift_prec, &reduce_prec);
             for r in tail {

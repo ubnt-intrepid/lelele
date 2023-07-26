@@ -2,7 +2,6 @@
 
 pub mod build;
 pub mod codegen;
-pub mod grammar;
 pub mod ielr;
 pub mod syntax;
 pub mod types;

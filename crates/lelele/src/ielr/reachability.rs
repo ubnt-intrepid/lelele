@@ -1,8 +1,8 @@
 use super::{
+    cfg::{Grammar, NonterminalID, SymbolID, TerminalID},
     lr0::StateID,
     table::{Action, ParseTable},
 };
-use crate::grammar::{Grammar, NonterminalID, SymbolID, TerminalID};
 use std::{borrow::Cow, cmp::Ordering, collections::BinaryHeap};
 
 // The fact that the LR state `start` is reachable to `end` on the specified lookahead symbol.
@@ -119,7 +119,7 @@ impl<'g> ReachabilityAlgorithm<'g> {
                 .grammar
                 .rules
                 .values()
-                .fold(0usize, |acc, r| acc + r.right().len())
+                .fold(0usize, |acc, r| acc + r.right.len())
             * self.grammar.terminals.len()
             * self.grammar.terminals.len();
         tracing::trace!("maximum number of facts = {}", max_facts);
@@ -237,16 +237,16 @@ impl<'g> ReachabilityAlgorithm<'g> {
 
             for reduce in &*reduce_ids {
                 let reduce = &self.grammar.rules[reduce];
-                if reduce.right() != fact.symbols || t != fact.lookahead {
+                if reduce.right != fact.symbols || t != fact.lookahead {
                     continue;
                 }
 
-                let Some((_, &new_end)) = node_start.gotos.iter().find(|(n, _)| **n == reduce.left()) else { continue; };
+                let Some((_, &new_end)) = node_start.gotos.iter().find(|(n, _)| **n == reduce.left) else { continue; };
 
                 let edge_fact = EdgeFact {
                     start: fact.start,
                     end: new_end,
-                    symbol: reduce.left(),
+                    symbol: reduce.left,
                     words: fact.words.clone(),
                     lookahead: fact.lookahead,
                 };

@@ -1,6 +1,6 @@
 //! Build script support.
 
-use crate::{codegen::Codegen, grammar::Grammar};
+use crate::codegen::Codegen;
 use anyhow::Context as _;
 use std::{
     env, fs,
@@ -70,10 +70,10 @@ impl Build {
 
         println!("cargo:rerun-if-changed={}", in_file.display());
 
-        let grammar = Grammar::from_file(&in_file)?;
+        let grammar_file = crate::syntax::parse_file(&in_file)?;
         // TODO: report grammar diganosis
 
-        let table = crate::ielr::compute(&grammar, Default::default())
+        let table = crate::ielr::compute(&grammar_file.cfg, Default::default())
             .context("failed to construct LR automaton")?;
 
         let mut num_inconsist_states = 0;
@@ -96,7 +96,7 @@ impl Build {
             );
         }
 
-        let codegen = Codegen::new(&grammar, &table);
+        let codegen = Codegen::new(&grammar_file, &table);
         fs::write(&out_file, codegen.to_string())?;
 
         Ok(())

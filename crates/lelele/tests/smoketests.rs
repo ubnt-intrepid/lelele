@@ -1,15 +1,14 @@
-use lelele::grammar::Grammar;
 use std::{env, path::PathBuf};
 
 macro_rules! define_tests {
     ($($name:ident),*$(,)?) => {$(
         #[test]
         fn $name() {
-            let grammar = Grammar::from_file(
+            let grammar = lelele::syntax::parse_file(
                 &PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
                     .join(concat!("tests/", stringify!($name), ".lll"))
             ).unwrap();
-            let _table = lelele::ielr::compute(&grammar, Default::default()).unwrap();
+            let _table = lelele::ielr::compute(&grammar.cfg, Default::default()).unwrap();
         }
     )*};
 }

@@ -3,13 +3,13 @@ resolver = "2"
 members = [
     "crates/lelele",
     "crates/lelele-runtime",
-]
-exclude = [
     "crates/lelele-cli",
     "crates/lelele-runtime-tests",
     "examples/arithmetic",
     "examples/json",
     "examples/min-caml",
+]
+exclude = [
     "examples/wip",
 ]
 

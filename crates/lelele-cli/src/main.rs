@@ -1,6 +1,6 @@
 use anyhow::Context as _;
 use clap::{Parser, ValueEnum};
-use lelele::{codegen::Codegen, grammar::Grammar};
+use lelele::codegen::Codegen;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -47,19 +47,13 @@ fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
 
     let out_file = in_file.with_extension("rs");
     let backup_file = in_file.with_extension("rs.bak");
-    let expanded_file = in_file.with_extension("lll.expanded");
-    let automaton_file = in_file.with_extension("lll.automaton");
 
-    let grammar = Grammar::from_file(&in_file)?;
+    let grammar = lelele::syntax::parse_file(&in_file)?;
 
     let mut empty_nonterminals = vec![];
-    for nonterminal in grammar.nonterminals.values() {
-        if grammar
-            .rules
-            .values()
-            .all(|rule| rule.left() != nonterminal.id())
-        {
-            empty_nonterminals.extend(nonterminal.export_name());
+    for (&id, name) in &grammar.nonterminals {
+        if grammar.cfg.rules.values().all(|rule| rule.left != id) {
+            empty_nonterminals.push(&*name);
         }
     }
     if !empty_nonterminals.is_empty() {
@@ -69,27 +63,7 @@ fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
         );
     }
 
-    let table = lelele::ielr::compute(&grammar, Default::default())?;
-
-    let mut num_inconsist_states = 0;
-    for node in table.states.values() {
-        let mut has_inconsistent_action = false;
-        for action in node.actions.values() {
-            has_inconsistent_action |= !action.is_consistent();
-        }
-        if has_inconsistent_action {
-            num_inconsist_states += 1;
-        }
-    }
-    if num_inconsist_states > 0 {
-        let suffix = if num_inconsist_states == 1 { "" } else { "s" };
-        println!(
-            "[warning] The automaton has {} inconsistent state{}. See {} for details.",
-            num_inconsist_states,
-            suffix,
-            automaton_file.display()
-        );
-    }
+    let table = lelele::ielr::compute(&grammar.cfg, Default::default())?;
 
     let codegen = Codegen::new(&grammar, &table);
     let mut generated: Vec<u8> = codegen.to_string().into();
@@ -107,9 +81,6 @@ fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
     }
 
     // dump results.
-    fs::write(&expanded_file, grammar.to_string()).context("writing .grammar")?;
-    fs::write(&automaton_file, table.display(&grammar).to_string())
-        .context("writing .automaton")?;
     if out_file.exists() {
         fs::copy(&out_file, &backup_file).with_context(|| {
             anyhow::anyhow!(
