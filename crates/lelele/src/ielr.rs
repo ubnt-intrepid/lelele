@@ -102,72 +102,71 @@ fn compute_automaton(g: &Grammar, mode: Mode) -> (LR0Automaton, LASet) {
 
 #[cfg(test)]
 mod tests {
-    use super::cfg::SymbolID::*;
+    use super::cfg::{GrammarDef, SymbolID::*};
     use super::*;
 
     #[test]
     fn smoketest1() {
-        let grammar = Grammar::define(|def| {
-            let equal = def.terminal(None)?;
-            let plus = def.terminal(None)?;
-            let ident = def.terminal(None)?;
-            let num = def.terminal(None)?;
+        let mut def = GrammarDef::default();
 
-            let a = def.nonterminal()?;
-            let e = def.nonterminal()?;
-            let t = def.nonterminal()?;
+        let equal = def.terminal(None);
+        let plus = def.terminal(None);
+        let ident = def.terminal(None);
+        let num = def.terminal(None);
 
-            def.start_symbol(a)?;
+        let a = def.nonterminal();
+        let e = def.nonterminal();
+        let t = def.nonterminal();
 
-            def.rule(a, [N(e), T(equal), N(e)], None)?;
-            def.rule(a, [T(ident)], None)?;
-            def.rule(e, [N(e), T(plus), N(t)], None)?;
-            def.rule(e, [N(t)], None)?;
-            def.rule(t, [T(num)], None)?;
-            def.rule(t, [T(ident)], None)?;
+        def.start_symbol(a);
 
-            Ok(())
-        })
-        .unwrap();
+        def.rule(a, [N(e), T(equal), N(e)], None);
+        def.rule(a, [T(ident)], None);
+        def.rule(e, [N(e), T(plus), N(t)], None);
+        def.rule(e, [N(t)], None);
+        def.rule(t, [T(num)], None);
+        def.rule(t, [T(ident)], None);
+
+        let grammar = def.end();
+
         let _table = compute(&grammar, Default::default()).unwrap();
     }
 
     #[test]
     fn smoketest2() {
-        let grammar = Grammar::define(|g| {
-            // declare terminal symbols.
-            let lparen = g.terminal(None)?;
-            let rparen = g.terminal(None)?;
-            let plus = g.terminal(None)?;
-            let minus = g.terminal(None)?;
-            let star = g.terminal(None)?;
-            let slash = g.terminal(None)?;
-            let num = g.terminal(None)?;
-            let _ = g.terminal(None)?;
+        let mut g = GrammarDef::default();
 
-            // declare nonterminal symbols.
-            let expr = g.nonterminal()?;
-            let term = g.nonterminal()?;
-            let factor = g.nonterminal()?;
-            let _ = g.nonterminal()?;
+        // declare terminal symbols.
+        let lparen = g.terminal(None);
+        let rparen = g.terminal(None);
+        let plus = g.terminal(None);
+        let minus = g.terminal(None);
+        let star = g.terminal(None);
+        let slash = g.terminal(None);
+        let num = g.terminal(None);
+        let _ = g.terminal(None);
 
-            // declare syntax rules.
-            g.rule(expr, [N(expr), T(plus), N(term)], None)?;
-            g.rule(expr, [N(expr), T(minus), N(term)], None)?;
-            g.rule(expr, [N(term)], None)?;
+        // declare nonterminal symbols.
+        let expr = g.nonterminal();
+        let term = g.nonterminal();
+        let factor = g.nonterminal();
+        let _ = g.nonterminal();
 
-            g.rule(term, [N(term), T(star), N(factor)], None)?;
-            g.rule(term, [N(term), T(slash), N(factor)], None)?;
-            g.rule(term, [N(factor)], None)?;
+        // declare syntax rules.
+        g.rule(expr, [N(expr), T(plus), N(term)], None);
+        g.rule(expr, [N(expr), T(minus), N(term)], None);
+        g.rule(expr, [N(term)], None);
 
-            g.rule(factor, [T(num)], None)?;
-            g.rule(factor, [T(lparen), N(expr), T(rparen)], None)?;
+        g.rule(term, [N(term), T(star), N(factor)], None);
+        g.rule(term, [N(term), T(slash), N(factor)], None);
+        g.rule(term, [N(factor)], None);
 
-            g.start_symbol(expr)?;
+        g.rule(factor, [T(num)], None);
+        g.rule(factor, [T(lparen), N(expr), T(rparen)], None);
 
-            Ok(())
-        })
-        .unwrap();
+        g.start_symbol(expr);
+
+        let grammar = g.end();
         let _table = compute(&grammar, Default::default()).unwrap();
     }
 }

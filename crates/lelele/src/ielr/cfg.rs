@@ -1,5 +1,4 @@
 use crate::types::{Map, Set};
-use std::marker::PhantomData;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
@@ -131,12 +130,20 @@ pub struct Grammar {
     pub nullables: Set<NonterminalID>,
 }
 
-impl Grammar {
-    /// Define a grammar using the specified function.
-    pub fn define<F>(f: F) -> Result<Self, GrammarDefError>
-    where
-        F: FnOnce(&mut GrammarDef) -> Result<(), GrammarDefError>,
-    {
+/// The contextural values for building a `Grammar`.
+#[derive(Debug)]
+pub struct GrammarDef {
+    terminals: Map<TerminalID, Terminal>,
+    nonterminals: Map<NonterminalID, Nonterminal>,
+    rules: Map<RuleID, Rule>,
+    start: Option<NonterminalID>,
+    next_terminal_id: u16,
+    next_nonterminal_id: u16,
+    next_rule_id: u16,
+}
+
+impl Default for GrammarDef {
+    fn default() -> Self {
         let mut def = GrammarDef {
             terminals: Map::default(),
             nonterminals: Map::default(),
@@ -145,7 +152,6 @@ impl Grammar {
             next_terminal_id: TerminalID::OFFSET,
             next_nonterminal_id: NonterminalID::OFFSET,
             next_rule_id: RuleID::OFFSET,
-            _marker: PhantomData,
         };
 
         def.terminals
@@ -156,43 +162,25 @@ impl Grammar {
         def.nonterminals
             .insert(NonterminalID::START, Nonterminal {});
 
-        f(&mut def)?;
-
-        def.end()
+        def
     }
 }
 
-/// The contextural values for building a `Grammar`.
-#[derive(Debug)]
-pub struct GrammarDef<'def> {
-    terminals: Map<TerminalID, Terminal>,
-    nonterminals: Map<NonterminalID, Nonterminal>,
-    rules: Map<RuleID, Rule>,
-    start: Option<NonterminalID>,
-    next_terminal_id: u16,
-    next_nonterminal_id: u16,
-    next_rule_id: u16,
-    _marker: PhantomData<&'def mut ()>,
-}
-
-impl<'def> GrammarDef<'def> {
+impl GrammarDef {
     /// Declare a terminal symbol used in this grammar.
-    pub fn terminal(
-        &mut self,
-        precedence: Option<Precedence>,
-    ) -> Result<TerminalID, GrammarDefError> {
+    pub fn terminal(&mut self, precedence: Option<Precedence>) -> TerminalID {
         let id = TerminalID::from_raw(self.next_terminal_id);
         self.next_terminal_id += 1;
         self.terminals.insert(id, Terminal { precedence });
-        Ok(id)
+        id
     }
 
     /// Declare a nonterminal symbol used in this grammar.
-    pub fn nonterminal(&mut self) -> Result<NonterminalID, GrammarDefError> {
+    pub fn nonterminal(&mut self) -> NonterminalID {
         let id = NonterminalID::new(self.next_nonterminal_id);
         self.next_nonterminal_id += 1;
         self.nonterminals.insert(id, Nonterminal {});
-        Ok(id)
+        id
     }
 
     /// Specify a production rule into this grammer.
@@ -201,17 +189,16 @@ impl<'def> GrammarDef<'def> {
         left: NonterminalID,
         right: I,
         precedence: Option<Precedence>,
-    ) -> Result<RuleID, GrammarDefError>
+    ) -> RuleID
     where
         I: IntoIterator<Item = SymbolID>,
     {
         let right_ = right.into_iter().collect();
         for rule in self.rules.values() {
-            if rule.left == left && rule.right == right_ {
-                return Err(GrammarDefError::Other {
-                    msg: "Duplicate production rule detected".into(),
-                });
-            }
+            assert!(
+                rule.left != left || rule.right != right_,
+                "Duplicate production rule"
+            );
         }
         let id = RuleID::new(self.next_rule_id);
         self.next_rule_id += 1;
@@ -223,16 +210,15 @@ impl<'def> GrammarDef<'def> {
                 precedence,
             },
         );
-        Ok(id)
+        id
     }
 
     /// Specify the start symbol for this grammar.
-    pub fn start_symbol(&mut self, symbol: NonterminalID) -> Result<(), GrammarDefError> {
+    pub fn start_symbol(&mut self, symbol: NonterminalID) {
         self.start.replace(symbol);
-        Ok(())
     }
 
-    fn end(mut self) -> Result<Grammar, GrammarDefError> {
+    pub fn end(mut self) -> Grammar {
         // start symbolのID変換
         // 指定されていない場合は最初に登録されたnonterminal symbolを用いる
         let start = match self.start.take() {
@@ -242,9 +228,7 @@ impl<'def> GrammarDef<'def> {
                 .keys()
                 .find(|id| **id != NonterminalID::START)
                 .copied()
-                .ok_or_else(|| GrammarDefError::Other {
-                    msg: "empty nonterminal symbols".into(),
-                })?,
+                .expect("empty nonterminal symbols"),
         };
 
         self.rules.insert(
@@ -272,28 +256,12 @@ impl<'def> GrammarDef<'def> {
             }
         }
 
-        Ok(Grammar {
+        Grammar {
             terminals: self.terminals,
             nonterminals: self.nonterminals,
             rules: self.rules,
             start_symbol: start,
             nullables,
-        })
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum GrammarDefError {
-    #[error("Other error: {}", msg)]
-    Other { msg: String },
-}
-impl From<&str> for GrammarDefError {
-    fn from(msg: &str) -> Self {
-        Self::Other { msg: msg.into() }
-    }
-}
-impl From<String> for GrammarDefError {
-    fn from(msg: String) -> Self {
-        Self::Other { msg }
+        }
     }
 }

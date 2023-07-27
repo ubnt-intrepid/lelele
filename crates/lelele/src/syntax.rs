@@ -4,10 +4,10 @@ pub mod lexer;
 pub mod parser;
 
 use crate::{
-    ielr::cfg::{Assoc, Grammar, NonterminalID, Precedence, SymbolID, TerminalID},
+    ielr::cfg::{Assoc, Grammar, GrammarDef, NonterminalID, Precedence, SymbolID, TerminalID},
     types::Map,
 };
-use anyhow::{anyhow, Context as _};
+use anyhow::{anyhow, bail, Context as _};
 use std::{fs, path::Path};
 
 #[derive(Debug)]
@@ -55,164 +55,146 @@ pub fn parse_file(path: &Path) -> anyhow::Result<GrammarFile> {
         cmp.reverse()
     });
 
-    let mut terminals = Map::default();
-    let mut nonterminals = Map::default();
-
-    let cfg = Grammar::define(|g| {
-        let mut added_terminals = Map::default();
-        let mut added_nonterminals = Map::default();
-        let mut precedences = Map::default();
-        let mut next_priority = 0;
-
-        for desc in &ast.stmts {
-            match desc {
-                Stmt::PrecDesc(PrecDesc { configs, ident }) => {
-                    let mut assoc = None;
-                    for config in configs {
-                        match (&*config.key, &*config.value) {
-                            ("assoc", "left") => assoc = Some(Assoc::Left),
-                            ("assoc", "right") => assoc = Some(Assoc::Right),
-                            ("assoc", "none" | "nonassoc") => assoc = Some(Assoc::Nonassoc),
-                            _ => return Err("unexpected config in @prec desc".into()),
-                        }
+    let mut g = GrammarDef::default();
+    let mut added_terminals = Map::default();
+    let mut added_nonterminals = Map::default();
+    let mut precedences = Map::default();
+    let mut next_priority = 0;
+    for desc in &ast.stmts {
+        match desc {
+            Stmt::PrecDesc(PrecDesc { configs, ident }) => {
+                let mut assoc = None;
+                for config in configs {
+                    match (&*config.key, &*config.value) {
+                        ("assoc", "left") => assoc = Some(Assoc::Left),
+                        ("assoc", "right") => assoc = Some(Assoc::Right),
+                        ("assoc", "none" | "nonassoc") => assoc = Some(Assoc::Nonassoc),
+                        _ => bail!("unexpected config in @prec desc"),
                     }
-                    let assoc = assoc.unwrap_or(Assoc::Nonassoc);
-                    precedences.insert(ident.to_string(), Precedence::new(next_priority, assoc));
-                    next_priority += 1;
                 }
+                let assoc = assoc.unwrap_or(Assoc::Nonassoc);
+                precedences.insert(ident.to_string(), Precedence::new(next_priority, assoc));
+                next_priority += 1;
+            }
 
-                Stmt::TerminalDesc(TerminalDesc { configs, idents }) => {
+            Stmt::TerminalDesc(TerminalDesc { configs, idents }) => {
+                let mut prec = None;
+                for config in configs {
+                    if config.key == "prec" {
+                        prec = Some(config.value.clone());
+                    }
+                }
+                let prec = match prec {
+                    Some(prec) => Some(
+                        precedences
+                            .get(&prec)
+                            .copied()
+                            .ok_or_else(|| anyhow!("missing precedence name: `{}'", prec))?,
+                    ),
+                    None => None,
+                };
+                for name in idents {
+                    if !verify_ident(name) {
+                        bail!("The terminal `{}' is not valid Rust identifier", name);
+                    }
+                    let symbol = g.terminal(prec);
+                    added_terminals.insert(name, symbol);
+                }
+            }
+
+            Stmt::NonterminalDesc(NonterminalDesc { idents }) => {
+                for name in idents {
+                    if !verify_ident(name) {
+                        bail!("The nonterminal `{}' is not valid Rust identifier", name);
+                    }
+                    let symbol = g.nonterminal();
+                    added_nonterminals.insert(name, symbol);
+                }
+            }
+
+            Stmt::StartDesc(StartDesc { name }) => {
+                let start_symbol = added_nonterminals
+                    .get(name)
+                    .copied()
+                    .ok_or_else(|| anyhow!("unknown start symbol: `{}'", name))?;
+                g.start_symbol(start_symbol);
+            }
+
+            Stmt::RuleDesc(RuleDesc { left, productions }) => {
+                let left = match added_nonterminals.get(left) {
+                    Some(s) => *s,
+                    None => {
+                        // 未登場の記号は非終端記号と解釈する
+                        if !verify_ident(left) {
+                            bail!("The nonterminal `{}' is not valid Rust identifier", left);
+                        }
+                        let id = g.nonterminal();
+                        added_nonterminals.insert(left, id);
+                        id
+                    }
+                };
+
+                for production in productions {
                     let mut prec = None;
-                    for config in configs {
-                        if config.key == "prec" {
-                            prec = Some(config.value.clone());
-                        }
-                    }
-                    let prec = match prec {
-                        Some(prec) => Some(
-                            precedences
-                                .get(&prec)
-                                .copied()
-                                .ok_or_else(|| format!("missing precedence name: `{}'", prec))?,
-                        ),
-                        None => None,
-                    };
-                    for name in idents {
-                        if !verify_ident(name) {
-                            return Err(format!(
-                                "The terminal `{}' is not valid Rust identifier",
-                                name
-                            )
-                            .into());
-                        }
-                        let symbol = g.terminal(prec)?;
-                        added_terminals.insert(name, symbol);
-                    }
-                }
-
-                Stmt::NonterminalDesc(NonterminalDesc { idents }) => {
-                    for name in idents {
-                        if !verify_ident(name) {
-                            return Err(format!(
-                                "The nonterminal `{}' is not valid Rust identifier",
-                                name
-                            )
-                            .into());
-                        }
-                        let symbol = g.nonterminal()?;
-                        added_nonterminals.insert(name, symbol);
-                    }
-                }
-
-                Stmt::StartDesc(StartDesc { name }) => {
-                    let start_symbol = added_nonterminals
-                        .get(name)
-                        .copied()
-                        .ok_or_else(|| format!("unknown start symbol: `{}'", name))?;
-                    g.start_symbol(start_symbol)?;
-                }
-
-                Stmt::RuleDesc(RuleDesc { left, productions }) => {
-                    let left = match added_nonterminals.get(left) {
-                        Some(s) => *s,
-                        None => {
-                            // 未登場の記号は非終端記号と解釈する
-                            if !verify_ident(left) {
-                                return Err(format!(
-                                    "The nonterminal `{}' is not valid Rust identifier",
-                                    left
-                                )
-                                .into());
+                    for config in &production.configs {
+                        match &*config.key {
+                            "prec" => {
+                                prec = Some(precedences.get(&config.value).copied().ok_or_else(
+                                    || anyhow!("unknown precedence name: `{}'", config.value),
+                                )?);
                             }
-                            let id = g.nonterminal()?;
-                            added_nonterminals.insert(left, id);
-                            id
+                            _ => (),
                         }
-                    };
+                    }
 
-                    for production in productions {
-                        let mut prec = None;
-                        for config in &production.configs {
-                            match &*config.key {
-                                "prec" => {
-                                    prec =
-                                        Some(precedences.get(&config.value).copied().ok_or_else(
-                                            || {
-                                                format!(
-                                                    "unknown precedence name: `{}'",
-                                                    config.value
-                                                )
-                                            },
-                                        )?);
-                                }
-                                _ => (),
-                            }
-                        }
-
-                        let mut right = vec![];
-                        for symbol in &production.elems {
-                            use ProductionElem::*;
-                            let symbol = match symbol {
-                                Ident(symbol) => {
-                                    let s = added_terminals
-                                        .get(symbol)
-                                        .map(|t| SymbolID::T(*t)) //
-                                        .or_else(|| {
-                                            added_nonterminals.get(symbol).map(|n| SymbolID::N(*n))
-                                        });
-                                    match s {
-                                        Some(s) => s,
-                                        None => {
-                                            // 未登場の記号は非終端記号と解釈する
-                                            if !verify_ident(symbol) {
-                                                return Err(format!("The nonterminal `{}' is not valid Rust identifier", symbol).into());
-                                            }
-                                            let id = g.nonterminal()?;
-                                            added_nonterminals.insert(symbol, id);
-                                            SymbolID::N(id)
+                    let mut right = vec![];
+                    for symbol in &production.elems {
+                        use ProductionElem::*;
+                        let symbol = match symbol {
+                            Ident(symbol) => {
+                                let s = added_terminals
+                                    .get(symbol)
+                                    .map(|t| SymbolID::T(*t)) //
+                                    .or_else(|| {
+                                        added_nonterminals.get(symbol).map(|n| SymbolID::N(*n))
+                                    });
+                                match s {
+                                    Some(s) => s,
+                                    None => {
+                                        // 未登場の記号は非終端記号と解釈する
+                                        if !verify_ident(symbol) {
+                                            bail!(
+                                                "The nonterminal `{}' is not valid Rust identifier",
+                                                symbol
+                                            );
                                         }
+                                        let id = g.nonterminal();
+                                        added_nonterminals.insert(symbol, id);
+                                        SymbolID::N(id)
                                     }
                                 }
-                                ErrorToken => SymbolID::T(TerminalID::ERROR),
-                            };
-                            right.push(symbol);
-                        }
-
-                        let _id = g.rule(left, right, prec)?;
+                            }
+                            ErrorToken => SymbolID::T(TerminalID::ERROR),
+                        };
+                        right.push(symbol);
                     }
+
+                    let _id = g.rule(left, right, prec);
                 }
             }
         }
+    }
+    let cfg = g.end();
 
-        for (name, id) in added_terminals {
-            terminals.insert(id, name.clone());
-        }
-        for (name, id) in added_nonterminals {
-            nonterminals.insert(id, name.clone());
-        }
+    let mut terminals = Map::default();
+    for (name, id) in added_terminals {
+        terminals.insert(id, name.clone());
+    }
 
-        Ok(())
-    })?;
+    let mut nonterminals = Map::default();
+    for (name, id) in added_nonterminals {
+        nonterminals.insert(id, name.clone());
+    }
 
     Ok(GrammarFile {
         cfg,
