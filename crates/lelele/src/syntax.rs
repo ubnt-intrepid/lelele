@@ -17,6 +17,41 @@ pub struct GrammarFile {
     pub nonterminals: Map<NonterminalID, String>,
 }
 
+struct ParseContext {
+    def: GrammarDef,
+    terminals: Map<String, TerminalID>,
+    nonterminals: Map<String, NonterminalID>,
+    precedences: Map<String, Precedence>,
+    next_priority: u16,
+}
+impl ParseContext {
+    fn add_precedence(&mut self, ident: &str, assoc: Assoc) {
+        self.precedences.insert(
+            ident.to_string(),
+            Precedence::new(self.next_priority, assoc),
+        );
+        self.next_priority += 1;
+    }
+
+    fn add_terminal(&mut self, name: &str, prec: Option<Precedence>) -> anyhow::Result<()> {
+        if !verify_ident(name) {
+            bail!("The terminal `{}' is not valid Rust identifier", name);
+        }
+        let symbol = self.def.terminal(prec);
+        self.terminals.insert(name.to_owned(), symbol);
+        Ok(())
+    }
+
+    fn add_nonterminal(&mut self, name: &str) -> anyhow::Result<NonterminalID> {
+        if !verify_ident(name) {
+            bail!("The nonterminal `{}' is not valid Rust identifier", name);
+        }
+        let symbol = self.def.nonterminal();
+        self.nonterminals.insert(name.to_owned(), symbol);
+        Ok(symbol)
+    }
+}
+
 pub fn parse_file(path: &Path) -> anyhow::Result<GrammarFile> {
     use ast::*;
 
@@ -25,41 +60,15 @@ pub fn parse_file(path: &Path) -> anyhow::Result<GrammarFile> {
 
     let mut ast = self::parser::parse(&input).with_context(|| anyhow!("syntax error"))?;
 
-    ast.stmts.sort_by(|s1, s2| {
-        use std::cmp::Ordering::*;
-        let cmp = match s1 {
-            Stmt::PrecDesc(..) => match s2 {
-                Stmt::PrecDesc(..) => Equal,
-                _ => Greater,
-            },
-            Stmt::TerminalDesc(..) => match s2 {
-                Stmt::PrecDesc(..) => Less,
-                Stmt::TerminalDesc(..) => Equal,
-                _ => Greater,
-            },
-            Stmt::NonterminalDesc(..) => match s2 {
-                Stmt::RuleDesc(..) | Stmt::StartDesc(..) => Greater,
-                Stmt::NonterminalDesc(..) => Equal,
-                Stmt::TerminalDesc(..) | Stmt::PrecDesc(..) => Less,
-            },
-            Stmt::RuleDesc(..) => match s2 {
-                Stmt::StartDesc(..) => Greater,
-                Stmt::RuleDesc(..) => Equal,
-                _ => Less,
-            },
-            Stmt::StartDesc(..) => match s2 {
-                Stmt::StartDesc(..) => Equal,
-                _ => Less,
-            },
-        };
-        cmp.reverse()
-    });
+    ast.stmts.sort_by(|s1, s2| s1.cmp_by_desc(s2));
 
-    let mut g = GrammarDef::default();
-    let mut added_terminals = Map::default();
-    let mut added_nonterminals = Map::default();
-    let mut precedences = Map::default();
-    let mut next_priority = 0;
+    let mut cx = ParseContext {
+        def: GrammarDef::default(),
+        terminals: Map::default(),
+        nonterminals: Map::default(),
+        precedences: Map::default(),
+        next_priority: 0,
+    };
     for desc in &ast.stmts {
         match desc {
             Stmt::PrecDesc(PrecDesc { configs, ident }) => {
@@ -73,8 +82,7 @@ pub fn parse_file(path: &Path) -> anyhow::Result<GrammarFile> {
                     }
                 }
                 let assoc = assoc.unwrap_or(Assoc::Nonassoc);
-                precedences.insert(ident.to_string(), Precedence::new(next_priority, assoc));
-                next_priority += 1;
+                cx.add_precedence(ident, assoc);
             }
 
             Stmt::TerminalDesc(TerminalDesc { configs, idents }) => {
@@ -86,7 +94,7 @@ pub fn parse_file(path: &Path) -> anyhow::Result<GrammarFile> {
                 }
                 let prec = match prec {
                     Some(prec) => Some(
-                        precedences
+                        cx.precedences
                             .get(&prec)
                             .copied()
                             .ok_or_else(|| anyhow!("missing precedence name: `{}'", prec))?,
@@ -94,44 +102,30 @@ pub fn parse_file(path: &Path) -> anyhow::Result<GrammarFile> {
                     None => None,
                 };
                 for name in idents {
-                    if !verify_ident(name) {
-                        bail!("The terminal `{}' is not valid Rust identifier", name);
-                    }
-                    let symbol = g.terminal(prec);
-                    added_terminals.insert(name, symbol);
+                    cx.add_terminal(name, prec)?;
                 }
             }
 
             Stmt::NonterminalDesc(NonterminalDesc { idents }) => {
                 for name in idents {
-                    if !verify_ident(name) {
-                        bail!("The nonterminal `{}' is not valid Rust identifier", name);
-                    }
-                    let symbol = g.nonterminal();
-                    added_nonterminals.insert(name, symbol);
+                    cx.add_nonterminal(name)?;
                 }
             }
 
             Stmt::StartDesc(StartDesc { name }) => {
-                let start_symbol = added_nonterminals
+                let start_symbol = cx
+                    .nonterminals
                     .get(name)
                     .copied()
                     .ok_or_else(|| anyhow!("unknown start symbol: `{}'", name))?;
-                g.start_symbol(start_symbol);
+                cx.def.start_symbol(start_symbol);
             }
 
             Stmt::RuleDesc(RuleDesc { left, productions }) => {
-                let left = match added_nonterminals.get(left) {
+                let left = match cx.nonterminals.get(left) {
                     Some(s) => *s,
-                    None => {
-                        // 未登場の記号は非終端記号と解釈する
-                        if !verify_ident(left) {
-                            bail!("The nonterminal `{}' is not valid Rust identifier", left);
-                        }
-                        let id = g.nonterminal();
-                        added_nonterminals.insert(left, id);
-                        id
-                    }
+                    // 未登場の記号は非終端記号と解釈する
+                    None => cx.add_nonterminal(left)?,
                 };
 
                 for production in productions {
@@ -139,9 +133,10 @@ pub fn parse_file(path: &Path) -> anyhow::Result<GrammarFile> {
                     for config in &production.configs {
                         match &*config.key {
                             "prec" => {
-                                prec = Some(precedences.get(&config.value).copied().ok_or_else(
-                                    || anyhow!("unknown precedence name: `{}'", config.value),
-                                )?);
+                                prec =
+                                    Some(cx.precedences.get(&config.value).copied().ok_or_else(
+                                        || anyhow!("unknown precedence name: `{}'", config.value),
+                                    )?);
                             }
                             _ => (),
                         }
@@ -152,24 +147,18 @@ pub fn parse_file(path: &Path) -> anyhow::Result<GrammarFile> {
                         use ProductionElem::*;
                         let symbol = match symbol {
                             Ident(symbol) => {
-                                let s = added_terminals
+                                let s = cx
+                                    .terminals
                                     .get(symbol)
                                     .map(|t| SymbolID::T(*t)) //
                                     .or_else(|| {
-                                        added_nonterminals.get(symbol).map(|n| SymbolID::N(*n))
+                                        cx.nonterminals.get(symbol).map(|n| SymbolID::N(*n))
                                     });
                                 match s {
                                     Some(s) => s,
                                     None => {
                                         // 未登場の記号は非終端記号と解釈する
-                                        if !verify_ident(symbol) {
-                                            bail!(
-                                                "The nonterminal `{}' is not valid Rust identifier",
-                                                symbol
-                                            );
-                                        }
-                                        let id = g.nonterminal();
-                                        added_nonterminals.insert(symbol, id);
+                                        let id = cx.add_nonterminal(symbol)?;
                                         SymbolID::N(id)
                                     }
                                 }
@@ -179,20 +168,21 @@ pub fn parse_file(path: &Path) -> anyhow::Result<GrammarFile> {
                         right.push(symbol);
                     }
 
-                    let _id = g.rule(left, right, prec);
+                    let _id = cx.def.rule(left, right, prec);
                 }
             }
         }
     }
-    let cfg = g.end();
+
+    let cfg = cx.def.end();
 
     let mut terminals = Map::default();
-    for (name, id) in added_terminals {
+    for (name, id) in cx.terminals {
         terminals.insert(id, name.clone());
     }
 
     let mut nonterminals = Map::default();
-    for (name, id) in added_nonterminals {
+    for (name, id) in cx.nonterminals {
         nonterminals.insert(id, name.clone());
     }
 
