@@ -11,9 +11,8 @@
 //!       <https://www.sciencedirect.com/science/article/pii/S0167642309001191>
 
 use super::{
-    cfg::{Grammar, NonterminalID, RuleID, SymbolID},
+    cfg::{Grammar, NonterminalID, RuleID, SymbolID, TerminalIDSet},
     lr0::{LR0Automaton, StateID},
-    TerminalSet,
 };
 use crate::types::{Map, Set};
 use std::fmt;
@@ -45,9 +44,9 @@ impl fmt::Debug for Reduce {
 #[derive(Debug)]
 pub struct LASet {
     pub gotos: Map<Goto, StateID>,
-    pub lookaheads: Map<Reduce, TerminalSet>,
-    pub follows: Map<Goto, TerminalSet>,
-    pub always_follows: Map<Goto, TerminalSet>,
+    pub lookaheads: Map<Reduce, TerminalIDSet>,
+    pub follows: Map<Goto, TerminalIDSet>,
+    pub always_follows: Map<Goto, TerminalIDSet>,
     pub reads: Map<Goto, Set<Goto>>,
     pub includes: Map<Goto, Map<Goto, bool>>,
     pub lookbacks: Map<Reduce, Set<Goto>>,
@@ -104,7 +103,7 @@ pub fn lalr(g: &Grammar, lr0: &LR0Automaton) -> LASet {
 
     // Step 3: calculate LA(q,A->ω) from Follow(p,A) and `lookbacks` relations.
     //   LA(q,A->ω) = \bigcup { Follow(p,A) | (q,A->ω) `lookback` (p,A) }
-    let mut lookaheads = Map::<_, TerminalSet>::default();
+    let mut lookaheads = Map::<_, TerminalIDSet>::default();
     for (&from, lr0_state) in &lr0.states {
         for &production in &lr0_state.reduces {
             let reduce_id = Reduce {

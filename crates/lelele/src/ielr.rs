@@ -9,59 +9,7 @@ pub mod reachability;
 pub mod split;
 pub mod table;
 
-use self::{
-    cfg::{Grammar, TerminalID},
-    lalr::LASet,
-    lr0::LR0Automaton,
-    table::ParseTable,
-};
-
-#[derive(Debug, Default, Clone)]
-pub struct TerminalSet {
-    inner: bit_set::BitSet,
-}
-
-impl TerminalSet {
-    pub fn contains(&self, id: TerminalID) -> bool {
-        self.inner.contains(id.into_raw().into())
-    }
-    pub fn insert(&mut self, id: TerminalID) -> bool {
-        self.inner.insert(id.into_raw().into())
-    }
-    pub fn union_with(&mut self, other: &Self) {
-        self.inner.union_with(&other.inner)
-    }
-    pub fn intersect_with(&mut self, other: &Self) {
-        self.inner.intersect_with(&other.inner)
-    }
-    pub fn difference_with(&mut self, other: &Self) {
-        self.inner.difference_with(&other.inner)
-    }
-    pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
-    }
-    pub fn iter(&self) -> impl Iterator<Item = TerminalID> + '_ {
-        self.inner
-            .iter()
-            .map(|raw| raw.try_into().map(TerminalID::from_raw).unwrap())
-    }
-}
-
-impl FromIterator<TerminalID> for TerminalSet {
-    fn from_iter<I>(iter: I) -> Self
-    where
-        I: IntoIterator<Item = TerminalID>,
-    {
-        Self {
-            inner: iter.into_iter().map(|t| t.into_raw().into()).collect(),
-        }
-    }
-}
-impl digraph::Set for TerminalSet {
-    fn union_with(&mut self, other: &Self) {
-        self.union_with(other)
-    }
-}
+use self::{cfg::Grammar, lalr::LASet, lr0::LR0Automaton, table::ParseTable};
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Mode {

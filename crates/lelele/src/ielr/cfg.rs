@@ -23,6 +23,54 @@ impl TerminalID {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct TerminalIDSet {
+    inner: bit_set::BitSet,
+}
+
+impl TerminalIDSet {
+    pub fn contains(&self, id: TerminalID) -> bool {
+        self.inner.contains(id.into_raw().into())
+    }
+    pub fn insert(&mut self, id: TerminalID) -> bool {
+        self.inner.insert(id.into_raw().into())
+    }
+    pub fn union_with(&mut self, other: &Self) {
+        self.inner.union_with(&other.inner)
+    }
+    pub fn intersect_with(&mut self, other: &Self) {
+        self.inner.intersect_with(&other.inner)
+    }
+    pub fn difference_with(&mut self, other: &Self) {
+        self.inner.difference_with(&other.inner)
+    }
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+    pub fn iter(&self) -> impl Iterator<Item = TerminalID> + '_ {
+        self.inner
+            .iter()
+            .map(|raw| raw.try_into().map(TerminalID::from_raw).unwrap())
+    }
+}
+
+impl FromIterator<TerminalID> for TerminalIDSet {
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = TerminalID>,
+    {
+        Self {
+            inner: iter.into_iter().map(|t| t.into_raw().into()).collect(),
+        }
+    }
+}
+
+impl super::digraph::Set for TerminalIDSet {
+    fn union_with(&mut self, other: &Self) {
+        self.union_with(other)
+    }
+}
+
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Terminal {

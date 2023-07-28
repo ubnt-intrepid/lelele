@@ -1,10 +1,9 @@
 //! Calculatation of IELR(1) annotation list.
 
 use super::{
-    cfg::{Grammar, RuleID, SymbolID, TerminalID},
+    cfg::{Grammar, RuleID, SymbolID, TerminalID, TerminalIDSet},
     lalr::{Goto, LASet, Reduce},
     lr0::{LR0Automaton, StateID},
-    TerminalSet,
 };
 use crate::types::{Map, Queue, Set};
 use bit_set::BitSet;
@@ -390,10 +389,10 @@ fn follow_kernel_items(g: &Grammar, lr0: &LR0Automaton, lalr: &LASet) -> Map<Got
 fn item_lookaheads(
     g: &Grammar,
     lr0: &LR0Automaton,
-    follows: &Map<Goto, TerminalSet>,
+    follows: &Map<Goto, TerminalIDSet>,
     predecessors: &Map<StateID, Set<StateID>>,
-) -> Map<StateID, Vec<TerminalSet>> {
-    let mut item_lookaheads = Map::<StateID, Vec<TerminalSet>>::default();
+) -> Map<StateID, Vec<TerminalIDSet>> {
+    let mut item_lookaheads = Map::<StateID, Vec<TerminalIDSet>>::default();
 
     let mut pending_states: Queue<StateID> = lr0.states.keys().copied().collect();
     'queue: while let Some(id) = pending_states.pop() {
@@ -402,7 +401,7 @@ fn item_lookaheads(
         }
 
         let state = &lr0.states[&id];
-        let mut lookaheads = vec![TerminalSet::default(); state.kernels.len()];
+        let mut lookaheads = vec![TerminalIDSet::default(); state.kernels.len()];
         for (k, kernel) in state.kernels.iter().enumerate() {
             let production = &g.rules[&kernel.production];
             match kernel.index {

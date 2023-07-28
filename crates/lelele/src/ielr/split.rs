@@ -1,9 +1,8 @@
 use super::{
     annotation::{Action, AnnotationList},
-    cfg::{Assoc, Grammar, Precedence, SymbolID, TerminalID},
+    cfg::{Assoc, Grammar, Precedence, SymbolID, TerminalID, TerminalIDSet},
     lalr::{Goto, LASet},
     lr0::{LR0Automaton, LR0State, StateID},
-    TerminalSet,
 };
 use crate::types::{Map, Queue, Set};
 use std::cmp::Ordering;
@@ -14,9 +13,9 @@ pub fn split_states(
     lalr: &LASet,
     annotation_list: &AnnotationList,
 ) -> LR0Automaton {
-    let mut lookahead_set_filters = Map::<StateID, Vec<TerminalSet>>::default();
+    let mut lookahead_set_filters = Map::<StateID, Vec<TerminalIDSet>>::default();
     for (&id, state) in &lr0.states {
-        let mut filters = vec![TerminalSet::default(); state.kernels.len()];
+        let mut filters = vec![TerminalIDSet::default(); state.kernels.len()];
         for (j, _kernel) in state.kernels.iter().enumerate() {
             let Some(annotations) = annotation_list.annotations.get(&id) else { continue };
             for (desc, annot) in annotations {
@@ -38,7 +37,7 @@ pub fn split_states(
         }
     };
     let mut lr0_isocores = Map::<StateID, Set<StateID>>::default();
-    let mut ielr_item_lookaheads = Map::<StateID, Vec<TerminalSet>>::default();
+    let mut ielr_item_lookaheads = Map::<StateID, Vec<TerminalIDSet>>::default();
 
     #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
     struct QueueItem {
@@ -66,7 +65,7 @@ pub fn split_states(
             .insert(StateID::START);
         ielr_item_lookaheads.insert(
             StateID::START,
-            vec![TerminalSet::default(); start.kernels.len()],
+            vec![TerminalIDSet::default(); start.kernels.len()],
         );
     }
 
@@ -80,7 +79,7 @@ pub fn split_states(
         {
             let lr0_next_state = &lr0.states[&lr0_next];
             let mut propagated_lookaheads =
-                vec![TerminalSet::default(); lr0_next_state.kernels.len()];
+                vec![TerminalIDSet::default(); lr0_next_state.kernels.len()];
             for (k, (kernel_k, filter)) in lr0_next_state
                 .kernels
                 .iter()
@@ -131,7 +130,7 @@ pub fn split_states(
                     let mut is_compatible = true;
                     if let Some(annotations) = annotation_list.annotations.get(&lr0_next) {
                         is_compatible = annotations.iter().all(|(desc, annot)| {
-                            let dominant_contribution = |item_lookaheads: &Vec<TerminalSet>| {
+                            let dominant_contribution = |item_lookaheads: &Vec<TerminalIDSet>| {
                                 let contributions: Vec<_> = desc
                                     .actions
                                     .iter()
