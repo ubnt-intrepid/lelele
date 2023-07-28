@@ -10,7 +10,7 @@ use tracing_subscriber::EnvFilter;
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, value_enum, default_value_t = MergeMode::PGM)]
+    #[arg(long, value_enum, default_value_t = MergeMode::IELR)]
     merge_mode: MergeMode,
 
     /// The path of grammar definition file.
@@ -19,8 +19,8 @@ struct Args {
 
 #[derive(Debug, Copy, Clone, PartialEq, ValueEnum)]
 enum MergeMode {
-    Canonical,
-    PGM,
+    //Canonical,
+    IELR,
     LALR,
 }
 
@@ -41,7 +41,7 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
+fn process_file(args: &Args, in_file: &Path) -> anyhow::Result<()> {
     let in_file = fs::canonicalize(in_file) //
         .context("failed to canonicalize the input file name")?;
 
@@ -63,7 +63,12 @@ fn process_file(_args: &Args, in_file: &Path) -> anyhow::Result<()> {
         );
     }
 
-    let table = lelele::ielr::compute(&grammar.cfg, Default::default())?;
+    let mode = match args.merge_mode {
+        MergeMode::LALR => lelele::ielr::Mode::LALR,
+        MergeMode::IELR => lelele::ielr::Mode::IELR,
+    };
+
+    let table = lelele::ielr::compute(&grammar.cfg, mode)?;
 
     let codegen = Codegen::new(&grammar, &table);
     let mut generated: Vec<u8> = codegen.to_string().into();
