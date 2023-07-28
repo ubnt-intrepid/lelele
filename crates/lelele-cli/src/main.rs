@@ -1,24 +1,26 @@
 use anyhow::Context as _;
 use clap::{Parser, ValueEnum};
 use lelele::codegen::Codegen;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::PathBuf, time::Instant};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, value_enum, default_value_t = MergeMode::IELR)]
-    merge_mode: MergeMode,
+    /// The algorithm to generate LR(1) automaton.
+    #[arg(long, value_enum, default_value_t = LRAlgorithm::IELR)]
+    algorithm: LRAlgorithm,
+
+    /// Specify the path of generated .rs file.
+    #[arg(short, long)]
+    output: Option<PathBuf>,
 
     /// The path of grammar definition file.
-    input: Vec<PathBuf>,
+    input: PathBuf,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, ValueEnum)]
-enum MergeMode {
+enum LRAlgorithm {
     //Canonical,
     IELR,
     LALR,
@@ -32,23 +34,25 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     tracing::debug!("parsed CLI args = {:?}", args);
 
-    for in_file in &args.input {
-        tracing::info!("process {}", in_file.display());
-        process_file(&args, in_file)
-            .with_context(|| anyhow::anyhow!("errored during processing {}", in_file.display()))?;
-    }
+    process_file(&args)
+        .with_context(|| anyhow::anyhow!("errored during processing {}", args.input.display()))?;
 
     Ok(())
 }
 
-fn process_file(args: &Args, in_file: &Path) -> anyhow::Result<()> {
-    let in_file = fs::canonicalize(in_file) //
+fn process_file(args: &Args) -> anyhow::Result<()> {
+    let in_file = fs::canonicalize(&args.input) //
         .context("failed to canonicalize the input file name")?;
 
-    let out_file = in_file.with_extension("rs");
-    let backup_file = in_file.with_extension("rs.bak");
+    let out_file = args
+        .output
+        .clone()
+        .unwrap_or_else(|| in_file.with_extension("rs"));
+    let backup_file = out_file.with_extension("rs.bak");
 
+    let s = Instant::now();
     let grammar = lelele::syntax::parse_file(&in_file)?;
+    tracing::info!("parse_file: {:?} elapsed", s.elapsed());
 
     let mut empty_nonterminals = vec![];
     for (&id, name) in &grammar.nonterminals {
@@ -63,27 +67,14 @@ fn process_file(args: &Args, in_file: &Path) -> anyhow::Result<()> {
         );
     }
 
-    let mode = match args.merge_mode {
-        MergeMode::LALR => lelele::ielr::Mode::LALR,
-        MergeMode::IELR => lelele::ielr::Mode::IELR,
+    let mode = match args.algorithm {
+        LRAlgorithm::LALR => lelele::ielr::Mode::LALR,
+        LRAlgorithm::IELR => lelele::ielr::Mode::IELR,
     };
 
+    let s = Instant::now();
     let table = lelele::ielr::compute(&grammar.cfg, mode)?;
-
-    let codegen = Codegen::new(&grammar, &table);
-    let mut generated: Vec<u8> = codegen.to_string().into();
-
-    // attempt to apply rustfmt to generated code.
-    let sh = xshell::Shell::new()?;
-    let res = xshell::cmd!(sh, "rustfmt --emit=stdout --color=never --quiet")
-        .quiet()
-        .stdin(&generated)
-        .output();
-    if let Ok(output) = res {
-        if output.status.success() {
-            generated = output.stdout;
-        }
-    }
+    tracing::info!("compute_table: {:?} elapsed", s.elapsed());
 
     // dump results.
     if out_file.exists() {
@@ -94,7 +85,9 @@ fn process_file(args: &Args, in_file: &Path) -> anyhow::Result<()> {
             )
         })?;
     }
-    fs::write(&out_file, &generated).with_context(|| {
+
+    let codegen = Codegen::new(&grammar, &table);
+    fs::write(&out_file, codegen.to_string()).with_context(|| {
         anyhow::anyhow!("failed to write generated parser to {}", out_file.display())
     })?;
 

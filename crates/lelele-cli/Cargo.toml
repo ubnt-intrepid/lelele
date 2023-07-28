@@ -12,7 +12,6 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-xshell = { workspace = true }
 
 [[bin]]
 name = "lelele"
