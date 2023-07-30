@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "crates/lelele",
     "crates/lelele-runtime",
-    "crates/lelele-cli",
     "crates/lelele-runtime-tests",
     "examples/arithmetic",
     "examples/json",

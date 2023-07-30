@@ -11,17 +11,24 @@ lelele-runtime = { path = "../lelele-runtime" }
 anyhow = { workspace = true }
 bit-set = { workspace = true }
 bit-vec = { workspace = true }
+clap = { workspace = true }
 indexmap = { workspace = true }
 lexgen = { workspace = true }
 lexgen_util = { workspace = true }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 unicode-ident = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[[bin]]
+name = "lelele"
+path = "src/main.rs"
+doc = false
 
 [[bench]]
 name = "benches"

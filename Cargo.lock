@@ -430,6 +430,7 @@ dependencies = [
  "anyhow",
  "bit-set",
  "bit-vec",
+ "clap",
  "criterion",
  "indexmap",
  "lelele-runtime",
@@ -440,17 +441,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unicode-ident",
-]
-
-[[package]]
-name = "lelele-cli"
-version = "0.0.0-dev"
-dependencies = [
- "anyhow",
- "clap",
- "lelele",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
