@@ -1,5 +1,5 @@
 mod gen {
-    include!(concat!(env!("OUT_DIR"), "/min_caml.rs"));
+    include!(concat!(env!("OUT_DIR"), "/parser.rs"));
 }
 pub use gen::*;
 

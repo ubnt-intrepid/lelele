@@ -35,7 +35,6 @@ thiserror = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 unicode-ident = "1"
-walkdir = "2"
 
 # Enable build script optimization.
 # See also https://doc.rust-lang.org/cargo/reference/profiles.html#build-dependencies
