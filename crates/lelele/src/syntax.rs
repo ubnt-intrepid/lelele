@@ -1,7 +1,6 @@
 pub mod ast;
 pub mod grammar;
 pub mod lexer;
-pub mod parser;
 
 use crate::{
     ielr::cfg::{Assoc, Grammar, GrammarDef, NonterminalID, Precedence, SymbolID, TerminalID},
@@ -58,7 +57,7 @@ pub fn parse_file(path: &Path) -> anyhow::Result<GrammarFile> {
     let input = fs::read_to_string(path)
         .with_context(|| anyhow!("failed to read grammar file: {}", path.display()))?;
 
-    let mut ast = self::parser::parse(&input).with_context(|| anyhow!("syntax error"))?;
+    let mut ast = ast::parse(&input).with_context(|| anyhow!("syntax error"))?;
 
     ast.stmts.sort_by(|s1, s2| s1.cmp_by_desc(s2));
 
